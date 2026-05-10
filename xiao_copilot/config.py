@@ -2,9 +2,25 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 
 DEFAULT_EMBEDDING_BASE_URL = "http://129.212.184.41:8000/v1/embeddings"
+
+
+def _load_dotenv() -> None:
+    env_path = Path(__file__).resolve().parents[1] / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+_load_dotenv()
 
 
 def _env(name: str, default: str = "") -> str:
@@ -28,6 +44,8 @@ class Settings:
     request_timeout_seconds: float = float(_env("REQUEST_TIMEOUT_SECONDS", "20"))
     top_k: int = int(_env("TOP_K", "5"))
     candidate_k: int = int(_env("CANDIDATE_K", "8"))
+    gradio_server_name: str = _env("GRADIO_SERVER_NAME", "127.0.0.1")
+    gradio_server_port: int = int(_env("GRADIO_SERVER_PORT", "7860"))
 
 
 def load_settings() -> Settings:

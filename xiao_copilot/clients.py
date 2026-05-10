@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -122,41 +123,72 @@ def rerank(
     if not base_url:
         return EndpointResult(ok=False, error="Reranker endpoint is not configured.")
 
-    payload: dict[str, Any] = {"query": query, "documents": documents}
-    if model:
-        payload["model"] = model
-
     try:
-        response = requests.post(
-            _join_url(base_url, "/rerank"),
-            headers=_headers(api_key),
-            json=payload,
-            timeout=timeout,
-        )
-        if response.status_code == 404:
-            response = requests.post(
-                _join_url(base_url, "/v1/rerank"),
-                headers=_headers(api_key),
-                json=payload,
-                timeout=timeout,
-            )
-        response.raise_for_status()
-        body = response.json()
-        scores = _parse_rerank_scores(body, len(documents))
+        scores = [
+            (index, _rerank_one(base_url, model, query, document, api_key, timeout))
+            for index, document in enumerate(documents)
+        ]
         return EndpointResult(ok=True, data=scores)
     except Exception as exc:  # noqa: BLE001
         return EndpointResult(ok=False, error=str(exc))
 
 
-def _parse_rerank_scores(body: dict[str, Any], count: int) -> list[tuple[int, float]]:
-    results = body.get("results", body.get("data", []))
-    parsed: list[tuple[int, float]] = []
-    for position, item in enumerate(results):
-        index = int(item.get("index", position))
-        score = float(item.get("relevance_score", item.get("score", 0)))
-        if 0 <= index < count:
-            parsed.append((index, score))
-    return parsed
+def _rerank_one(
+    base_url: str,
+    model: str,
+    query: str,
+    document: str,
+    api_key: str,
+    timeout: float,
+) -> float:
+    prompt = (
+        "Given a hardware support query, decide whether the document is relevant. "
+        "Answer with exactly one word: yes or no.\n\n"
+        f"Query: {query}\n"
+        f"Document: {document}\n"
+        "Relevant:"
+    )
+    payload: dict[str, Any] = {
+        "model": model,
+        "prompt": prompt,
+        "max_tokens": 1,
+        "logprobs": 20,
+        "temperature": 0.0,
+    }
+    response = requests.post(
+        _join_url(base_url, "/v1/completions"),
+        headers=_headers(api_key),
+        json=payload,
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    return _parse_yes_no_score(response.json())
+
+
+def _parse_yes_no_score(body: dict[str, Any]) -> float:
+    choice = body["choices"][0]
+    logprobs = choice.get("logprobs") or {}
+    top = (logprobs.get("top_logprobs") or [{}])[0]
+    yes_lp = _find_token_logprob(top, "yes")
+    no_lp = _find_token_logprob(top, "no")
+    if yes_lp is None or no_lp is None:
+        generated = (choice.get("text") or (choice.get("message") or {}).get("content", "")).strip().lower()
+        return 1.0 if generated.startswith("yes") else 0.0
+    yes = math.exp(yes_lp)
+    no = math.exp(no_lp)
+    return yes / (yes + no) if yes + no else 0.0
+
+
+def _find_token_logprob(top: Any, token: str) -> float | None:
+    if isinstance(top, dict):
+        for key, value in top.items():
+            if key.strip().lower() == token:
+                return float(value)
+    if isinstance(top, list):
+        for entry in top:
+            if entry.get("token", "").strip().lower() == token:
+                return float(entry["logprob"])
+    return None
 
 
 def chat_completion(
@@ -174,6 +206,7 @@ def chat_completion(
         "messages": messages,
         "temperature": 0.2,
         "max_tokens": 700,
+        "chat_template_kwargs": {"enable_thinking": False},
     }
 
     try:

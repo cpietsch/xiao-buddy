@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gradio as gr
 
+from xiao_copilot.config import load_settings
 from xiao_copilot.pipeline import answer_question
 
 
@@ -115,4 +116,10 @@ demo = build_demo()
 
 
 if __name__ == "__main__":
-    demo.launch(theme=THEME, css=CSS)
+    settings = load_settings()
+    demo.launch(
+        server_name=settings.gradio_server_name,
+        server_port=settings.gradio_server_port,
+        theme=THEME,
+        css=CSS,
+    )
