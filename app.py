@@ -153,17 +153,50 @@ CSS = """
 }
 .result-box {
     background-color: #ffffff;
-    border-left: 4px solid #0f8f6b;
+    border: 1px solid #dbe7e1;
+    border-radius: 8px;
     min-height: 360px;
 }
 .dark .result-box {
     background-color: #0f172a;
+    border-color: #334155;
+    color: #e2e8f0;
 }
 .sources-box {
-    border-left: 4px solid #eab308;
+    background-color: #ffffff;
+    border: 1px solid #dbe7e1;
+    border-radius: 8px;
+}
+.dark .sources-box {
+    background-color: #0f172a;
+    border-color: #334155;
+    color: #e2e8f0;
 }
 .trace-box {
-    border-left: 4px solid #64748b;
+    background-color: #ffffff;
+    border: 1px solid #dbe7e1;
+    border-radius: 8px;
+}
+.dark .trace-box {
+    background-color: #0f172a;
+    border-color: #334155;
+    color: #e2e8f0;
+}
+.dark .result-box *,
+.dark .sources-box *,
+.dark .trace-box * {
+    color: #e2e8f0 !important;
+}
+.dark .result-box a,
+.dark .sources-box a {
+    color: #5eead4 !important;
+}
+.dark .result-box code,
+.dark .sources-box code,
+.dark .trace-box code,
+.dark .trace-box pre {
+    background: #020617 !important;
+    color: #f8fafc !important;
 }
 button {
     border-radius: 8px !important;
