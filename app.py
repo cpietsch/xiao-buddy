@@ -46,13 +46,18 @@ THEME = gr.themes.Soft(
 CSS = """
 .gradio-container {
     max-width: 1220px !important;
-    background:
-        linear-gradient(180deg, #f8fafc 0%, #eefdf6 42%, #f8fafc 100%);
+    background: linear-gradient(180deg, #f8fafc 0%, #eefdf6 42%, #f8fafc 100%);
+}
+.dark .gradio-container {
+    background: linear-gradient(180deg, #020617 0%, #052e16 42%, #020617 100%);
 }
 .hero {
     padding: 1.5rem 0 0.65rem;
     border-bottom: 1px solid #dbe7e1;
     margin-bottom: 1rem;
+}
+.dark .hero {
+    border-bottom: 1px solid #1e293b;
 }
 .hero h1 {
     color: #0f172a;
@@ -62,11 +67,17 @@ CSS = """
     font-weight: 760;
     letter-spacing: 0;
 }
+.dark .hero h1 {
+    color: #f8fafc;
+}
 .hero p {
     color: #334155;
     font-size: 1.02rem;
     margin: 0;
     max-width: 780px;
+}
+.dark .hero p {
+    color: #cbd5e1;
 }
 .chips {
     align-items: center;
@@ -85,6 +96,11 @@ CSS = """
     line-height: 1;
     padding: 0.42rem 0.62rem;
 }
+.dark .chip {
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: #34d399;
+}
 .bench-strip {
     display: grid;
     gap: 0.55rem;
@@ -100,6 +116,11 @@ CSS = """
     min-height: 74px;
     padding: 0.75rem 0.85rem;
 }
+.dark .bench-card {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    color: #cbd5e1;
+}
 .bench-card strong {
     color: #0f513f;
     display: block;
@@ -107,6 +128,9 @@ CSS = """
     letter-spacing: 0.08em;
     margin-bottom: 0.3rem;
     text-transform: uppercase;
+}
+.dark .bench-card strong {
+    color: #10b981;
 }
 .bench-label {
     color: #0f513f;
@@ -116,15 +140,24 @@ CSS = """
     margin: 0 0 0.5rem;
     text-transform: uppercase;
 }
+.dark .bench-label {
+    color: #10b981;
+}
 .panel-copy {
     color: #475569;
     font-size: 0.92rem;
     margin: -0.25rem 0 0.75rem;
 }
+.dark .panel-copy {
+    color: #94a3b8;
+}
 .result-box {
     background-color: #ffffff;
     border-left: 4px solid #0f8f6b;
     min-height: 360px;
+}
+.dark .result-box {
+    background-color: #0f172a;
 }
 .sources-box {
     border-left: 4px solid #eab308;
