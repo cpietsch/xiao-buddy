@@ -19,7 +19,6 @@ def retrieve(
 ) -> tuple[list[KnowledgeChunk], dict[str, object]]:
     chunks = load_knowledge_base()
     diagnostics: dict[str, object] = {
-        "embedding_endpoint": settings.embedding_base_url,
         "embedding_used": False,
         "multimodal_query": bool(image_data_url),
         "reranker_used": False,
@@ -56,7 +55,7 @@ def retrieve(
 
     ranked = sorted(scored, key=lambda item: item[1], reverse=True)
     diagnostics["initial_top"] = [
-        {"id": chunk.id, "score": round(float(score), 4), "source": chunk.source}
+        {"id": chunk.id, "score": round(float(score), 4)}
         for chunk, score in ranked[: settings.candidate_k]
     ]
     top = [chunk for chunk, _score in ranked[: settings.candidate_k]]

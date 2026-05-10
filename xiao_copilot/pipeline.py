@@ -43,7 +43,6 @@ def answer_question(image: Image.Image | None, question: str) -> tuple[str, str,
         "intent": intent,
         "image": image_summary,
         "retrieval": retrieval_diagnostics,
-        "agent_endpoint": settings.agent_base_url or "not configured",
     }
 
     if answer is None:
