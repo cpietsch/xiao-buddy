@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_EMBEDDING_BASE_URL = "http://129.212.184.41:8000/v1/embeddings"
+DEFAULT_EMBEDDING_BASE_URL = ""
 
 
 def _load_dotenv() -> None:

@@ -38,29 +38,29 @@ photo + question
 Set these as Space secrets or variables:
 
 ```bash
-EMBEDDING_BASE_URL=http://129.212.184.41:8000/v1/embeddings
+EMBEDDING_BASE_URL=https://your-embed-host/v1/embeddings
 EMBEDDING_MODEL=qwen3-vl-embedding-2b
 EMBEDDING_API_KEY=
 
-RERANK_BASE_URL=
+RERANK_BASE_URL=https://your-rerank-host/v1
 RERANK_MODEL=qwen3-vl-reranker-2b
 RERANK_API_KEY=
 
-AGENT_BASE_URL=
-AGENT_MODEL=qwen3.5-small
+AGENT_BASE_URL=https://your-llm-host/v1
+AGENT_MODEL=qwen3p6-35b-a3b
 AGENT_API_KEY=
 
 TOP_K=5
 CANDIDATE_K=8
-REQUEST_TIMEOUT_SECONDS=20
+REQUEST_TIMEOUT_SECONDS=60
 ```
 
-`EMBEDDING_BASE_URL` defaults to `http://129.212.184.41:8000/v1/embeddings`.
+Endpoint URLs are intentionally environment-only. Do not commit local IPs or tunnel URLs.
 
 Expected hosted protocols:
 
 - Embeddings: OpenAI-compatible text embeddings with `input`, plus Qwen/vLLM multimodal embeddings with `messages` containing an `image_url` and text.
-- Reranker: placeholder support for `POST /rerank`, with fallback to `POST /v1/rerank`.
+- Reranker: Qwen reranker over `POST /v1/completions` with yes/no logprobs.
 - Agent: OpenAI-compatible `POST /v1/chat/completions`.
 
 On Hugging Face Spaces, add these as Space variables/secrets. The app calls the endpoints server-side, so HTTP endpoint URLs are fine for the Python backend.
