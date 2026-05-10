@@ -137,6 +137,24 @@ def _chunks_for_board(doc: dict[str, Any]) -> list[KnowledgeChunk]:
             )
         )
 
+    for note in doc.get("support_notes", []):
+        note_id = note.get("id", "support")
+        title = note.get("title", f"{doc['title']} support note")
+        text = note.get("text", "")
+        if not text:
+            continue
+        chunks.append(
+            KnowledgeChunk(
+                id=f"{board_id}-{note_id}",
+                title=title,
+                source=note.get("source", citation_url),
+                text=text,
+                board_id=board_id,
+                kind=note.get("kind", "support"),
+                metadata=common,
+            )
+        )
+
     return chunks
 
 

@@ -1,36 +1,153 @@
 {
   "schema_version": "0.1",
   "curation_date": "2026-05-10",
-  "scope": "Seeed Studio XIAO boards only",
+  "scope": "Seeed Studio XIAO boards and selected XIAO accessories",
   "documents": [
     {
       "id": "xiao-esp32s3",
       "title": "Seeed Studio XIAO ESP32S3 Series",
       "board_family": "XIAO",
-      "aliases": ["XIAO ESP32S3", "XIAO ESP32-S3", "XIAO ESP32S3 Sense", "XIAO ESP32S3 Plus"],
-      "retrieval_tags": ["wifi", "ble", "camera", "microphone", "sd-card", "tinyml", "esp32-s3"],
+      "aliases": [
+        "XIAO ESP32S3",
+        "XIAO ESP32-S3",
+        "XIAO ESP32S3 Sense",
+        "XIAO ESP32S3 Plus"
+      ],
+      "retrieval_tags": [
+        "wifi",
+        "ble",
+        "camera",
+        "microphone",
+        "sd-card",
+        "tinyml",
+        "esp32-s3"
+      ],
       "summary": "Thumb-size ESP32-S3 XIAO board. The Sense variant adds a camera expansion board, digital microphone, and microSD support for vision and audio TinyML projects.",
       "mcu": {
         "vendor": "Espressif",
         "part": "ESP32-S3",
         "architecture": "Xtensa LX7"
       },
-      "connectivity": ["2.4 GHz WiFi", "Bluetooth LE"],
-      "onboard_features": ["USB-C", "reset button", "boot button", "user LED on GPIO21", "battery pad", "U.FL antenna connector"],
-      "sense_features": ["OV3660 camera on current Sense units", "OV2640 examples remain relevant", "digital PDM microphone", "microSD card slot"],
+      "connectivity": [
+        "2.4 GHz WiFi",
+        "Bluetooth LE"
+      ],
+      "onboard_features": [
+        "USB-C",
+        "reset button",
+        "boot button",
+        "user LED on GPIO21",
+        "battery pad",
+        "U.FL antenna connector"
+      ],
+      "sense_features": [
+        "OV3660 camera on current Sense units",
+        "OV2640 examples remain relevant",
+        "digital PDM microphone",
+        "microSD card slot"
+      ],
       "pin_map": [
-        {"xiao_pin": "D0", "chip_pin": "GPIO1", "functions": ["ADC", "touch"]},
-        {"xiao_pin": "D1", "chip_pin": "GPIO2", "functions": ["ADC", "touch"]},
-        {"xiao_pin": "D2", "chip_pin": "GPIO3", "functions": ["ADC", "touch", "SD card CS on Sense"]},
-        {"xiao_pin": "D3", "chip_pin": "GPIO4", "functions": ["ADC", "touch"]},
-        {"xiao_pin": "D4", "chip_pin": "GPIO5", "functions": ["I2C SDA", "ADC", "touch"]},
-        {"xiao_pin": "D5", "chip_pin": "GPIO6", "functions": ["I2C SCL", "ADC", "touch"]},
-        {"xiao_pin": "D6", "chip_pin": "GPIO43", "functions": ["UART TX"]},
-        {"xiao_pin": "D7", "chip_pin": "GPIO44", "functions": ["UART RX"]},
-        {"xiao_pin": "D8", "chip_pin": "GPIO7", "functions": ["SPI SCK", "ADC", "touch", "SD card SCK on Sense"]},
-        {"xiao_pin": "D9", "chip_pin": "GPIO8", "functions": ["SPI MISO", "ADC", "touch", "SD card MISO on Sense"]},
-        {"xiao_pin": "D10", "chip_pin": "GPIO9", "functions": ["SPI MOSI", "ADC", "touch"]},
-        {"xiao_pin": "Boot", "chip_pin": "GPIO0", "functions": ["enter boot mode"]}
+        {
+          "xiao_pin": "D0",
+          "chip_pin": "GPIO1",
+          "functions": [
+            "ADC",
+            "touch"
+          ]
+        },
+        {
+          "xiao_pin": "D1",
+          "chip_pin": "GPIO2",
+          "functions": [
+            "ADC",
+            "touch"
+          ]
+        },
+        {
+          "xiao_pin": "D2",
+          "chip_pin": "GPIO3",
+          "functions": [
+            "ADC",
+            "touch",
+            "SD card CS on Sense"
+          ]
+        },
+        {
+          "xiao_pin": "D3",
+          "chip_pin": "GPIO4",
+          "functions": [
+            "ADC",
+            "touch"
+          ]
+        },
+        {
+          "xiao_pin": "D4",
+          "chip_pin": "GPIO5",
+          "functions": [
+            "I2C SDA",
+            "ADC",
+            "touch"
+          ]
+        },
+        {
+          "xiao_pin": "D5",
+          "chip_pin": "GPIO6",
+          "functions": [
+            "I2C SCL",
+            "ADC",
+            "touch"
+          ]
+        },
+        {
+          "xiao_pin": "D6",
+          "chip_pin": "GPIO43",
+          "functions": [
+            "UART TX"
+          ]
+        },
+        {
+          "xiao_pin": "D7",
+          "chip_pin": "GPIO44",
+          "functions": [
+            "UART RX"
+          ]
+        },
+        {
+          "xiao_pin": "D8",
+          "chip_pin": "GPIO7",
+          "functions": [
+            "SPI SCK",
+            "ADC",
+            "touch",
+            "SD card SCK on Sense"
+          ]
+        },
+        {
+          "xiao_pin": "D9",
+          "chip_pin": "GPIO8",
+          "functions": [
+            "SPI MISO",
+            "ADC",
+            "touch",
+            "SD card MISO on Sense"
+          ]
+        },
+        {
+          "xiao_pin": "D10",
+          "chip_pin": "GPIO9",
+          "functions": [
+            "SPI MOSI",
+            "ADC",
+            "touch"
+          ]
+        },
+        {
+          "xiao_pin": "Boot",
+          "chip_pin": "GPIO0",
+          "functions": [
+            "enter boot mode"
+          ]
+        }
       ],
       "field_gotchas": [
         "Ask whether the user has the base ESP32S3, Sense, or Plus before giving camera, microphone, or B2B connector advice.",
@@ -46,38 +163,154 @@
         "pinout": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/img/2.jpg"
       },
       "citations": [
-        {"title": "Getting Started with Seeed Studio XIAO ESP32S3 Series", "url": "https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/"},
-        {"title": "XIAO ESP32-S3 Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/res/XIAO_ESP32S3_Sense_Pinout.xlsx"},
-        {"title": "XIAO ESP32-S3 Factory Firmware", "url": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/res/XIAO-ESP32S3-firmware-20240814.zip"}
+        {
+          "title": "Getting Started with Seeed Studio XIAO ESP32S3 Series",
+          "url": "https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/"
+        },
+        {
+          "title": "XIAO ESP32-S3 Pinout Sheet",
+          "url": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/res/XIAO_ESP32S3_Sense_Pinout.xlsx"
+        },
+        {
+          "title": "XIAO ESP32-S3 Factory Firmware",
+          "url": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/res/XIAO-ESP32S3-firmware-20240814.zip"
+        }
+      ],
+      "support_notes": [
+        {
+          "id": "sense-vision-audio",
+          "title": "XIAO ESP32S3 Sense camera, microphone, and microSD checks",
+          "kind": "vision",
+          "text": "For image or audio TinyML, confirm the board is the Sense variant, not the base ESP32S3. Sense hardware adds the camera expansion, PDM microphone, and microSD slot. Current Sense units may use OV3660 while older examples mention OV2640; the Seeed examples remain applicable, but users should verify their exact camera module before troubleshooting focus, frame size, or camera init failures."
+        }
       ]
     },
     {
       "id": "xiao-esp32c3",
       "title": "Seeed Studio XIAO ESP32C3",
       "board_family": "XIAO",
-      "aliases": ["XIAO ESP32C3", "XIAO ESP32-C3", "Seeed XIAO C3"],
-      "retrieval_tags": ["wifi", "ble", "risc-v", "esp32-c3", "low-power", "antenna"],
+      "aliases": [
+        "XIAO ESP32C3",
+        "XIAO ESP32-C3",
+        "Seeed XIAO C3"
+      ],
+      "retrieval_tags": [
+        "wifi",
+        "ble",
+        "risc-v",
+        "esp32-c3",
+        "low-power",
+        "antenna"
+      ],
       "summary": "Tiny ESP32-C3 XIAO board with WiFi, Bluetooth LE, 11 digital IO, 4 analog IO, UART, I2C, SPI, reset, boot button, and external antenna connector.",
       "mcu": {
         "vendor": "Espressif",
         "part": "ESP32-C3",
         "architecture": "32-bit RISC-V"
       },
-      "connectivity": ["2.4 GHz WiFi", "Bluetooth 5 LE"],
-      "onboard_features": ["USB-C", "reset button", "boot button", "U.FL antenna connector", "battery pad"],
+      "connectivity": [
+        "2.4 GHz WiFi",
+        "Bluetooth 5 LE"
+      ],
+      "onboard_features": [
+        "USB-C",
+        "reset button",
+        "boot button",
+        "U.FL antenna connector",
+        "battery pad"
+      ],
       "pin_map": [
-        {"xiao_pin": "D0", "chip_pin": "GPIO2", "functions": ["ADC1_CH2"]},
-        {"xiao_pin": "D1", "chip_pin": "GPIO3", "functions": ["ADC1_CH3"]},
-        {"xiao_pin": "D2", "chip_pin": "GPIO4", "functions": ["ADC1_CH4", "JTAG MTMS"]},
-        {"xiao_pin": "D3", "chip_pin": "GPIO5", "functions": ["ADC2_CH0", "JTAG MTDI"]},
-        {"xiao_pin": "D4", "chip_pin": "GPIO6", "functions": ["I2C SDA", "JTAG MTCK"]},
-        {"xiao_pin": "D5", "chip_pin": "GPIO7", "functions": ["I2C SCL", "JTAG MTDO"]},
-        {"xiao_pin": "D6", "chip_pin": "GPIO21", "functions": ["UART TX"]},
-        {"xiao_pin": "D7", "chip_pin": "GPIO20", "functions": ["UART RX"]},
-        {"xiao_pin": "D8", "chip_pin": "GPIO8", "functions": ["SPI SCK", "strapping pin"]},
-        {"xiao_pin": "D9", "chip_pin": "GPIO9", "functions": ["SPI MISO", "boot", "strapping pin"]},
-        {"xiao_pin": "D10", "chip_pin": "GPIO10", "functions": ["SPI MOSI"]},
-        {"xiao_pin": "Boot", "chip_pin": "GPIO9", "functions": ["enter boot mode"]}
+        {
+          "xiao_pin": "D0",
+          "chip_pin": "GPIO2",
+          "functions": [
+            "ADC1_CH2"
+          ]
+        },
+        {
+          "xiao_pin": "D1",
+          "chip_pin": "GPIO3",
+          "functions": [
+            "ADC1_CH3"
+          ]
+        },
+        {
+          "xiao_pin": "D2",
+          "chip_pin": "GPIO4",
+          "functions": [
+            "ADC1_CH4",
+            "JTAG MTMS"
+          ]
+        },
+        {
+          "xiao_pin": "D3",
+          "chip_pin": "GPIO5",
+          "functions": [
+            "ADC2_CH0",
+            "JTAG MTDI"
+          ]
+        },
+        {
+          "xiao_pin": "D4",
+          "chip_pin": "GPIO6",
+          "functions": [
+            "I2C SDA",
+            "JTAG MTCK"
+          ]
+        },
+        {
+          "xiao_pin": "D5",
+          "chip_pin": "GPIO7",
+          "functions": [
+            "I2C SCL",
+            "JTAG MTDO"
+          ]
+        },
+        {
+          "xiao_pin": "D6",
+          "chip_pin": "GPIO21",
+          "functions": [
+            "UART TX"
+          ]
+        },
+        {
+          "xiao_pin": "D7",
+          "chip_pin": "GPIO20",
+          "functions": [
+            "UART RX"
+          ]
+        },
+        {
+          "xiao_pin": "D8",
+          "chip_pin": "GPIO8",
+          "functions": [
+            "SPI SCK",
+            "strapping pin"
+          ]
+        },
+        {
+          "xiao_pin": "D9",
+          "chip_pin": "GPIO9",
+          "functions": [
+            "SPI MISO",
+            "boot",
+            "strapping pin"
+          ]
+        },
+        {
+          "xiao_pin": "D10",
+          "chip_pin": "GPIO10",
+          "functions": [
+            "SPI MOSI"
+          ]
+        },
+        {
+          "xiao_pin": "Boot",
+          "chip_pin": "GPIO9",
+          "functions": [
+            "enter boot mode"
+          ]
+        }
       ],
       "field_gotchas": [
         "For reliable analog reads, prefer ADC1 pins A0, A1, and A2; Seeed warns that A3/GPIO5 uses ADC2 and may be unreliable.",
@@ -91,17 +324,45 @@
         "pinout": "https://files.seeedstudio.com/wiki/XIAO_WiFi/pin_map-2.png"
       },
       "citations": [
-        {"title": "Getting Started with Seeed Studio XIAO ESP32C3", "url": "https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/"},
-        {"title": "XIAO ESP32-C3 Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/XIAO_WiFi/Resources/XIAO-ESP32C3-pinout_sheet.xlsx"},
-        {"title": "Report of XIAO ESP32-C3 Low Power Consumption", "url": "https://files.seeedstudio.com/wiki/Seeed-Studio-XIAO-ESP32/Low_Power_Consumption.pdf"}
+        {
+          "title": "Getting Started with Seeed Studio XIAO ESP32C3",
+          "url": "https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/"
+        },
+        {
+          "title": "XIAO ESP32-C3 Pinout Sheet",
+          "url": "https://files.seeedstudio.com/wiki/XIAO_WiFi/Resources/XIAO-ESP32C3-pinout_sheet.xlsx"
+        },
+        {
+          "title": "Report of XIAO ESP32-C3 Low Power Consumption",
+          "url": "https://files.seeedstudio.com/wiki/Seeed-Studio-XIAO-ESP32/Low_Power_Consumption.pdf"
+        }
+      ],
+      "support_notes": [
+        {
+          "id": "adc-and-boot-pins",
+          "title": "XIAO ESP32C3 ADC and boot-strapping cautions",
+          "kind": "troubleshooting",
+          "text": "For analog readings on XIAO ESP32C3, prefer ADC1 pins A0, A1, and A2. A3/GPIO5 uses ADC2 and can be unreliable. External circuitry on strapping pins GPIO2, GPIO8, or GPIO9 can also interfere with boot or upload, so remove add-ons from D0, D8, or D9 when diagnosing upload failures."
+        }
       ]
     },
     {
       "id": "xiao-rp2040",
       "title": "Seeed Studio XIAO RP2040",
       "board_family": "XIAO",
-      "aliases": ["XIAO RP2040", "Seeed XIAO RP2040", "XIAO Pico"],
-      "retrieval_tags": ["rp2040", "pico", "circuitpython", "micropython", "arduino", "rgb-led"],
+      "aliases": [
+        "XIAO RP2040",
+        "Seeed XIAO RP2040",
+        "XIAO Pico"
+      ],
+      "retrieval_tags": [
+        "rp2040",
+        "pico",
+        "circuitpython",
+        "micropython",
+        "arduino",
+        "rgb-led"
+      ],
       "summary": "RP2040-based XIAO board with 264 KB SRAM, 2 MB flash, 11 digital pins, 4 analog pins, I2C, UART, SPI, SWD pads, boot button, reset button, and onboard RGB/user LEDs.",
       "mcu": {
         "vendor": "Raspberry Pi",
@@ -109,20 +370,99 @@
         "architecture": "dual-core Arm Cortex-M0+"
       },
       "connectivity": [],
-      "onboard_features": ["USB-C", "reset button", "boot button", "RGB LED", "SWD pads"],
+      "onboard_features": [
+        "USB-C",
+        "reset button",
+        "boot button",
+        "RGB LED",
+        "SWD pads"
+      ],
       "pin_map": [
-        {"xiao_pin": "D0", "chip_pin": "GPIO26", "functions": ["ADC"]},
-        {"xiao_pin": "D1", "chip_pin": "GPIO27", "functions": ["ADC"]},
-        {"xiao_pin": "D2", "chip_pin": "GPIO28", "functions": ["ADC"]},
-        {"xiao_pin": "D3", "chip_pin": "GPIO29", "functions": ["ADC"]},
-        {"xiao_pin": "D4", "chip_pin": "GPIO6", "functions": ["I2C SDA"]},
-        {"xiao_pin": "D5", "chip_pin": "GPIO7", "functions": ["I2C SCL"]},
-        {"xiao_pin": "D6", "chip_pin": "GPIO0", "functions": ["UART TX"]},
-        {"xiao_pin": "D7", "chip_pin": "GPIO1", "functions": ["UART RX", "SPI CSn"]},
-        {"xiao_pin": "D8", "chip_pin": "GPIO2", "functions": ["SPI SCK"]},
-        {"xiao_pin": "D9", "chip_pin": "GPIO4", "functions": ["SPI MISO"]},
-        {"xiao_pin": "D10", "chip_pin": "GPIO3", "functions": ["SPI MOSI"]},
-        {"xiao_pin": "Boot", "chip_pin": "RP2040_BOOT", "functions": ["enter boot mode"]}
+        {
+          "xiao_pin": "D0",
+          "chip_pin": "GPIO26",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D1",
+          "chip_pin": "GPIO27",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D2",
+          "chip_pin": "GPIO28",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D3",
+          "chip_pin": "GPIO29",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D4",
+          "chip_pin": "GPIO6",
+          "functions": [
+            "I2C SDA"
+          ]
+        },
+        {
+          "xiao_pin": "D5",
+          "chip_pin": "GPIO7",
+          "functions": [
+            "I2C SCL"
+          ]
+        },
+        {
+          "xiao_pin": "D6",
+          "chip_pin": "GPIO0",
+          "functions": [
+            "UART TX"
+          ]
+        },
+        {
+          "xiao_pin": "D7",
+          "chip_pin": "GPIO1",
+          "functions": [
+            "UART RX",
+            "SPI CSn"
+          ]
+        },
+        {
+          "xiao_pin": "D8",
+          "chip_pin": "GPIO2",
+          "functions": [
+            "SPI SCK"
+          ]
+        },
+        {
+          "xiao_pin": "D9",
+          "chip_pin": "GPIO4",
+          "functions": [
+            "SPI MISO"
+          ]
+        },
+        {
+          "xiao_pin": "D10",
+          "chip_pin": "GPIO3",
+          "functions": [
+            "SPI MOSI"
+          ]
+        },
+        {
+          "xiao_pin": "Boot",
+          "chip_pin": "RP2040_BOOT",
+          "functions": [
+            "enter boot mode"
+          ]
+        }
       ],
       "field_gotchas": [
         "If the serial port disappears after bad firmware, use the boot button / bootloader mode and reflash UF2 firmware.",
@@ -135,42 +475,172 @@
         "pinout": "https://files.seeedstudio.com/wiki/XIAO-RP2040/img/xinfront.jpg"
       },
       "citations": [
-        {"title": "Getting Started with Seeed Studio XIAO RP2040", "url": "https://wiki.seeedstudio.com/XIAO-RP2040/"},
-        {"title": "XIAO RP2040 Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/XIAO-RP2040/res/XIAO-RP2040-pinout_sheet.xlsx"},
-        {"title": "XIAO RP2040 Schematic", "url": "https://files.seeedstudio.com/wiki/XIAO-RP2040/res/Seeed-Studio-XIAO-RP2040-v1.3.pdf"}
+        {
+          "title": "Getting Started with Seeed Studio XIAO RP2040",
+          "url": "https://wiki.seeedstudio.com/XIAO-RP2040/"
+        },
+        {
+          "title": "XIAO RP2040 Pinout Sheet",
+          "url": "https://files.seeedstudio.com/wiki/XIAO-RP2040/res/XIAO-RP2040-pinout_sheet.xlsx"
+        },
+        {
+          "title": "XIAO RP2040 Schematic",
+          "url": "https://files.seeedstudio.com/wiki/XIAO-RP2040/res/Seeed-Studio-XIAO-RP2040-v1.3.pdf"
+        }
       ]
     },
     {
       "id": "xiao-nrf52840",
       "title": "Seeed Studio XIAO nRF52840 Series",
       "board_family": "XIAO",
-      "aliases": ["XIAO nRF52840", "XIAO BLE", "XIAO BLE Sense", "XIAO nRF52840 Sense", "XIAO nRF52840 Plus"],
-      "retrieval_tags": ["ble", "nfc", "imu", "pdm", "microphone", "battery", "tinyml", "nordic"],
+      "aliases": [
+        "XIAO nRF52840",
+        "XIAO BLE",
+        "XIAO BLE Sense",
+        "XIAO nRF52840 Sense",
+        "XIAO nRF52840 Plus"
+      ],
+      "retrieval_tags": [
+        "ble",
+        "nfc",
+        "imu",
+        "pdm",
+        "microphone",
+        "battery",
+        "tinyml",
+        "nordic"
+      ],
       "summary": "Nordic nRF52840 XIAO board focused on Bluetooth LE. Sense variants add a PDM microphone and 6-axis IMU; Plus variants add more exposed pins and interfaces.",
       "mcu": {
         "vendor": "Nordic Semiconductor",
         "part": "nRF52840",
         "architecture": "Arm Cortex-M4F"
       },
-      "connectivity": ["Bluetooth LE", "Bluetooth Mesh", "NFC"],
-      "onboard_features": ["USB-C", "reset button", "battery charging", "user RGB LED", "onboard antenna", "2 MB flash"],
-      "sense_features": ["PDM digital microphone", "LSM6DS3TR-C 6-axis IMU"],
+      "connectivity": [
+        "Bluetooth LE",
+        "Bluetooth Mesh",
+        "NFC"
+      ],
+      "onboard_features": [
+        "USB-C",
+        "reset button",
+        "battery charging",
+        "user RGB LED",
+        "onboard antenna",
+        "2 MB flash"
+      ],
+      "sense_features": [
+        "PDM digital microphone",
+        "LSM6DS3TR-C 6-axis IMU"
+      ],
       "pin_map": [
-        {"xiao_pin": "D0", "chip_pin": "P0.02", "functions": ["AIN0"]},
-        {"xiao_pin": "D1", "chip_pin": "P0.03", "functions": ["AIN1"]},
-        {"xiao_pin": "D2", "chip_pin": "P0.28", "functions": ["AIN4"]},
-        {"xiao_pin": "D3", "chip_pin": "P0.29", "functions": ["AIN5"]},
-        {"xiao_pin": "D4", "chip_pin": "P0.04", "functions": ["I2C SDA", "AIN2"]},
-        {"xiao_pin": "D5", "chip_pin": "P0.05", "functions": ["I2C SCL", "AIN3"]},
-        {"xiao_pin": "D6", "chip_pin": "P1.11", "functions": ["UART TX"]},
-        {"xiao_pin": "D7", "chip_pin": "P1.12", "functions": ["UART RX"]},
-        {"xiao_pin": "D8", "chip_pin": "P1.13", "functions": ["SPI SCK"]},
-        {"xiao_pin": "D9", "chip_pin": "P1.14", "functions": ["SPI MISO"]},
-        {"xiao_pin": "D10", "chip_pin": "P1.15", "functions": ["SPI MOSI"]},
-        {"xiao_pin": "NFC1", "chip_pin": "P0.09", "functions": ["NFC"]},
-        {"xiao_pin": "NFC2", "chip_pin": "P0.10", "functions": ["NFC"]},
-        {"xiao_pin": "ADC_BAT", "chip_pin": "P0.14", "functions": ["READ_BAT_ENABLE"]},
-        {"xiao_pin": "AIN7_BAT", "chip_pin": "P0.31", "functions": ["battery voltage ADC"]}
+        {
+          "xiao_pin": "D0",
+          "chip_pin": "P0.02",
+          "functions": [
+            "AIN0"
+          ]
+        },
+        {
+          "xiao_pin": "D1",
+          "chip_pin": "P0.03",
+          "functions": [
+            "AIN1"
+          ]
+        },
+        {
+          "xiao_pin": "D2",
+          "chip_pin": "P0.28",
+          "functions": [
+            "AIN4"
+          ]
+        },
+        {
+          "xiao_pin": "D3",
+          "chip_pin": "P0.29",
+          "functions": [
+            "AIN5"
+          ]
+        },
+        {
+          "xiao_pin": "D4",
+          "chip_pin": "P0.04",
+          "functions": [
+            "I2C SDA",
+            "AIN2"
+          ]
+        },
+        {
+          "xiao_pin": "D5",
+          "chip_pin": "P0.05",
+          "functions": [
+            "I2C SCL",
+            "AIN3"
+          ]
+        },
+        {
+          "xiao_pin": "D6",
+          "chip_pin": "P1.11",
+          "functions": [
+            "UART TX"
+          ]
+        },
+        {
+          "xiao_pin": "D7",
+          "chip_pin": "P1.12",
+          "functions": [
+            "UART RX"
+          ]
+        },
+        {
+          "xiao_pin": "D8",
+          "chip_pin": "P1.13",
+          "functions": [
+            "SPI SCK"
+          ]
+        },
+        {
+          "xiao_pin": "D9",
+          "chip_pin": "P1.14",
+          "functions": [
+            "SPI MISO"
+          ]
+        },
+        {
+          "xiao_pin": "D10",
+          "chip_pin": "P1.15",
+          "functions": [
+            "SPI MOSI"
+          ]
+        },
+        {
+          "xiao_pin": "NFC1",
+          "chip_pin": "P0.09",
+          "functions": [
+            "NFC"
+          ]
+        },
+        {
+          "xiao_pin": "NFC2",
+          "chip_pin": "P0.10",
+          "functions": [
+            "NFC"
+          ]
+        },
+        {
+          "xiao_pin": "ADC_BAT",
+          "chip_pin": "P0.14",
+          "functions": [
+            "READ_BAT_ENABLE"
+          ]
+        },
+        {
+          "xiao_pin": "AIN7_BAT",
+          "chip_pin": "P0.31",
+          "functions": [
+            "battery voltage ADC"
+          ]
+        }
       ],
       "field_gotchas": [
         "Use the Seeed nRF52 board package for Bluetooth and low-power work.",
@@ -186,17 +656,45 @@
         "pinout": "https://files.seeedstudio.com/wiki/XIAO-BLE/pinout2.png"
       },
       "citations": [
-        {"title": "Getting Started with Seeed Studio XIAO nRF52840 Series", "url": "https://wiki.seeedstudio.com/XIAO_BLE/"},
-        {"title": "XIAO nRF52840 Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/XIAO-BLE/XIAO-nRF52840-pinout_sheet.xlsx"},
-        {"title": "XIAO nRF52840 Sense Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/XIAO-BLE/XIAO-nRF52840-Senese-pinout_sheet.xlsx"}
+        {
+          "title": "Getting Started with Seeed Studio XIAO nRF52840 Series",
+          "url": "https://wiki.seeedstudio.com/XIAO_BLE/"
+        },
+        {
+          "title": "XIAO nRF52840 Pinout Sheet",
+          "url": "https://files.seeedstudio.com/wiki/XIAO-BLE/XIAO-nRF52840-pinout_sheet.xlsx"
+        },
+        {
+          "title": "XIAO nRF52840 Sense Pinout Sheet",
+          "url": "https://files.seeedstudio.com/wiki/XIAO-BLE/XIAO-nRF52840-Senese-pinout_sheet.xlsx"
+        }
+      ],
+      "support_notes": [
+        {
+          "id": "battery-and-sense-package",
+          "title": "XIAO nRF52840 battery and Sense package guidance",
+          "kind": "power",
+          "text": "For battery voltage on XIAO nRF52840, enable the divider by driving P0.14/READ_BAT_ENABLE low, then read P0.31/AIN7_BAT. Use the mbed-enabled board package when the project needs Sense IMU or PDM microphone support, and do not promise those sensors on the base nRF52840 board."
+        }
       ]
     },
     {
       "id": "xiao-samd21",
       "title": "Seeed Studio XIAO SAMD21",
       "board_family": "XIAO",
-      "aliases": ["XIAO SAMD21", "Seeeduino XIAO", "Seeed Studio XIAO SAMD21"],
-      "retrieval_tags": ["samd21", "arduino", "circuitpython", "micropython", "dac", "bootloader"],
+      "aliases": [
+        "XIAO SAMD21",
+        "Seeeduino XIAO",
+        "Seeed Studio XIAO SAMD21"
+      ],
+      "retrieval_tags": [
+        "samd21",
+        "arduino",
+        "circuitpython",
+        "micropython",
+        "dac",
+        "bootloader"
+      ],
       "summary": "Original XIAO board formerly named Seeeduino XIAO, based on Microchip SAMD21G18. It has 11 digital/analog pins, 10 PWM pins, one DAC output on D0, I2C, UART, SPI, SWD pads, and USB-C.",
       "mcu": {
         "vendor": "Microchip",
@@ -204,20 +702,117 @@
         "architecture": "Arm Cortex-M0+"
       },
       "connectivity": [],
-      "onboard_features": ["USB-C", "reset pads", "user LED", "power LED", "TX/RX LEDs", "SWD pads"],
+      "onboard_features": [
+        "USB-C",
+        "reset pads",
+        "user LED",
+        "power LED",
+        "TX/RX LEDs",
+        "SWD pads"
+      ],
       "pin_map": [
-        {"xiao_pin": "D0", "chip_pin": "PA02", "functions": ["ADC", "DAC"]},
-        {"xiao_pin": "D1", "chip_pin": "PA04", "functions": ["ADC", "PWM"]},
-        {"xiao_pin": "D2", "chip_pin": "PA10", "functions": ["ADC", "PWM"]},
-        {"xiao_pin": "D3", "chip_pin": "PA11", "functions": ["ADC", "PWM"]},
-        {"xiao_pin": "D4", "chip_pin": "PA08", "functions": ["I2C SDA", "ADC", "PWM"]},
-        {"xiao_pin": "D5", "chip_pin": "PA09", "functions": ["I2C SCL", "ADC", "PWM"]},
-        {"xiao_pin": "D6", "chip_pin": "PB08", "functions": ["UART TX", "ADC", "PWM"]},
-        {"xiao_pin": "D7", "chip_pin": "PB09", "functions": ["UART RX", "ADC", "PWM"]},
-        {"xiao_pin": "D8", "chip_pin": "PA07", "functions": ["SPI SCK", "ADC", "PWM"]},
-        {"xiao_pin": "D9", "chip_pin": "PA05", "functions": ["SPI MISO", "ADC", "PWM"]},
-        {"xiao_pin": "D10", "chip_pin": "PA06", "functions": ["SPI MOSI", "ADC", "PWM"]},
-        {"xiao_pin": "Reset", "chip_pin": "RES", "functions": ["reset"]}
+        {
+          "xiao_pin": "D0",
+          "chip_pin": "PA02",
+          "functions": [
+            "ADC",
+            "DAC"
+          ]
+        },
+        {
+          "xiao_pin": "D1",
+          "chip_pin": "PA04",
+          "functions": [
+            "ADC",
+            "PWM"
+          ]
+        },
+        {
+          "xiao_pin": "D2",
+          "chip_pin": "PA10",
+          "functions": [
+            "ADC",
+            "PWM"
+          ]
+        },
+        {
+          "xiao_pin": "D3",
+          "chip_pin": "PA11",
+          "functions": [
+            "ADC",
+            "PWM"
+          ]
+        },
+        {
+          "xiao_pin": "D4",
+          "chip_pin": "PA08",
+          "functions": [
+            "I2C SDA",
+            "ADC",
+            "PWM"
+          ]
+        },
+        {
+          "xiao_pin": "D5",
+          "chip_pin": "PA09",
+          "functions": [
+            "I2C SCL",
+            "ADC",
+            "PWM"
+          ]
+        },
+        {
+          "xiao_pin": "D6",
+          "chip_pin": "PB08",
+          "functions": [
+            "UART TX",
+            "ADC",
+            "PWM"
+          ]
+        },
+        {
+          "xiao_pin": "D7",
+          "chip_pin": "PB09",
+          "functions": [
+            "UART RX",
+            "ADC",
+            "PWM"
+          ]
+        },
+        {
+          "xiao_pin": "D8",
+          "chip_pin": "PA07",
+          "functions": [
+            "SPI SCK",
+            "ADC",
+            "PWM"
+          ]
+        },
+        {
+          "xiao_pin": "D9",
+          "chip_pin": "PA05",
+          "functions": [
+            "SPI MISO",
+            "ADC",
+            "PWM"
+          ]
+        },
+        {
+          "xiao_pin": "D10",
+          "chip_pin": "PA06",
+          "functions": [
+            "SPI MOSI",
+            "ADC",
+            "PWM"
+          ]
+        },
+        {
+          "xiao_pin": "Reset",
+          "chip_pin": "RES",
+          "functions": [
+            "reset"
+          ]
+        }
       ],
       "field_gotchas": [
         "D0 is the DAC-capable pin; do not imply that every analog-capable pin can output true analog voltage.",
@@ -231,40 +826,162 @@
         "bootloader_reset": "https://files.seeedstudio.com/wiki/Seeeduino-XIAO/img/XIAO-reset.gif"
       },
       "citations": [
-        {"title": "Getting Started with Seeed Studio XIAO SAMD21", "url": "https://wiki.seeedstudio.com/Seeeduino-XIAO/"},
-        {"title": "XIAO SAMD21 Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/Seeeduino-XIAO/res/XIAO-SAMD21-pinout_sheet.xlsx"},
-        {"title": "XIAO SAMD21 Factory Firmware", "url": "https://files.seeedstudio.com/wiki/Seeeduino-XIAO/res/102010328_Seeeduino_XIAO_final_firmware.zip"}
+        {
+          "title": "Getting Started with Seeed Studio XIAO SAMD21",
+          "url": "https://wiki.seeedstudio.com/Seeeduino-XIAO/"
+        },
+        {
+          "title": "XIAO SAMD21 Pinout Sheet",
+          "url": "https://files.seeedstudio.com/wiki/Seeeduino-XIAO/res/XIAO-SAMD21-pinout_sheet.xlsx"
+        },
+        {
+          "title": "XIAO SAMD21 Factory Firmware",
+          "url": "https://files.seeedstudio.com/wiki/Seeeduino-XIAO/res/102010328_Seeeduino_XIAO_final_firmware.zip"
+        }
       ]
     },
     {
       "id": "xiao-esp32c6",
       "title": "Seeed Studio XIAO ESP32C6",
       "board_family": "XIAO",
-      "aliases": ["XIAO ESP32C6", "XIAO ESP32-C6", "Seeed XIAO C6"],
-      "retrieval_tags": ["wifi-6", "ble", "zigbee", "thread", "matter", "risc-v", "esp32-c6", "antenna"],
+      "aliases": [
+        "XIAO ESP32C6",
+        "XIAO ESP32-C6",
+        "Seeed XIAO C6"
+      ],
+      "retrieval_tags": [
+        "wifi-6",
+        "ble",
+        "zigbee",
+        "thread",
+        "matter",
+        "risc-v",
+        "esp32-c6",
+        "antenna"
+      ],
       "summary": "ESP32-C6 XIAO board with WiFi 6, Bluetooth LE, Zigbee, Thread, and Matter-oriented smart-home use. It exposes the XIAO D0-D10 pattern plus RF switch control pins.",
       "mcu": {
         "vendor": "Espressif",
         "part": "ESP32-C6",
         "architecture": "32-bit RISC-V"
       },
-      "connectivity": ["2.4 GHz WiFi 6", "Bluetooth 5 LE", "Zigbee", "Thread", "IEEE 802.15.4"],
-      "onboard_features": ["USB-C", "reset/EN", "boot button", "ceramic antenna", "U.FL antenna option", "user light"],
+      "connectivity": [
+        "2.4 GHz WiFi 6",
+        "Bluetooth 5 LE",
+        "Zigbee",
+        "Thread",
+        "IEEE 802.15.4"
+      ],
+      "onboard_features": [
+        "USB-C",
+        "reset/EN",
+        "boot button",
+        "ceramic antenna",
+        "U.FL antenna option",
+        "user light"
+      ],
       "pin_map": [
-        {"xiao_pin": "D0", "chip_pin": "GPIO0", "functions": ["ADC", "LP_GPIO0"]},
-        {"xiao_pin": "D1", "chip_pin": "GPIO1", "functions": ["ADC", "LP_GPIO1"]},
-        {"xiao_pin": "D2", "chip_pin": "GPIO2", "functions": ["ADC", "LP_GPIO2"]},
-        {"xiao_pin": "D3", "chip_pin": "GPIO21", "functions": ["GPIO"]},
-        {"xiao_pin": "D4", "chip_pin": "GPIO22", "functions": ["I2C SDA"]},
-        {"xiao_pin": "D5", "chip_pin": "GPIO23", "functions": ["I2C SCL"]},
-        {"xiao_pin": "D6", "chip_pin": "GPIO16", "functions": ["UART TX"]},
-        {"xiao_pin": "D7", "chip_pin": "GPIO17", "functions": ["UART RX"]},
-        {"xiao_pin": "D8", "chip_pin": "GPIO19", "functions": ["SPI SCK"]},
-        {"xiao_pin": "D9", "chip_pin": "GPIO20", "functions": ["SPI MISO"]},
-        {"xiao_pin": "D10", "chip_pin": "GPIO18", "functions": ["SPI MOSI"]},
-        {"xiao_pin": "Boot", "chip_pin": "GPIO9", "functions": ["enter boot mode"]},
-        {"xiao_pin": "RF Switch Port Select", "chip_pin": "GPIO14", "functions": ["select ceramic or U.FL antenna"]},
-        {"xiao_pin": "RF Switch Power", "chip_pin": "GPIO3", "functions": ["enable RF switch control"]}
+        {
+          "xiao_pin": "D0",
+          "chip_pin": "GPIO0",
+          "functions": [
+            "ADC",
+            "LP_GPIO0"
+          ]
+        },
+        {
+          "xiao_pin": "D1",
+          "chip_pin": "GPIO1",
+          "functions": [
+            "ADC",
+            "LP_GPIO1"
+          ]
+        },
+        {
+          "xiao_pin": "D2",
+          "chip_pin": "GPIO2",
+          "functions": [
+            "ADC",
+            "LP_GPIO2"
+          ]
+        },
+        {
+          "xiao_pin": "D3",
+          "chip_pin": "GPIO21",
+          "functions": [
+            "GPIO"
+          ]
+        },
+        {
+          "xiao_pin": "D4",
+          "chip_pin": "GPIO22",
+          "functions": [
+            "I2C SDA"
+          ]
+        },
+        {
+          "xiao_pin": "D5",
+          "chip_pin": "GPIO23",
+          "functions": [
+            "I2C SCL"
+          ]
+        },
+        {
+          "xiao_pin": "D6",
+          "chip_pin": "GPIO16",
+          "functions": [
+            "UART TX"
+          ]
+        },
+        {
+          "xiao_pin": "D7",
+          "chip_pin": "GPIO17",
+          "functions": [
+            "UART RX"
+          ]
+        },
+        {
+          "xiao_pin": "D8",
+          "chip_pin": "GPIO19",
+          "functions": [
+            "SPI SCK"
+          ]
+        },
+        {
+          "xiao_pin": "D9",
+          "chip_pin": "GPIO20",
+          "functions": [
+            "SPI MISO"
+          ]
+        },
+        {
+          "xiao_pin": "D10",
+          "chip_pin": "GPIO18",
+          "functions": [
+            "SPI MOSI"
+          ]
+        },
+        {
+          "xiao_pin": "Boot",
+          "chip_pin": "GPIO9",
+          "functions": [
+            "enter boot mode"
+          ]
+        },
+        {
+          "xiao_pin": "RF Switch Port Select",
+          "chip_pin": "GPIO14",
+          "functions": [
+            "select ceramic or U.FL antenna"
+          ]
+        },
+        {
+          "xiao_pin": "RF Switch Power",
+          "chip_pin": "GPIO3",
+          "functions": [
+            "enable RF switch control"
+          ]
+        }
       ],
       "field_gotchas": [
         "For external antenna use, set GPIO3 LOW to activate RF switch control, then set GPIO14 HIGH to select the external antenna.",
@@ -279,9 +996,1259 @@
         "pinout": "https://wdcdn.qpic.cn/MTY4ODg1Nzc0ODUwMjM3NA_318648_dMoXitoaQiq2N3-a_1711678067?w=1486&h=1228"
       },
       "citations": [
-        {"title": "Getting Started with Seeed Studio XIAO ESP32C6", "url": "https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/"},
-        {"title": "Pin Multiplexing With Seeed Studio XIAO ESP32C6", "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp32c6/"},
-        {"title": "XIAO ESP32-C6 Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32C6/res/XIAO_ESP32C6_Pinout.xlsx"}
+        {
+          "title": "Getting Started with Seeed Studio XIAO ESP32C6",
+          "url": "https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/"
+        },
+        {
+          "title": "Pin Multiplexing With Seeed Studio XIAO ESP32C6",
+          "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp32c6/"
+        },
+        {
+          "title": "XIAO ESP32-C6 Pinout Sheet",
+          "url": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32C6/res/XIAO_ESP32C6_Pinout.xlsx"
+        }
+      ],
+      "support_notes": [
+        {
+          "id": "rf-switch-and-battery",
+          "title": "XIAO ESP32C6 RF switch and battery-voltage checks",
+          "kind": "wireless",
+          "text": "To select the external U.FL antenna on XIAO ESP32C6, enable RF switch control with GPIO3 low, then set GPIO14 high. GPIO14 low selects the onboard ceramic antenna. For battery-voltage measurement, treat the battery read circuitry separately from normal analog pins and follow the board-specific example."
+        }
+      ]
+    },
+    {
+      "id": "xiao-ra4m1",
+      "title": "Seeed Studio XIAO RA4M1",
+      "board_family": "XIAO",
+      "aliases": [
+        "XIAO RA4M1",
+        "Seeed XIAO RA4M1",
+        "Renesas XIAO",
+        "Arduino Uno R4 compatible XIAO"
+      ],
+      "retrieval_tags": [
+        "renesas",
+        "ra4m1",
+        "arduino",
+        "can-bus",
+        "dac",
+        "adc",
+        "battery",
+        "low-power"
+      ],
+      "summary": "Renesas RA4M1 XIAO board using the R7FA4M1AB3CNE Arm Cortex-M4 MCU up to 48 MHz. It adds expanded rear IO, CAN bus, a 14-bit ADC, 12-bit DAC, EEPROM, RGB LED, and battery-voltage measurement support.",
+      "mcu": {
+        "vendor": "Renesas",
+        "part": "R7FA4M1AB3CNE / RA4M1",
+        "architecture": "Arm Cortex-M4"
+      },
+      "connectivity": [],
+      "onboard_features": [
+        "USB-C",
+        "reset button",
+        "boot button",
+        "user LED",
+        "RGB LED",
+        "CAN bus pins",
+        "battery charging",
+        "expanded rear IO"
+      ],
+      "pin_map": [
+        {
+          "xiao_pin": "D0",
+          "chip_pin": "P014",
+          "functions": [
+            "ADC",
+            "AN009"
+          ]
+        },
+        {
+          "xiao_pin": "D1",
+          "chip_pin": "P000",
+          "functions": [
+            "ADC",
+            "AN000"
+          ]
+        },
+        {
+          "xiao_pin": "D2",
+          "chip_pin": "P001",
+          "functions": [
+            "ADC",
+            "AN001"
+          ]
+        },
+        {
+          "xiao_pin": "D3",
+          "chip_pin": "P002",
+          "functions": [
+            "ADC",
+            "AN002"
+          ]
+        },
+        {
+          "xiao_pin": "D4",
+          "chip_pin": "P206",
+          "functions": [
+            "I2C SDA1"
+          ]
+        },
+        {
+          "xiao_pin": "D5",
+          "chip_pin": "P100",
+          "functions": [
+            "I2C SCL1",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D6",
+          "chip_pin": "P302",
+          "functions": [
+            "UART TXD2",
+            "I2C SDA2"
+          ]
+        },
+        {
+          "xiao_pin": "D7",
+          "chip_pin": "P301",
+          "functions": [
+            "UART RXD2",
+            "I2C SCL2"
+          ]
+        },
+        {
+          "xiao_pin": "D8",
+          "chip_pin": "P111",
+          "functions": [
+            "SPI1 SCK"
+          ]
+        },
+        {
+          "xiao_pin": "D9",
+          "chip_pin": "P110",
+          "functions": [
+            "SPI1 MISO",
+            "CAN RX"
+          ]
+        },
+        {
+          "xiao_pin": "D10",
+          "chip_pin": "P109",
+          "functions": [
+            "SPI1 MOSI",
+            "CAN TX"
+          ]
+        },
+        {
+          "xiao_pin": "D11",
+          "chip_pin": "P408",
+          "functions": [
+            "UART RX9"
+          ]
+        },
+        {
+          "xiao_pin": "D12",
+          "chip_pin": "P409",
+          "functions": [
+            "UART TX9"
+          ]
+        },
+        {
+          "xiao_pin": "D15",
+          "chip_pin": "P101",
+          "functions": [
+            "UART TXD0",
+            "I2C SDA0",
+            "ADC",
+            "SPI0 MOSI"
+          ]
+        },
+        {
+          "xiao_pin": "D16",
+          "chip_pin": "P104",
+          "functions": [
+            "UART RXD0",
+            "I2C SCL0",
+            "SPI0 MISO"
+          ]
+        },
+        {
+          "xiao_pin": "D17",
+          "chip_pin": "P102",
+          "functions": [
+            "CAN RX",
+            "SPI0 SCK",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D18",
+          "chip_pin": "P103",
+          "functions": [
+            "CAN TX",
+            "SPI",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "ADC_BAT",
+          "chip_pin": "P400",
+          "functions": [
+            "BAT_READ_EN"
+          ]
+        },
+        {
+          "xiao_pin": "Boot",
+          "chip_pin": "P201",
+          "functions": [
+            "enter boot mode"
+          ]
+        }
+      ],
+      "field_gotchas": [
+        "RA4M1 has no onboard radio; wireless projects require an external module or a different XIAO family.",
+        "Battery-voltage reading uses BAT_DET_PIN/P105 and must be enabled with BAT_READ_EN/P400 high.",
+        "Use the Seeed Renesas board package URL in Arduino IDE for board support.",
+        "RA4M1 is a good fit when a project needs CAN bus, DAC output, EEPROM, or expanded IO rather than WiFi/BLE."
+      ],
+      "support_notes": [
+        {
+          "id": "battery-voltage",
+          "title": "XIAO RA4M1 battery voltage read path",
+          "kind": "power",
+          "text": "XIAO RA4M1 can read battery voltage without the manual resistor workaround required by some earlier XIAO boards. Read BAT_DET_PIN/P105, but first set BAT_READ_EN/P400 high to enable the battery measurement path."
+        },
+        {
+          "id": "arduino-package",
+          "title": "XIAO RA4M1 Arduino package setup",
+          "kind": "setup",
+          "text": "For Arduino IDE, add the Seeed Renesas board package URL, install the Seeed Renesas board support, then select the XIAO RA4M1 board before uploading a blink or serial test."
+        }
+      ],
+      "image_urls": {},
+      "citations": [
+        {
+          "title": "Getting Started with Seeed Studio XIAO RA4M1",
+          "url": "https://wiki.seeedstudio.com/getting_started_xiao_ra4m1/"
+        }
+      ]
+    },
+    {
+      "id": "xiao-mg24",
+      "title": "Seeed Studio XIAO MG24 Series",
+      "board_family": "XIAO",
+      "aliases": [
+        "XIAO MG24",
+        "XIAO MG24 Sense",
+        "Seeed XIAO MG24",
+        "EFR32MG24 XIAO"
+      ],
+      "retrieval_tags": [
+        "matter",
+        "thread",
+        "zigbee",
+        "ble",
+        "bluetooth-mesh",
+        "silicon-labs",
+        "mg24",
+        "low-power",
+        "imu",
+        "microphone"
+      ],
+      "summary": "Silicon Labs EFR32MG24 XIAO board with Arm Cortex-M33 at 78 MHz, 256 KB RAM, 1536 KB flash plus 4 MB onboard flash, strong 2.4 GHz RF, Matter/Thread/Zigbee/BLE support, and a Sense variant with analog microphone and 6-axis IMU.",
+      "mcu": {
+        "vendor": "Silicon Labs",
+        "part": "EFR32MG24",
+        "architecture": "Arm Cortex-M33"
+      },
+      "connectivity": [
+        "Bluetooth LE 5.3",
+        "Bluetooth mesh",
+        "Matter",
+        "Thread",
+        "Zigbee",
+        "OpenThread"
+      ],
+      "onboard_features": [
+        "USB-C",
+        "reset button",
+        "user LED",
+        "power LED",
+        "battery management",
+        "U.FL antenna switch pins"
+      ],
+      "sense_features": [
+        "analog microphone",
+        "6-axis IMU"
+      ],
+      "pin_map": [
+        {
+          "xiao_pin": "D0",
+          "chip_pin": "PC00",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D1",
+          "chip_pin": "PC01",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D2",
+          "chip_pin": "PC02",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D3",
+          "chip_pin": "PC03",
+          "functions": [
+            "SPI",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D4",
+          "chip_pin": "PC04",
+          "functions": [
+            "I2C SDA",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D5",
+          "chip_pin": "PC05",
+          "functions": [
+            "I2C SCL",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D6",
+          "chip_pin": "PC06",
+          "functions": [
+            "UART TX0",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D7",
+          "chip_pin": "PC07",
+          "functions": [
+            "UART RX0",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D8",
+          "chip_pin": "PA03",
+          "functions": [
+            "SPI SCK0",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D9",
+          "chip_pin": "PA04",
+          "functions": [
+            "SPI MISO0",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D10",
+          "chip_pin": "PA05",
+          "functions": [
+            "SPI MOSI0",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D11",
+          "chip_pin": "PA09",
+          "functions": [
+            "SAMD11 TX",
+            "UART receive",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D12",
+          "chip_pin": "PA08",
+          "functions": [
+            "SAMD11 RX",
+            "UART transmit",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D13",
+          "chip_pin": "PB02",
+          "functions": [
+            "I2C clock",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D14",
+          "chip_pin": "PB03",
+          "functions": [
+            "I2C data",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D15",
+          "chip_pin": "PB00",
+          "functions": [
+            "SPI MOSI1",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D16",
+          "chip_pin": "PB01",
+          "functions": [
+            "SPI MISO1",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D17",
+          "chip_pin": "PA00",
+          "functions": [
+            "SPI SCK1",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D18",
+          "chip_pin": "PD02",
+          "functions": [
+            "SPI CS",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "ADC_BAT",
+          "chip_pin": "PD04",
+          "functions": [
+            "battery voltage ADC"
+          ]
+        },
+        {
+          "xiao_pin": "RF Switch Port Select",
+          "chip_pin": "PB04",
+          "functions": [
+            "antenna selection"
+          ]
+        },
+        {
+          "xiao_pin": "RF Switch Power",
+          "chip_pin": "PB05",
+          "functions": [
+            "RF switch power"
+          ]
+        }
+      ],
+      "field_gotchas": [
+        "MG24 Sense has the microphone and 6-axis IMU; the base MG24 does not.",
+        "The 5V pin can be used as voltage input only with suitable diode protection between the external source and 5V pin.",
+        "Deep sleep / EM4 can make the board difficult to reprogram; use the documented escape pin or recovery scripts before experimenting heavily.",
+        "MG24 is a strong pick for Matter, Thread, Zigbee, and Bluetooth mesh projects where low power matters."
+      ],
+      "support_notes": [
+        {
+          "id": "deep-sleep-recovery",
+          "title": "XIAO MG24 deep sleep recovery and bricking prevention",
+          "kind": "recovery",
+          "text": "XIAO MG24 can become difficult to upload to after deep sleep experiments. Seeed documents using PC1 pulled low during reset as an escape mechanism, and provides flash erase recovery scripts for Windows and macOS. Avoid deploying deep sleep sketches without an escape path."
+        },
+        {
+          "id": "sense-sensors",
+          "title": "XIAO MG24 Sense sensor distinction",
+          "kind": "identity",
+          "text": "Only XIAO MG24 Sense includes the onboard analog microphone and 6-axis IMU. Ask for the exact variant before giving microphone, IMU, or onboard ML sensor advice."
+        }
+      ],
+      "image_urls": {},
+      "citations": [
+        {
+          "title": "Getting Started with Seeed Studio XIAO MG24",
+          "url": "https://wiki.seeedstudio.com/xiao_mg24_getting_started/"
+        }
+      ]
+    },
+    {
+      "id": "xiao-nrf54l15",
+      "title": "Seeed Studio XIAO nRF54L15 Series",
+      "board_family": "XIAO",
+      "aliases": [
+        "XIAO nRF54L15",
+        "XIAO nRF54L15 Sense",
+        "XIAO nRF54",
+        "Nordic nRF54L15 XIAO"
+      ],
+      "retrieval_tags": [
+        "nrf54l15",
+        "bluetooth-6",
+        "channel-sounding",
+        "matter",
+        "thread",
+        "zigbee",
+        "nfc",
+        "nordic",
+        "imu",
+        "microphone"
+      ],
+      "summary": "Next-generation Nordic nRF54L15 XIAO board with 128 MHz Arm Cortex-M33 plus 128 MHz RISC-V coprocessor, Bluetooth LE 6.0 with channel sounding, Matter, Thread, Zigbee, NFC, and a Sense variant with IMU and microphone.",
+      "mcu": {
+        "vendor": "Nordic Semiconductor",
+        "part": "nRF54L15",
+        "architecture": "Arm Cortex-M33 plus RISC-V coprocessor"
+      },
+      "connectivity": [
+        "Bluetooth LE 6.0",
+        "Bluetooth channel sounding",
+        "NFC",
+        "Thread",
+        "Zigbee",
+        "Matter",
+        "Amazon Sidewalk",
+        "2.4 GHz proprietary up to 4 Mbps"
+      ],
+      "onboard_features": [
+        "USB-C",
+        "internal PMIC",
+        "battery-voltage collection",
+        "user key",
+        "user LED",
+        "RF switch pins",
+        "SWD/JTAG pads"
+      ],
+      "sense_features": [
+        "LSM6DS3TR-C 6-axis IMU",
+        "MSM261DGT006 microphone"
+      ],
+      "pin_map": [
+        {
+          "xiao_pin": "D0",
+          "chip_pin": "P1.04",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D1",
+          "chip_pin": "P1.05",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D2",
+          "chip_pin": "P1.06",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D3",
+          "chip_pin": "P1.07",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D4",
+          "chip_pin": "P1.10",
+          "functions": [
+            "I2C SDA-0"
+          ]
+        },
+        {
+          "xiao_pin": "D5",
+          "chip_pin": "P1.11",
+          "functions": [
+            "I2C SCL-0"
+          ]
+        },
+        {
+          "xiao_pin": "D6",
+          "chip_pin": "P2.08",
+          "functions": [
+            "UART TX"
+          ]
+        },
+        {
+          "xiao_pin": "D7",
+          "chip_pin": "P2.07",
+          "functions": [
+            "UART RX"
+          ]
+        },
+        {
+          "xiao_pin": "D8",
+          "chip_pin": "P2.01",
+          "functions": [
+            "SPI SCK"
+          ]
+        },
+        {
+          "xiao_pin": "D9",
+          "chip_pin": "P2.04",
+          "functions": [
+            "SPI MISO"
+          ]
+        },
+        {
+          "xiao_pin": "D10",
+          "chip_pin": "P2.02",
+          "functions": [
+            "SPI MOSI"
+          ]
+        },
+        {
+          "xiao_pin": "D11",
+          "chip_pin": "P0.03",
+          "functions": [
+            "I2C SCL-1"
+          ]
+        },
+        {
+          "xiao_pin": "D12",
+          "chip_pin": "P0.04",
+          "functions": [
+            "I2C SDA-1"
+          ]
+        },
+        {
+          "xiao_pin": "D13",
+          "chip_pin": "P2.10",
+          "functions": [
+            "GPIO"
+          ]
+        },
+        {
+          "xiao_pin": "D14",
+          "chip_pin": "P2.09",
+          "functions": [
+            "GPIO"
+          ]
+        },
+        {
+          "xiao_pin": "D15",
+          "chip_pin": "P2.06",
+          "functions": [
+            "GPIO"
+          ]
+        },
+        {
+          "xiao_pin": "NFC1",
+          "chip_pin": "P1.02",
+          "functions": [
+            "NFC"
+          ]
+        },
+        {
+          "xiao_pin": "NFC2",
+          "chip_pin": "P1.03",
+          "functions": [
+            "NFC"
+          ]
+        },
+        {
+          "xiao_pin": "USER KEY",
+          "chip_pin": "P0.00",
+          "functions": [
+            "user key"
+          ]
+        },
+        {
+          "xiao_pin": "RF Switch Port Select",
+          "chip_pin": "P2.05",
+          "functions": [
+            "antenna switch"
+          ]
+        },
+        {
+          "xiao_pin": "RF Switch Power",
+          "chip_pin": "P2.03",
+          "functions": [
+            "RF switch power"
+          ]
+        },
+        {
+          "xiao_pin": "AIN7_VBAT",
+          "chip_pin": "P1.14",
+          "functions": [
+            "battery voltage ADC"
+          ]
+        },
+        {
+          "xiao_pin": "USER_LED",
+          "chip_pin": "P2.00",
+          "functions": [
+            "user LED"
+          ]
+        }
+      ],
+      "field_gotchas": [
+        "Use nRF Connect SDK / Zephyr style workflows for advanced nRF54L15 development rather than assuming classic Arduino-only workflows.",
+        "Sense-only IMU and microphone should not be promised for the base nRF54L15 board.",
+        "nRF54L15 is the best fit in this corpus for Bluetooth 6.0 channel sounding or newer Nordic multiprotocol work.",
+        "Battery powered designs can use the internal PMIC and AIN7_VBAT battery voltage path."
+      ],
+      "support_notes": [
+        {
+          "id": "wireless-choice",
+          "title": "XIAO nRF54L15 wireless protocol selection",
+          "kind": "wireless",
+          "text": "Choose XIAO nRF54L15 when the design needs Nordic BLE 6.0 features such as channel sounding, NFC, Matter, Thread, Zigbee, or high-throughput 2.4 GHz proprietary modes. For simpler BLE-only projects, XIAO nRF52840 may be easier."
+        },
+        {
+          "id": "sense-sensors",
+          "title": "XIAO nRF54L15 Sense sensor distinction",
+          "kind": "identity",
+          "text": "XIAO nRF54L15 Sense adds the LSM6DS3TR-C 6-axis IMU and MSM261DGT006 microphone. Confirm Sense vs base before recommending onboard motion or audio examples."
+        }
+      ],
+      "image_urls": {},
+      "citations": [
+        {
+          "title": "Getting Started with Seeed Studio XIAO nRF54L15(Sense)",
+          "url": "https://wiki.seeedstudio.com/xiao_nrf54l15_sense_getting_started/"
+        }
+      ]
+    },
+    {
+      "id": "xiao-esp32c5",
+      "title": "Seeed Studio XIAO ESP32-C5",
+      "board_family": "XIAO",
+      "aliases": [
+        "XIAO ESP32C5",
+        "XIAO ESP32-C5",
+        "Seeed XIAO C5"
+      ],
+      "retrieval_tags": [
+        "wifi-6",
+        "dual-band-wifi",
+        "5ghz",
+        "ble",
+        "bluetooth-mesh",
+        "esp32-c5",
+        "risc-v",
+        "battery"
+      ],
+      "summary": "ESP32-C5 XIAO board with 2.4 GHz and 5 GHz dual-band WiFi 6, Bluetooth 5 LE / mesh, 8 MB PSRAM, 8 MB flash, battery charge management, external RF antenna, and 11 XIAO GPIO pins.",
+      "mcu": {
+        "vendor": "Espressif",
+        "part": "ESP32-C5",
+        "architecture": "32-bit RISC-V"
+      },
+      "connectivity": [
+        "2.4 GHz WiFi 6",
+        "5 GHz WiFi 6",
+        "Bluetooth 5 LE",
+        "Bluetooth mesh"
+      ],
+      "onboard_features": [
+        "USB-C",
+        "reset button",
+        "boot button",
+        "external RF antenna",
+        "battery charging chip",
+        "charge LED",
+        "user LED",
+        "JTAG pads"
+      ],
+      "pin_map": [
+        {
+          "xiao_pin": "D0",
+          "chip_pin": "GPIO1",
+          "functions": [
+            "ADC",
+            "LP_GPIO1"
+          ]
+        },
+        {
+          "xiao_pin": "D1",
+          "chip_pin": "GPIO0",
+          "functions": [
+            "GPIO",
+            "LP_GPIO0"
+          ]
+        },
+        {
+          "xiao_pin": "D2",
+          "chip_pin": "GPIO25",
+          "functions": [
+            "GPIO"
+          ]
+        },
+        {
+          "xiao_pin": "D3",
+          "chip_pin": "GPIO7",
+          "functions": [
+            "GPIO",
+            "SDIO_DATA1"
+          ]
+        },
+        {
+          "xiao_pin": "D4",
+          "chip_pin": "GPIO23",
+          "functions": [
+            "I2C SDA"
+          ]
+        },
+        {
+          "xiao_pin": "D5",
+          "chip_pin": "GPIO24",
+          "functions": [
+            "I2C SCL"
+          ]
+        },
+        {
+          "xiao_pin": "D6",
+          "chip_pin": "GPIO11",
+          "functions": [
+            "UART TX"
+          ]
+        },
+        {
+          "xiao_pin": "D7",
+          "chip_pin": "GPIO12",
+          "functions": [
+            "UART RX"
+          ]
+        },
+        {
+          "xiao_pin": "D8",
+          "chip_pin": "GPIO8",
+          "functions": [
+            "SPI SCK",
+            "TOUCH7"
+          ]
+        },
+        {
+          "xiao_pin": "D9",
+          "chip_pin": "GPIO9",
+          "functions": [
+            "SPI MISO",
+            "TOUCH8"
+          ]
+        },
+        {
+          "xiao_pin": "D10",
+          "chip_pin": "GPIO10",
+          "functions": [
+            "SPI MOSI",
+            "TOUCH9"
+          ]
+        },
+        {
+          "xiao_pin": "MTMS",
+          "chip_pin": "GPIO2",
+          "functions": [
+            "JTAG",
+            "ADC",
+            "LP_I2C SDA"
+          ]
+        },
+        {
+          "xiao_pin": "MTDI",
+          "chip_pin": "GPIO3",
+          "functions": [
+            "JTAG",
+            "ADC",
+            "LP_I2C SCL"
+          ]
+        },
+        {
+          "xiao_pin": "MTCK",
+          "chip_pin": "GPIO4",
+          "functions": [
+            "JTAG",
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "MTDO",
+          "chip_pin": "GPIO5",
+          "functions": [
+            "JTAG"
+          ]
+        },
+        {
+          "xiao_pin": "ADC_BAT",
+          "chip_pin": "GPIO6",
+          "functions": [
+            "battery voltage ADC"
+          ]
+        },
+        {
+          "xiao_pin": "ADC_CRL",
+          "chip_pin": "GPIO26",
+          "functions": [
+            "battery measurement enable"
+          ]
+        },
+        {
+          "xiao_pin": "Boot",
+          "chip_pin": "GPIO28",
+          "functions": [
+            "enter boot mode"
+          ]
+        },
+        {
+          "xiao_pin": "USER_LED",
+          "chip_pin": "GPIO27",
+          "functions": [
+            "user LED"
+          ]
+        }
+      ],
+      "field_gotchas": [
+        "Choose ESP32-C5 when dual-band 2.4/5 GHz WiFi 6 matters; choose ESP32-C6 for Thread/Zigbee/Matter 802.15.4 work.",
+        "Reserve JTAG pins MTMS, MTDI, MTCK, and MTDO during deep sleep experiments to avoid making firmware flashing harder.",
+        "Battery-voltage reading uses GPIO6 for BAT_VOLT_PIN and GPIO26 for BAT_VOLT_PIN_EN.",
+        "The serial port may disappear during deep sleep and reappear after wake-up."
+      ],
+      "support_notes": [
+        {
+          "id": "wifi-choice",
+          "title": "XIAO ESP32-C5 dual-band WiFi guidance",
+          "kind": "wireless",
+          "text": "Use XIAO ESP32-C5 when a project needs 5 GHz WiFi or dual-band WiFi 6 in the XIAO form factor. It is not the same choice as ESP32-C6, which is better for Thread/Zigbee/802.15.4."
+        },
+        {
+          "id": "battery-voltage",
+          "title": "XIAO ESP32-C5 battery voltage read path",
+          "kind": "power",
+          "text": "For battery voltage on XIAO ESP32-C5, enable the measurement circuit through GPIO26/BAT_VOLT_PIN_EN, then read GPIO6/BAT_VOLT_PIN. Keep the measurement range and voltage divider behavior in mind."
+        }
+      ],
+      "image_urls": {},
+      "citations": [
+        {
+          "title": "Getting Started with Seeed Studio XIAO ESP32-C5",
+          "url": "https://wiki.seeedstudio.com/xiao_esp32c5_getting_started/"
+        }
+      ]
+    },
+    {
+      "id": "xiao-rp2350",
+      "title": "Seeed Studio XIAO RP2350",
+      "board_family": "XIAO",
+      "aliases": [
+        "XIAO RP2350",
+        "Seeed XIAO RP2350",
+        "RP2350 XIAO",
+        "Pico 2 XIAO"
+      ],
+      "retrieval_tags": [
+        "rp2350",
+        "raspberry-pi",
+        "micropython",
+        "arduino",
+        "c-sdk",
+        "secure-boot",
+        "trustzone",
+        "battery"
+      ],
+      "summary": "RP2350-based XIAO board with dual Arm Cortex-M33 at 150 MHz, 520 KB SRAM, 2 MB flash, RGB LED, 19 multifunction GPIOs, expanded rear IO, secure boot / TrustZone features, and direct battery voltage measurement.",
+      "mcu": {
+        "vendor": "Raspberry Pi",
+        "part": "RP2350",
+        "architecture": "dual Arm Cortex-M33"
+      },
+      "connectivity": [],
+      "onboard_features": [
+        "USB-C",
+        "reset button",
+        "boot button",
+        "RGB LED",
+        "user LED",
+        "battery-voltage ADC",
+        "expanded rear IO"
+      ],
+      "pin_map": [
+        {
+          "xiao_pin": "D0",
+          "chip_pin": "GPIO26",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D1",
+          "chip_pin": "GPIO27",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D2",
+          "chip_pin": "GPIO28",
+          "functions": [
+            "ADC"
+          ]
+        },
+        {
+          "xiao_pin": "D3",
+          "chip_pin": "GPIO5",
+          "functions": [
+            "SPI CS"
+          ]
+        },
+        {
+          "xiao_pin": "D4",
+          "chip_pin": "GPIO6",
+          "functions": [
+            "I2C SDA1"
+          ]
+        },
+        {
+          "xiao_pin": "D5",
+          "chip_pin": "GPIO7",
+          "functions": [
+            "I2C SCL1"
+          ]
+        },
+        {
+          "xiao_pin": "D6",
+          "chip_pin": "GPIO0",
+          "functions": [
+            "UART TX0"
+          ]
+        },
+        {
+          "xiao_pin": "D7",
+          "chip_pin": "GPIO1",
+          "functions": [
+            "UART RX0"
+          ]
+        },
+        {
+          "xiao_pin": "D8",
+          "chip_pin": "GPIO2",
+          "functions": [
+            "SPI SCK"
+          ]
+        },
+        {
+          "xiao_pin": "D9",
+          "chip_pin": "GPIO4",
+          "functions": [
+            "SPI MISO"
+          ]
+        },
+        {
+          "xiao_pin": "D10",
+          "chip_pin": "GPIO3",
+          "functions": [
+            "SPI MOSI"
+          ]
+        },
+        {
+          "xiao_pin": "D11",
+          "chip_pin": "GPIO21",
+          "functions": [
+            "UART RX1"
+          ]
+        },
+        {
+          "xiao_pin": "D12",
+          "chip_pin": "GPIO20",
+          "functions": [
+            "UART TX1"
+          ]
+        },
+        {
+          "xiao_pin": "D13",
+          "chip_pin": "GPIO17",
+          "functions": [
+            "I2C SCL0"
+          ]
+        },
+        {
+          "xiao_pin": "D14",
+          "chip_pin": "GPIO16",
+          "functions": [
+            "I2C SDA0"
+          ]
+        },
+        {
+          "xiao_pin": "D15",
+          "chip_pin": "GPIO11",
+          "functions": [
+            "SPI1 MOSI"
+          ]
+        },
+        {
+          "xiao_pin": "D16",
+          "chip_pin": "GPIO12",
+          "functions": [
+            "SPI1 MISO"
+          ]
+        },
+        {
+          "xiao_pin": "D17",
+          "chip_pin": "GPIO10",
+          "functions": [
+            "SPI1 SCK"
+          ]
+        },
+        {
+          "xiao_pin": "D18",
+          "chip_pin": "GPIO9",
+          "functions": [
+            "SPI1 CS"
+          ]
+        },
+        {
+          "xiao_pin": "ADC_BAT",
+          "chip_pin": "GPIO29",
+          "functions": [
+            "battery voltage ADC"
+          ]
+        },
+        {
+          "xiao_pin": "RGB LED",
+          "chip_pin": "GPIO22",
+          "functions": [
+            "RGB LED"
+          ]
+        },
+        {
+          "xiao_pin": "USER_LED",
+          "chip_pin": "GPIO25",
+          "functions": [
+            "user LED"
+          ]
+        }
+      ],
+      "field_gotchas": [
+        "There is no onboard radio. Wireless projects need an external module or a wireless XIAO variant.",
+        "Use the arduino-pico core version 4.2.0 or later for Arduino support.",
+        "Enter BOOT mode by holding Boot while plugging in USB, or by holding Boot, clicking Reset, then releasing Boot.",
+        "RP2350 has more IO than RP2040 and supports direct battery-voltage measurement on GPIO29."
+      ],
+      "support_notes": [
+        {
+          "id": "boot-mode",
+          "title": "XIAO RP2350 boot mode and recovery",
+          "kind": "recovery",
+          "text": "For upload or recovery on XIAO RP2350, enter BOOT mode by holding Boot while plugging in the USB cable, or while connected by holding Boot, pressing Reset, then releasing Boot. Then select the port and upload known-good firmware."
+        },
+        {
+          "id": "rp2040-vs-rp2350",
+          "title": "XIAO RP2040 vs RP2350 choice",
+          "kind": "compare",
+          "text": "Choose RP2350 over RP2040 when you need dual Cortex-M33 performance, more SRAM, expanded rear IO, security features such as secure boot / TrustZone, or direct battery voltage measurement."
+        }
+      ],
+      "image_urls": {},
+      "citations": [
+        {
+          "title": "Getting Started with Seeed Studio XIAO RP2350(Arduino)",
+          "url": "https://wiki.seeedstudio.com/xiao_rp2350_arduino/"
+        }
+      ]
+    },
+    {
+      "id": "xiao-w5500-ethernet-adapter",
+      "title": "XIAO W5500 Ethernet Adapter",
+      "board_family": "XIAO accessory",
+      "aliases": [
+        "XIAO W5500",
+        "XIAO W5500 Ethernet Adapter",
+        "XIAO Ethernet Adapter",
+        "XIAO PoE adapter"
+      ],
+      "retrieval_tags": [
+        "ethernet",
+        "w5500",
+        "poe",
+        "esp32s3-plus",
+        "wired-network",
+        "spi"
+      ],
+      "summary": "A compact Ethernet / PoE adapter around XIAO ESP32S3 Plus and W5500. It supports wired Ethernet examples using ESP32 Arduino Ethernet APIs, with SPI wiring to the XIAO pins and optional PoE power.",
+      "mcu": {
+        "vendor": "WIZnet / Espressif",
+        "part": "W5500 + XIAO ESP32S3 Plus",
+        "architecture": "Ethernet controller accessory"
+      },
+      "connectivity": [
+        "10/100 Ethernet via W5500",
+        "PoE power option",
+        "WiFi/BLE from XIAO ESP32S3 Plus"
+      ],
+      "onboard_features": [
+        "RJ45 Ethernet jack",
+        "W5500 Ethernet controller",
+        "isolated PoE module",
+        "5V power conversion",
+        "reset button"
+      ],
+      "pin_map": [
+        {
+          "xiao_pin": "D1",
+          "chip_pin": "ETH_PHY_CS",
+          "functions": [
+            "W5500 chip select"
+          ]
+        },
+        {
+          "xiao_pin": "D8",
+          "chip_pin": "ETH_SPI_SCK",
+          "functions": [
+            "W5500 SPI SCK"
+          ]
+        },
+        {
+          "xiao_pin": "D9",
+          "chip_pin": "ETH_SPI_MISO",
+          "functions": [
+            "W5500 SPI MISO"
+          ]
+        },
+        {
+          "xiao_pin": "D10",
+          "chip_pin": "ETH_SPI_MOSI",
+          "functions": [
+            "W5500 SPI MOSI"
+          ]
+        }
+      ],
+      "field_gotchas": [
+        "The adapter examples target XIAO ESP32S3 Plus / ESP32 Arduino Ethernet APIs, not every XIAO board.",
+        "If using a non-PoE Ethernet cable, power the XIAO separately through a stable 5V USB-C supply.",
+        "For Ethernet bring-up, watch serial output for ETH start, link, DHCP IP, duplex, and link speed events.",
+        "Use D1 as chip select and D8/D9/D10 for SPI unless adapting the example carefully."
+      ],
+      "support_notes": [
+        {
+          "id": "ethernet-debug",
+          "title": "XIAO W5500 Ethernet debug checklist",
+          "kind": "troubleshooting",
+          "text": "For no Ethernet link, verify cable quality, switch/router link lights, PoE vs non-PoE power path, SPI pins D8/D9/D10, chip select D1, and serial event logs. After DHCP succeeds, the serial monitor should show the MAC address and assigned IPv4 address."
+        }
+      ],
+      "image_urls": {},
+      "citations": [
+        {
+          "title": "Getting Started with XIAO W5500 Ethernet Adapter",
+          "url": "https://wiki.seeedstudio.com/xiao_w5500_ethernet_adapter/"
+        }
       ]
     }
   ]
