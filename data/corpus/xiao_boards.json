@@ -1,0 +1,288 @@
+{
+  "schema_version": "0.1",
+  "curation_date": "2026-05-10",
+  "scope": "Seeed Studio XIAO boards only",
+  "documents": [
+    {
+      "id": "xiao-esp32s3",
+      "title": "Seeed Studio XIAO ESP32S3 Series",
+      "board_family": "XIAO",
+      "aliases": ["XIAO ESP32S3", "XIAO ESP32-S3", "XIAO ESP32S3 Sense", "XIAO ESP32S3 Plus"],
+      "retrieval_tags": ["wifi", "ble", "camera", "microphone", "sd-card", "tinyml", "esp32-s3"],
+      "summary": "Thumb-size ESP32-S3 XIAO board. The Sense variant adds a camera expansion board, digital microphone, and microSD support for vision and audio TinyML projects.",
+      "mcu": {
+        "vendor": "Espressif",
+        "part": "ESP32-S3",
+        "architecture": "Xtensa LX7"
+      },
+      "connectivity": ["2.4 GHz WiFi", "Bluetooth LE"],
+      "onboard_features": ["USB-C", "reset button", "boot button", "user LED on GPIO21", "battery pad", "U.FL antenna connector"],
+      "sense_features": ["OV3660 camera on current Sense units", "OV2640 examples remain relevant", "digital PDM microphone", "microSD card slot"],
+      "pin_map": [
+        {"xiao_pin": "D0", "chip_pin": "GPIO1", "functions": ["ADC", "touch"]},
+        {"xiao_pin": "D1", "chip_pin": "GPIO2", "functions": ["ADC", "touch"]},
+        {"xiao_pin": "D2", "chip_pin": "GPIO3", "functions": ["ADC", "touch", "SD card CS on Sense"]},
+        {"xiao_pin": "D3", "chip_pin": "GPIO4", "functions": ["ADC", "touch"]},
+        {"xiao_pin": "D4", "chip_pin": "GPIO5", "functions": ["I2C SDA", "ADC", "touch"]},
+        {"xiao_pin": "D5", "chip_pin": "GPIO6", "functions": ["I2C SCL", "ADC", "touch"]},
+        {"xiao_pin": "D6", "chip_pin": "GPIO43", "functions": ["UART TX"]},
+        {"xiao_pin": "D7", "chip_pin": "GPIO44", "functions": ["UART RX"]},
+        {"xiao_pin": "D8", "chip_pin": "GPIO7", "functions": ["SPI SCK", "ADC", "touch", "SD card SCK on Sense"]},
+        {"xiao_pin": "D9", "chip_pin": "GPIO8", "functions": ["SPI MISO", "ADC", "touch", "SD card MISO on Sense"]},
+        {"xiao_pin": "D10", "chip_pin": "GPIO9", "functions": ["SPI MOSI", "ADC", "touch"]},
+        {"xiao_pin": "Boot", "chip_pin": "GPIO0", "functions": ["enter boot mode"]}
+      ],
+      "field_gotchas": [
+        "Ask whether the user has the base ESP32S3, Sense, or Plus before giving camera, microphone, or B2B connector advice.",
+        "The Sense camera module changed from OV2640 to OV3660 on later units, while Seeed notes that the camera examples still apply.",
+        "Starting June 2025, Sense factory firmware may expose a default AP with SSID XIAO_ESP32S3_Sense and password seeedstudio.",
+        "Do not assume battery voltage can be read from a normal GPIO on this board."
+      ],
+      "image_urls": {
+        "product": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/img/xiaoesp32s3.jpg",
+        "sense_product": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/img/xiaoesp32s3sense.jpg",
+        "front_pinout": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/img/front-indication.png",
+        "back_pinout": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/img/back-indication.png",
+        "pinout": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/img/2.jpg"
+      },
+      "citations": [
+        {"title": "Getting Started with Seeed Studio XIAO ESP32S3 Series", "url": "https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/"},
+        {"title": "XIAO ESP32-S3 Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/res/XIAO_ESP32S3_Sense_Pinout.xlsx"},
+        {"title": "XIAO ESP32-S3 Factory Firmware", "url": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/res/XIAO-ESP32S3-firmware-20240814.zip"}
+      ]
+    },
+    {
+      "id": "xiao-esp32c3",
+      "title": "Seeed Studio XIAO ESP32C3",
+      "board_family": "XIAO",
+      "aliases": ["XIAO ESP32C3", "XIAO ESP32-C3", "Seeed XIAO C3"],
+      "retrieval_tags": ["wifi", "ble", "risc-v", "esp32-c3", "low-power", "antenna"],
+      "summary": "Tiny ESP32-C3 XIAO board with WiFi, Bluetooth LE, 11 digital IO, 4 analog IO, UART, I2C, SPI, reset, boot button, and external antenna connector.",
+      "mcu": {
+        "vendor": "Espressif",
+        "part": "ESP32-C3",
+        "architecture": "32-bit RISC-V"
+      },
+      "connectivity": ["2.4 GHz WiFi", "Bluetooth 5 LE"],
+      "onboard_features": ["USB-C", "reset button", "boot button", "U.FL antenna connector", "battery pad"],
+      "pin_map": [
+        {"xiao_pin": "D0", "chip_pin": "GPIO2", "functions": ["ADC1_CH2"]},
+        {"xiao_pin": "D1", "chip_pin": "GPIO3", "functions": ["ADC1_CH3"]},
+        {"xiao_pin": "D2", "chip_pin": "GPIO4", "functions": ["ADC1_CH4", "JTAG MTMS"]},
+        {"xiao_pin": "D3", "chip_pin": "GPIO5", "functions": ["ADC2_CH0", "JTAG MTDI"]},
+        {"xiao_pin": "D4", "chip_pin": "GPIO6", "functions": ["I2C SDA", "JTAG MTCK"]},
+        {"xiao_pin": "D5", "chip_pin": "GPIO7", "functions": ["I2C SCL", "JTAG MTDO"]},
+        {"xiao_pin": "D6", "chip_pin": "GPIO21", "functions": ["UART TX"]},
+        {"xiao_pin": "D7", "chip_pin": "GPIO20", "functions": ["UART RX"]},
+        {"xiao_pin": "D8", "chip_pin": "GPIO8", "functions": ["SPI SCK", "strapping pin"]},
+        {"xiao_pin": "D9", "chip_pin": "GPIO9", "functions": ["SPI MISO", "boot", "strapping pin"]},
+        {"xiao_pin": "D10", "chip_pin": "GPIO10", "functions": ["SPI MOSI"]},
+        {"xiao_pin": "Boot", "chip_pin": "GPIO9", "functions": ["enter boot mode"]}
+      ],
+      "field_gotchas": [
+        "For reliable analog reads, prefer ADC1 pins A0, A1, and A2; Seeed warns that A3/GPIO5 uses ADC2 and may be unreliable.",
+        "GPIO2, GPIO8, and GPIO9 are strapping pins. External circuits on D0, D8, or D9 can interfere with boot or upload.",
+        "If upload fails, remove external wiring from boot/strapping pins and use a known data-capable USB-C cable."
+      ],
+      "image_urls": {
+        "product": "https://files.seeedstudio.com/wiki/XIAO_WiFi/board-pic.png",
+        "front_pinout": "https://files.seeedstudio.com/wiki/XIAO_WiFi/front-label-3.png",
+        "back_pinout": "https://files.seeedstudio.com/wiki/XIAO_WiFi/back-label-6.png",
+        "pinout": "https://files.seeedstudio.com/wiki/XIAO_WiFi/pin_map-2.png"
+      },
+      "citations": [
+        {"title": "Getting Started with Seeed Studio XIAO ESP32C3", "url": "https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/"},
+        {"title": "XIAO ESP32-C3 Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/XIAO_WiFi/Resources/XIAO-ESP32C3-pinout_sheet.xlsx"},
+        {"title": "Report of XIAO ESP32-C3 Low Power Consumption", "url": "https://files.seeedstudio.com/wiki/Seeed-Studio-XIAO-ESP32/Low_Power_Consumption.pdf"}
+      ]
+    },
+    {
+      "id": "xiao-rp2040",
+      "title": "Seeed Studio XIAO RP2040",
+      "board_family": "XIAO",
+      "aliases": ["XIAO RP2040", "Seeed XIAO RP2040", "XIAO Pico"],
+      "retrieval_tags": ["rp2040", "pico", "circuitpython", "micropython", "arduino", "rgb-led"],
+      "summary": "RP2040-based XIAO board with 264 KB SRAM, 2 MB flash, 11 digital pins, 4 analog pins, I2C, UART, SPI, SWD pads, boot button, reset button, and onboard RGB/user LEDs.",
+      "mcu": {
+        "vendor": "Raspberry Pi",
+        "part": "RP2040",
+        "architecture": "dual-core Arm Cortex-M0+"
+      },
+      "connectivity": [],
+      "onboard_features": ["USB-C", "reset button", "boot button", "RGB LED", "SWD pads"],
+      "pin_map": [
+        {"xiao_pin": "D0", "chip_pin": "GPIO26", "functions": ["ADC"]},
+        {"xiao_pin": "D1", "chip_pin": "GPIO27", "functions": ["ADC"]},
+        {"xiao_pin": "D2", "chip_pin": "GPIO28", "functions": ["ADC"]},
+        {"xiao_pin": "D3", "chip_pin": "GPIO29", "functions": ["ADC"]},
+        {"xiao_pin": "D4", "chip_pin": "GPIO6", "functions": ["I2C SDA"]},
+        {"xiao_pin": "D5", "chip_pin": "GPIO7", "functions": ["I2C SCL"]},
+        {"xiao_pin": "D6", "chip_pin": "GPIO0", "functions": ["UART TX"]},
+        {"xiao_pin": "D7", "chip_pin": "GPIO1", "functions": ["UART RX", "SPI CSn"]},
+        {"xiao_pin": "D8", "chip_pin": "GPIO2", "functions": ["SPI SCK"]},
+        {"xiao_pin": "D9", "chip_pin": "GPIO4", "functions": ["SPI MISO"]},
+        {"xiao_pin": "D10", "chip_pin": "GPIO3", "functions": ["SPI MOSI"]},
+        {"xiao_pin": "Boot", "chip_pin": "RP2040_BOOT", "functions": ["enter boot mode"]}
+      ],
+      "field_gotchas": [
+        "If the serial port disappears after bad firmware, use the boot button / bootloader mode and reflash UF2 firmware.",
+        "There is no onboard radio. Do not recommend BLE, WiFi, Zigbee, or Thread without an external module.",
+        "Do not pry or lift the shield can."
+      ],
+      "image_urls": {
+        "product": "https://files.seeedstudio.com/wiki/XIAO-RP2040/img/102010428_Preview-07.jpg",
+        "hardware_overview": "https://files.seeedstudio.com/wiki/XIAO-RP2040/img/xinpin.jpg",
+        "pinout": "https://files.seeedstudio.com/wiki/XIAO-RP2040/img/xinfront.jpg"
+      },
+      "citations": [
+        {"title": "Getting Started with Seeed Studio XIAO RP2040", "url": "https://wiki.seeedstudio.com/XIAO-RP2040/"},
+        {"title": "XIAO RP2040 Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/XIAO-RP2040/res/XIAO-RP2040-pinout_sheet.xlsx"},
+        {"title": "XIAO RP2040 Schematic", "url": "https://files.seeedstudio.com/wiki/XIAO-RP2040/res/Seeed-Studio-XIAO-RP2040-v1.3.pdf"}
+      ]
+    },
+    {
+      "id": "xiao-nrf52840",
+      "title": "Seeed Studio XIAO nRF52840 Series",
+      "board_family": "XIAO",
+      "aliases": ["XIAO nRF52840", "XIAO BLE", "XIAO BLE Sense", "XIAO nRF52840 Sense", "XIAO nRF52840 Plus"],
+      "retrieval_tags": ["ble", "nfc", "imu", "pdm", "microphone", "battery", "tinyml", "nordic"],
+      "summary": "Nordic nRF52840 XIAO board focused on Bluetooth LE. Sense variants add a PDM microphone and 6-axis IMU; Plus variants add more exposed pins and interfaces.",
+      "mcu": {
+        "vendor": "Nordic Semiconductor",
+        "part": "nRF52840",
+        "architecture": "Arm Cortex-M4F"
+      },
+      "connectivity": ["Bluetooth LE", "Bluetooth Mesh", "NFC"],
+      "onboard_features": ["USB-C", "reset button", "battery charging", "user RGB LED", "onboard antenna", "2 MB flash"],
+      "sense_features": ["PDM digital microphone", "LSM6DS3TR-C 6-axis IMU"],
+      "pin_map": [
+        {"xiao_pin": "D0", "chip_pin": "P0.02", "functions": ["AIN0"]},
+        {"xiao_pin": "D1", "chip_pin": "P0.03", "functions": ["AIN1"]},
+        {"xiao_pin": "D2", "chip_pin": "P0.28", "functions": ["AIN4"]},
+        {"xiao_pin": "D3", "chip_pin": "P0.29", "functions": ["AIN5"]},
+        {"xiao_pin": "D4", "chip_pin": "P0.04", "functions": ["I2C SDA", "AIN2"]},
+        {"xiao_pin": "D5", "chip_pin": "P0.05", "functions": ["I2C SCL", "AIN3"]},
+        {"xiao_pin": "D6", "chip_pin": "P1.11", "functions": ["UART TX"]},
+        {"xiao_pin": "D7", "chip_pin": "P1.12", "functions": ["UART RX"]},
+        {"xiao_pin": "D8", "chip_pin": "P1.13", "functions": ["SPI SCK"]},
+        {"xiao_pin": "D9", "chip_pin": "P1.14", "functions": ["SPI MISO"]},
+        {"xiao_pin": "D10", "chip_pin": "P1.15", "functions": ["SPI MOSI"]},
+        {"xiao_pin": "NFC1", "chip_pin": "P0.09", "functions": ["NFC"]},
+        {"xiao_pin": "NFC2", "chip_pin": "P0.10", "functions": ["NFC"]},
+        {"xiao_pin": "ADC_BAT", "chip_pin": "P0.14", "functions": ["READ_BAT_ENABLE"]},
+        {"xiao_pin": "AIN7_BAT", "chip_pin": "P0.31", "functions": ["battery voltage ADC"]}
+      ],
+      "field_gotchas": [
+        "Use the Seeed nRF52 board package for Bluetooth and low-power work.",
+        "Use the mbed-enabled package when the user needs embedded ML, IMU, or PDM microphone support.",
+        "To read battery voltage safely, set P0.14 LOW to enable the divider before reading P0.31; do not leave P0.14 HIGH during a battery read.",
+        "Sense-only sensors should not be promised for the base nRF52840 board."
+      ],
+      "image_urls": {
+        "product": "https://files.seeedstudio.com/wiki/XIAO-BLE/nrf52840_front.jpg",
+        "sense_product": "https://files.seeedstudio.com/wiki/XIAO-BLE/xiaonrf52840sence.png",
+        "front_pinout": "https://files.seeedstudio.com/wiki/XIAO-BLE/front-pinout-4.jpg",
+        "back_pinout": "https://files.seeedstudio.com/wiki/XIAO-BLE/back-pinout-5.jpg",
+        "pinout": "https://files.seeedstudio.com/wiki/XIAO-BLE/pinout2.png"
+      },
+      "citations": [
+        {"title": "Getting Started with Seeed Studio XIAO nRF52840 Series", "url": "https://wiki.seeedstudio.com/XIAO_BLE/"},
+        {"title": "XIAO nRF52840 Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/XIAO-BLE/XIAO-nRF52840-pinout_sheet.xlsx"},
+        {"title": "XIAO nRF52840 Sense Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/XIAO-BLE/XIAO-nRF52840-Senese-pinout_sheet.xlsx"}
+      ]
+    },
+    {
+      "id": "xiao-samd21",
+      "title": "Seeed Studio XIAO SAMD21",
+      "board_family": "XIAO",
+      "aliases": ["XIAO SAMD21", "Seeeduino XIAO", "Seeed Studio XIAO SAMD21"],
+      "retrieval_tags": ["samd21", "arduino", "circuitpython", "micropython", "dac", "bootloader"],
+      "summary": "Original XIAO board formerly named Seeeduino XIAO, based on Microchip SAMD21G18. It has 11 digital/analog pins, 10 PWM pins, one DAC output on D0, I2C, UART, SPI, SWD pads, and USB-C.",
+      "mcu": {
+        "vendor": "Microchip",
+        "part": "SAMD21G18",
+        "architecture": "Arm Cortex-M0+"
+      },
+      "connectivity": [],
+      "onboard_features": ["USB-C", "reset pads", "user LED", "power LED", "TX/RX LEDs", "SWD pads"],
+      "pin_map": [
+        {"xiao_pin": "D0", "chip_pin": "PA02", "functions": ["ADC", "DAC"]},
+        {"xiao_pin": "D1", "chip_pin": "PA04", "functions": ["ADC", "PWM"]},
+        {"xiao_pin": "D2", "chip_pin": "PA10", "functions": ["ADC", "PWM"]},
+        {"xiao_pin": "D3", "chip_pin": "PA11", "functions": ["ADC", "PWM"]},
+        {"xiao_pin": "D4", "chip_pin": "PA08", "functions": ["I2C SDA", "ADC", "PWM"]},
+        {"xiao_pin": "D5", "chip_pin": "PA09", "functions": ["I2C SCL", "ADC", "PWM"]},
+        {"xiao_pin": "D6", "chip_pin": "PB08", "functions": ["UART TX", "ADC", "PWM"]},
+        {"xiao_pin": "D7", "chip_pin": "PB09", "functions": ["UART RX", "ADC", "PWM"]},
+        {"xiao_pin": "D8", "chip_pin": "PA07", "functions": ["SPI SCK", "ADC", "PWM"]},
+        {"xiao_pin": "D9", "chip_pin": "PA05", "functions": ["SPI MISO", "ADC", "PWM"]},
+        {"xiao_pin": "D10", "chip_pin": "PA06", "functions": ["SPI MOSI", "ADC", "PWM"]},
+        {"xiao_pin": "Reset", "chip_pin": "RES", "functions": ["reset"]}
+      ],
+      "field_gotchas": [
+        "D0 is the DAC-capable pin; do not imply that every analog-capable pin can output true analog voltage.",
+        "If the port disappears after a bad upload, double-short the RST pads to enter bootloader mode.",
+        "There is no onboard radio. Wireless projects need an external module."
+      ],
+      "image_urls": {
+        "product": "https://files.seeedstudio.com/wiki/Seeeduino-XIAO/img/Seeeduino-XIAO-preview-1.jpg",
+        "pinout": "https://files.seeedstudio.com/wiki/Seeeduino-XIAO/img/Seeeduino-XIAO-pinout-1.jpg",
+        "alternate_pinout": "https://files.seeedstudio.com/wiki/Seeeduino-XIAO/img/Seeeduino%20XIAO%20pinout%202.png",
+        "bootloader_reset": "https://files.seeedstudio.com/wiki/Seeeduino-XIAO/img/XIAO-reset.gif"
+      },
+      "citations": [
+        {"title": "Getting Started with Seeed Studio XIAO SAMD21", "url": "https://wiki.seeedstudio.com/Seeeduino-XIAO/"},
+        {"title": "XIAO SAMD21 Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/Seeeduino-XIAO/res/XIAO-SAMD21-pinout_sheet.xlsx"},
+        {"title": "XIAO SAMD21 Factory Firmware", "url": "https://files.seeedstudio.com/wiki/Seeeduino-XIAO/res/102010328_Seeeduino_XIAO_final_firmware.zip"}
+      ]
+    },
+    {
+      "id": "xiao-esp32c6",
+      "title": "Seeed Studio XIAO ESP32C6",
+      "board_family": "XIAO",
+      "aliases": ["XIAO ESP32C6", "XIAO ESP32-C6", "Seeed XIAO C6"],
+      "retrieval_tags": ["wifi-6", "ble", "zigbee", "thread", "matter", "risc-v", "esp32-c6", "antenna"],
+      "summary": "ESP32-C6 XIAO board with WiFi 6, Bluetooth LE, Zigbee, Thread, and Matter-oriented smart-home use. It exposes the XIAO D0-D10 pattern plus RF switch control pins.",
+      "mcu": {
+        "vendor": "Espressif",
+        "part": "ESP32-C6",
+        "architecture": "32-bit RISC-V"
+      },
+      "connectivity": ["2.4 GHz WiFi 6", "Bluetooth 5 LE", "Zigbee", "Thread", "IEEE 802.15.4"],
+      "onboard_features": ["USB-C", "reset/EN", "boot button", "ceramic antenna", "U.FL antenna option", "user light"],
+      "pin_map": [
+        {"xiao_pin": "D0", "chip_pin": "GPIO0", "functions": ["ADC", "LP_GPIO0"]},
+        {"xiao_pin": "D1", "chip_pin": "GPIO1", "functions": ["ADC", "LP_GPIO1"]},
+        {"xiao_pin": "D2", "chip_pin": "GPIO2", "functions": ["ADC", "LP_GPIO2"]},
+        {"xiao_pin": "D3", "chip_pin": "GPIO21", "functions": ["GPIO"]},
+        {"xiao_pin": "D4", "chip_pin": "GPIO22", "functions": ["I2C SDA"]},
+        {"xiao_pin": "D5", "chip_pin": "GPIO23", "functions": ["I2C SCL"]},
+        {"xiao_pin": "D6", "chip_pin": "GPIO16", "functions": ["UART TX"]},
+        {"xiao_pin": "D7", "chip_pin": "GPIO17", "functions": ["UART RX"]},
+        {"xiao_pin": "D8", "chip_pin": "GPIO19", "functions": ["SPI SCK"]},
+        {"xiao_pin": "D9", "chip_pin": "GPIO20", "functions": ["SPI MISO"]},
+        {"xiao_pin": "D10", "chip_pin": "GPIO18", "functions": ["SPI MOSI"]},
+        {"xiao_pin": "Boot", "chip_pin": "GPIO9", "functions": ["enter boot mode"]},
+        {"xiao_pin": "RF Switch Port Select", "chip_pin": "GPIO14", "functions": ["select ceramic or U.FL antenna"]},
+        {"xiao_pin": "RF Switch Power", "chip_pin": "GPIO3", "functions": ["enable RF switch control"]}
+      ],
+      "field_gotchas": [
+        "For external antenna use, set GPIO3 LOW to activate RF switch control, then set GPIO14 HIGH to select the external antenna.",
+        "GPIO14 LOW is the default built-in ceramic antenna selection.",
+        "This is the best fit in this corpus for Thread, Zigbee, and Matter questions.",
+        "Ask whether the user's framework supports ESP32-C6 Zigbee/Thread for their exact runtime before promising library compatibility."
+      ],
+      "image_urls": {
+        "product": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32C6/img/xiaoc6.jpg",
+        "product_cdn": "https://media-cdn.seeedstudio.com/media/catalog/product/cache/bb49d3ec4ee05b6f018e93f896b8a25d/2/-/2-113991254-seeedxiao-esp32c6-font.jpg",
+        "front_pinout": "https://wdcdn.qpic.cn/MTY4ODg1Nzc0ODUwMjM3NA_556525_Slxs4ARdyuXRrJK-_1711096256?w=9854&h=3367&type=image/png",
+        "pinout": "https://wdcdn.qpic.cn/MTY4ODg1Nzc0ODUwMjM3NA_318648_dMoXitoaQiq2N3-a_1711678067?w=1486&h=1228"
+      },
+      "citations": [
+        {"title": "Getting Started with Seeed Studio XIAO ESP32C6", "url": "https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/"},
+        {"title": "Pin Multiplexing With Seeed Studio XIAO ESP32C6", "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp32c6/"},
+        {"title": "XIAO ESP32-C6 Pinout Sheet", "url": "https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32C6/res/XIAO_ESP32C6_Pinout.xlsx"}
+      ]
+    }
+  ]
+}
