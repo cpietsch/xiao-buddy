@@ -74,6 +74,34 @@ pip install -r requirements.txt
 python app.py
 ```
 
+## Expanding The Knowledge Base
+
+Buddy keeps the hand-curated `xiao_boards.json` facts as the high-trust seed
+corpus, then layers in compact chunks from the official Seeed wiki markdown.
+This reuses the strongest ingestion idea from the larger `seeed-rag` project
+without shipping the full wiki-scale stack.
+
+To refresh the imported XIAO wiki chunks:
+
+```bash
+python scripts/import_seeed_wiki_xiao.py --refresh
+```
+
+The importer creates a sparse checkout of
+`Seeed-Studio/wiki-documents` under `.cache/seeed-wiki`, filters to
+`sites/en/docs/Sensor/SeeedStudio_XIAO`, cleans Docusaurus/MDX markdown,
+splits by headings, preserves source URLs and image URLs, infers the matching
+XIAO board family, and writes `data/corpus/wiki_chunks.jsonl`.
+
+At runtime the app loads:
+
+- curated board facts from `data/corpus/xiao_boards.json`
+- imported official wiki chunks from `data/corpus/wiki_chunks.jsonl`
+- small local field notes in `xiao_copilot/knowledge_base.py`
+
+Retrieval uses a lexical prefilter before dense embedding so the larger corpus
+does not require embedding every wiki chunk on every request.
+
 ## AMD MI300X vLLM Deployment
 
 This Space is a thin UI and orchestration layer. The three Qwen services can be
@@ -104,6 +132,7 @@ variables rather than committing them to the repo.
 - `app.py` - Gradio Blocks UI.
 - `amd-droplet.md` - AMD MI300X / ROCm / vLLM deployment walkthrough for the hosted Qwen endpoints.
 - `data/corpus/xiao_boards.json` - curated XIAO-only board facts, pin maps, gotchas, citations, and image URLs.
+- `data/corpus/wiki_chunks.jsonl` - imported XIAO-only chunks from the official Seeed wiki markdown.
 - `data/corpus/support_examples.jsonl` - seed support examples for demo planning.
 - `data/corpus/eval_queries.jsonl` - tiny benchmark set for the submission.
 - `xiao_copilot/config.py` - environment-driven endpoint settings.

@@ -1,19 +1,20 @@
 # XIAO Field Copilot Corpus
 
-This is a hackathon-simple, XIAO-only seed corpus for a multimodal hardware support copilot. It is intentionally compact: one curated board facts file, one support-example file, and one eval-query file.
+This is a hackathon-simple, XIAO-only corpus for a multimodal hardware support copilot. It combines compact curated board facts with imported official Seeed wiki chunks.
 
 ## Strategy
 
 1. Scope only Seeed Studio XIAO boards and tightly related XIAO accessories: ESP32S3, ESP32C3, ESP32C5, ESP32C6, RP2040, RP2350, nRF52840, nRF54L15, SAMD21, RA4M1, MG24, and the XIAO W5500 Ethernet Adapter.
 2. Prefer official Seeed wiki pages and official resource links as citations. Avoid forum lore unless it becomes a known failure case that needs a separate community-evidence bucket.
-3. Keep each board doc small enough for direct retrieval: identity, aliases, MCU, wireless/sensor capabilities, pin map, bootloader notes, power caveats, and known gotchas.
+3. Keep each curated board doc small enough for direct retrieval: identity, aliases, MCU, wireless/sensor capabilities, pin map, bootloader notes, power caveats, and known gotchas.
 4. Treat images as retrieval hints, not required truth. Store product and pinout image URLs where known, and let the app accept user-uploaded photos against board aliases, visual features, and pin labels.
 5. Split support examples from facts. Examples model the desired field-copilot behavior: ask for the board variant when needed, cite sources, and give short hardware-safe next steps.
-6. Use evals that test board identification, pin mapping, bootloader recovery, power/ADC caveats, and capability selection.
+6. Use evals that test board identification, pin mapping, bootloader recovery, power/ADC caveats, capability selection, and imported wiki-only workflows.
 
 ## Files
 
 - `xiao_boards.json`: curated board/accessory facts, citations, pin maps, field gotchas, and support notes.
+- `wiki_chunks.jsonl`: generated chunks from official Seeed wiki XIAO markdown. Rebuild with `python scripts/import_seeed_wiki_xiao.py --refresh`.
 - `support_examples.jsonl`: few-shot style question/answer examples with expected citations.
 - `eval_queries.jsonl`: small evaluation set for retrieval and answer checks.
 

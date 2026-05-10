@@ -18,9 +18,14 @@ def retrieve(
     image_data_url: str | None = None,
 ) -> tuple[list[KnowledgeChunk], dict[str, object]]:
     chunks = load_knowledge_base()
+    lexical_ranked = _lexical_prefilter(query, chunks, settings)
+    embedding_pool_size = max(settings.candidate_k * 12, 72)
+    embedding_pool = [chunk for chunk, _score in lexical_ranked[:embedding_pool_size]]
     diagnostics: dict[str, object] = {
         "embedding_used": False,
         "multimodal_query": bool(image_data_url),
+        "corpus_chunks": len(chunks),
+        "embedding_pool_chunks": len(embedding_pool),
         "reranker_used": False,
     }
 
@@ -35,7 +40,7 @@ def retrieve(
     document_embeddings = embed_texts(
         base_url=settings.embedding_base_url,
         model=settings.embedding_model,
-        texts=[chunk.search_text for chunk in chunks],
+        texts=[chunk.search_text for chunk in embedding_pool],
         api_key=settings.embedding_api_key,
         timeout=settings.request_timeout_seconds,
     )
@@ -43,15 +48,17 @@ def retrieve(
     if query_embedding.ok and document_embeddings.ok:
         diagnostics["embedding_used"] = True
         scored = [
-            (chunk, _cosine(query_embedding.data, vector) + _board_hint_score(query, chunk) * 0.15)
-            for chunk, vector in zip(chunks, document_embeddings.data, strict=True)
+            (
+                chunk,
+                _cosine(query_embedding.data, vector)
+                + _board_hint_score(query, chunk) * 0.15
+                + _kind_hint_score(query, chunk) * 0.05,
+            )
+            for chunk, vector in zip(embedding_pool, document_embeddings.data, strict=True)
         ]
     else:
         diagnostics["embedding_error"] = query_embedding.error or document_embeddings.error
-        scored = [
-            (chunk, _lexical_score(query, chunk.search_text) + _board_hint_score(query, chunk))
-            for chunk in chunks
-        ]
+        scored = lexical_ranked
 
     ranked = sorted(scored, key=lambda item: item[1], reverse=True)
     diagnostics["initial_top"] = [
@@ -78,6 +85,40 @@ def retrieve(
 
     diagnostics["citations"] = [chunk.id for chunk in top]
     return top, diagnostics
+
+
+def _lexical_prefilter(
+    query: str,
+    chunks: list[KnowledgeChunk],
+    settings: Settings,
+) -> list[tuple[KnowledgeChunk, float]]:
+    minimum = max(settings.candidate_k * 12, settings.top_k * 12, 72)
+    scored = [
+        (
+            chunk,
+            _lexical_score(query, chunk.search_text)
+            + _board_hint_score(query, chunk)
+            + _kind_hint_score(query, chunk),
+        )
+        for chunk in chunks
+    ]
+    ranked = sorted(scored, key=lambda item: item[1], reverse=True)
+    if len(ranked) <= minimum:
+        return ranked
+
+    positive = [item for item in ranked if item[1] > 0]
+    if len(positive) >= minimum:
+        return positive
+
+    seen_ids = {chunk.id for chunk, _score in positive}
+    padded = positive[:]
+    for chunk, score in ranked:
+        if chunk.id in seen_ids:
+            continue
+        padded.append((chunk, score))
+        if len(padded) >= minimum:
+            break
+    return padded
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -109,6 +150,28 @@ def _board_hint_score(query: str, chunk: KnowledgeChunk) -> float:
         if normalized_hint and normalized_hint in normalized_query:
             return 1.0
     return 0.0
+
+
+def _kind_hint_score(query: str, chunk: KnowledgeChunk) -> float:
+    q = query.lower()
+    score = 0.0
+
+    # Keep the hand-curated board facts prominent. The imported wiki gives
+    # breadth, while these chunks are the compact facts we trust most for demos.
+    if chunk.kind != "wiki":
+        score += 0.2
+
+    if any(term in q for term in ("pin", "pins", "i2c", "spi", "uart", "gpio", "adc", "dac")):
+        if chunk.kind == "pinout":
+            score += 0.8
+    if any(term in q for term in ("compare", "which", "choose", "pick", "wifi", "wireless", "camera")):
+        if chunk.kind == "identity":
+            score += 0.35
+    if any(term in q for term in ("not detected", "not responding", "fails", "error", "reset", "brownout", "boot")):
+        if chunk.kind in {"gotchas", "support", "note"}:
+            score += 0.35
+
+    return score
 
 
 def _normalize_id(text: str) -> str:

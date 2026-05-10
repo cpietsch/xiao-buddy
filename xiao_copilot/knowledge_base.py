@@ -26,6 +26,7 @@ class KnowledgeChunk:
 
 _ROOT = Path(__file__).resolve().parents[1]
 _CORPUS_PATH = _ROOT / "data" / "corpus" / "xiao_boards.json"
+_WIKI_CHUNKS_PATH = _ROOT / "data" / "corpus" / "wiki_chunks.jsonl"
 
 
 FIELD_NOTES: list[KnowledgeChunk] = [
@@ -69,7 +70,31 @@ def load_knowledge_base() -> list[KnowledgeChunk]:
         data = json.loads(_CORPUS_PATH.read_text())
         for doc in data.get("documents", []):
             chunks.extend(_chunks_for_board(doc))
+    chunks.extend(_load_wiki_chunks())
     return chunks + FIELD_NOTES
+
+
+def _load_wiki_chunks() -> list[KnowledgeChunk]:
+    if not _WIKI_CHUNKS_PATH.exists():
+        return []
+
+    chunks: list[KnowledgeChunk] = []
+    for line in _WIKI_CHUNKS_PATH.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        item = json.loads(line)
+        chunks.append(
+            KnowledgeChunk(
+                id=item["id"],
+                title=item["title"],
+                source=item["source"],
+                text=item["text"],
+                board_id=item.get("board_id", ""),
+                kind=item.get("kind", "wiki"),
+                metadata=item.get("metadata", {}),
+            )
+        )
+    return chunks
 
 
 def _chunks_for_board(doc: dict[str, Any]) -> list[KnowledgeChunk]:
