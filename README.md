@@ -74,9 +74,35 @@ pip install -r requirements.txt
 python app.py
 ```
 
+## AMD MI300X vLLM Deployment
+
+This Space is a thin UI and orchestration layer. The three Qwen services can be
+self-hosted on a single AMD Instinct MI300X GPU with vLLM:
+
+| Service | Model | Port | App variable |
+|---|---|---:|---|
+| Multimodal embedder | `Qwen/Qwen3-VL-Embedding-2B` | 8000 | `EMBEDDING_BASE_URL` |
+| Reranker | `Qwen/Qwen3-VL-Reranker-2B` | 8001 | `RERANK_BASE_URL` |
+| Generator | `Qwen/Qwen3.6-35B-A3B` | 8002 | `AGENT_BASE_URL` |
+
+The tested setup uses a DigitalOcean AMD GPU Droplet with an MI300X, ROCm, and
+vLLM. The 35B MoE model starts first with a larger memory reservation, then the
+2B embedding and reranking models share the remaining GPU memory. See the full
+walkthrough in [`amd-droplet.md`](amd-droplet.md) for:
+
+- opening the required droplet ports
+- using Jupyter terminals inside the ROCm container
+- serving all three models with `vllm serve`
+- testing `/v1/models`, `/v1/embeddings`, `/v1/completions`, and `/v1/chat/completions`
+- security notes for public HTTP endpoints
+
+For a public Space, set the deployed endpoint URLs as Hugging Face Space
+variables rather than committing them to the repo.
+
 ## Project Layout
 
 - `app.py` - Gradio Blocks UI.
+- `amd-droplet.md` - AMD MI300X / ROCm / vLLM deployment walkthrough for the hosted Qwen endpoints.
 - `data/corpus/xiao_boards.json` - curated XIAO-only board facts, pin maps, gotchas, citations, and image URLs.
 - `data/corpus/support_examples.jsonl` - seed support examples for demo planning.
 - `data/corpus/eval_queries.jsonl` - tiny benchmark set for the submission.
