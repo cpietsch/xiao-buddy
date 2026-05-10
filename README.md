@@ -1,7 +1,7 @@
 ---
 title: XIAO Field Copilot
 emoji: 🔧
-colorFrom: teal
+colorFrom: green
 colorTo: yellow
 sdk: gradio
 sdk_version: 6.14.0
