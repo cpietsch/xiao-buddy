@@ -33,6 +33,7 @@ def answer_question(image: Image.Image | None, question: str) -> tuple[str, str,
     answer = _generate_with_agent(
         question=question,
         image_summary=image_summary,
+        image_data_url=image_data_url,
         intent=intent,
         chunks=chunks,
         settings=settings,
@@ -42,6 +43,7 @@ def answer_question(image: Image.Image | None, question: str) -> tuple[str, str,
         "status": "ok",
         "intent": intent,
         "image": image_summary,
+        "agent_multimodal": bool(image_data_url),
         "retrieval": retrieval_diagnostics,
     }
 
@@ -57,6 +59,7 @@ def answer_question(image: Image.Image | None, question: str) -> tuple[str, str,
 def _generate_with_agent(
     question: str,
     image_summary: dict[str, object],
+    image_data_url: str | None,
     intent: str,
     chunks: list[KnowledgeChunk],
     settings,
@@ -65,18 +68,28 @@ def _generate_with_agent(
         f"[{chunk.id}] {chunk.title}\nSource: {chunk.source}\n{chunk.text}"
         for chunk in chunks
     )
+    prompt = (
+        f"Agent route: {intent}\n"
+        f"Question: {question}\n\n"
+        f"Image metadata: {image_summary}\n\n"
+        f"Context:\n{context}\n\n"
+        "If an image is provided, inspect visible board markings, MCU labels, connectors, "
+        "antenna parts, sensor modules, camera/microphone hardware, and pin labels. "
+        "Do not claim a visual detail unless it is visible. "
+        "Return: likely product or board family when relevant, short next checks, and citations."
+    )
+    user_content: str | list[dict[str, object]]
+    if image_data_url:
+        user_content = [
+            {"type": "image_url", "image_url": {"url": image_data_url}},
+            {"type": "text", "text": prompt},
+        ]
+    else:
+        user_content = prompt
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": (
-                f"Agent route: {intent}\n"
-                f"Question: {question}\n\n"
-                f"Image metadata: {image_summary}\n\n"
-                f"Context:\n{context}\n\n"
-                "Return: likely product or board family when relevant, short next checks, and citations."
-            ),
-        },
+        {"role": "user", "content": user_content},
     ]
     result = chat_completion(
         base_url=settings.agent_base_url,

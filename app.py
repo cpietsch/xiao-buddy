@@ -27,6 +27,38 @@ EXAMPLES = [
         None,
         "What SPI pins does the XIAO W5500 Ethernet Adapter use?",
     ],
+    [
+        None,
+        "What board target string should I select for XIAO nRF54L15 Sense Zigbee in nRF Connect SDK?",
+    ],
+    [
+        None,
+        "At what I2C address is the SSD1306 OLED configured for XIAO ESP32C3 with Zephyr?",
+    ],
+    [
+        None,
+        "How do I switch the XIAO ESP32C6 to the external antenna?",
+    ],
+    [
+        None,
+        "What is the safe battery-voltage read sequence on XIAO nRF52840 Sense?",
+    ],
+    [
+        None,
+        "Which editor setup does the XIAO ESP32C6 CircuitPython guide recommend?",
+    ],
+    [
+        None,
+        "How do I configure WiFi for a XIAO ESP32C3 ESPHome node in Home Assistant?",
+    ],
+    [
+        None,
+        "My XIAO RP2040 serial port disappeared after flashing. How do I recover it?",
+    ],
+    [
+        None,
+        "What visible markings should I photograph so you can identify a XIAO board?",
+    ],
 ]
 
 
@@ -156,6 +188,7 @@ CSS = """
     border: 1px solid #dbe7e1;
     border-radius: 8px;
     min-height: 360px;
+    padding: 1rem 1.1rem;
 }
 .dark .result-box {
     background-color: #0f172a;
@@ -166,6 +199,7 @@ CSS = """
     background-color: #ffffff;
     border: 1px solid #dbe7e1;
     border-radius: 8px;
+    padding: 0.85rem 1rem;
 }
 .dark .sources-box {
     background-color: #0f172a;
@@ -176,6 +210,7 @@ CSS = """
     background-color: #ffffff;
     border: 1px solid #dbe7e1;
     border-radius: 8px;
+    padding: 0.85rem 1rem;
 }
 .dark .trace-box {
     background-color: #0f172a;

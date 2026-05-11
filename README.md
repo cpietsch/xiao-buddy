@@ -100,7 +100,21 @@ At runtime the app loads:
 - small local field notes in `xiao_copilot/knowledge_base.py`
 
 Retrieval uses a lexical prefilter before dense embedding so the larger corpus
-does not require embedding every wiki chunk on every request.
+does not require embedding every wiki chunk on every request. For the real RAG
+path, build a local vector index after importing the wiki chunks:
+
+```bash
+python scripts/build_wiki_vector_index.py --batch-size 32
+```
+
+This writes:
+
+- `data/index/xiao_vectors.json` - vector index manifest, chunk IDs, source hash
+- `data/index/xiao_vectors.f16` - normalized float16 chunk embeddings
+
+At query time the app embeds only the user/photo query, searches this local
+vector index, merges vector candidates with lexical/high-trust curated matches,
+reranks the evidence, and sends only the selected chunks to the final agent.
 
 ## AMD MI300X vLLM Deployment
 
@@ -133,6 +147,7 @@ variables rather than committing them to the repo.
 - `amd-droplet.md` - AMD MI300X / ROCm / vLLM deployment walkthrough for the hosted Qwen endpoints.
 - `data/corpus/xiao_boards.json` - curated XIAO-only board facts, pin maps, gotchas, citations, and image URLs.
 - `data/corpus/wiki_chunks.jsonl` - imported XIAO-only chunks from the official Seeed wiki markdown.
+- `data/index/xiao_vectors.*` - optional local vector index built from the corpus for true query-time RAG.
 - `data/corpus/support_examples.jsonl` - seed support examples for demo planning.
 - `data/corpus/eval_queries.jsonl` - tiny benchmark set for the submission.
 - `xiao_copilot/config.py` - environment-driven endpoint settings.

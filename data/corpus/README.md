@@ -18,6 +18,18 @@ This is a hackathon-simple, XIAO-only corpus for a multimodal hardware support c
 - `support_examples.jsonl`: few-shot style question/answer examples with expected citations.
 - `eval_queries.jsonl`: small evaluation set for retrieval and answer checks.
 
+## Vector Index
+
+After refreshing `wiki_chunks.jsonl`, build the local vector index:
+
+```bash
+python scripts/build_wiki_vector_index.py --batch-size 32
+```
+
+The app will use `data/index/xiao_vectors.json` and
+`data/index/xiao_vectors.f32` when present. If the index is missing, retrieval
+falls back to embedding a smaller lexical candidate pool per request.
+
 ## Notes For The App Layer
 
 - Every answer should return citation URLs from the retrieved docs.

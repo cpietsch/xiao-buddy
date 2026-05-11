@@ -105,7 +105,9 @@ HIP_VISIBLE_DEVICES=0 vllm serve Qwen/Qwen3.6-35B-A3B \
   --max-model-len 32768 \
   --served-model-name qwen3p6-35b-a3b \
   --gpu-memory-utilization 0.55 \
-  --port 8002
+  --port 8002 \
+  --enable-auto-tool-choice \
+  --tool-call-parser qwen3_xml
 ```
 
 Notes:

@@ -7,6 +7,7 @@ from collections import Counter
 from xiao_copilot.clients import embed_query, embed_texts, rerank
 from xiao_copilot.config import Settings
 from xiao_copilot.knowledge_base import KnowledgeChunk, load_knowledge_base
+from xiao_copilot.vector_index import search_vector_index
 
 
 TOKEN_RE = re.compile(r"[a-zA-Z0-9_+.-]+")
@@ -18,14 +19,16 @@ def retrieve(
     image_data_url: str | None = None,
 ) -> tuple[list[KnowledgeChunk], dict[str, object]]:
     chunks = load_knowledge_base()
+    chunks_by_id = {chunk.id: chunk for chunk in chunks}
     lexical_ranked = _lexical_prefilter(query, chunks, settings)
-    embedding_pool_size = max(settings.candidate_k * 12, 72)
+    embedding_pool_size = max(settings.vector_candidate_k, settings.candidate_k * 12, 72)
     embedding_pool = [chunk for chunk, _score in lexical_ranked[:embedding_pool_size]]
     diagnostics: dict[str, object] = {
         "embedding_used": False,
         "multimodal_query": bool(image_data_url),
         "corpus_chunks": len(chunks),
         "embedding_pool_chunks": len(embedding_pool),
+        "vector_index_used": False,
         "reranker_used": False,
     }
 
@@ -37,28 +40,52 @@ def retrieve(
         api_key=settings.embedding_api_key,
         timeout=settings.request_timeout_seconds,
     )
-    document_embeddings = embed_texts(
-        base_url=settings.embedding_base_url,
-        model=settings.embedding_model,
-        texts=[chunk.search_text for chunk in embedding_pool],
-        api_key=settings.embedding_api_key,
-        timeout=settings.request_timeout_seconds,
-    )
 
-    if query_embedding.ok and document_embeddings.ok:
-        diagnostics["embedding_used"] = True
-        scored = [
-            (
-                chunk,
-                _cosine(query_embedding.data, vector)
-                + _board_hint_score(query, chunk) * 0.15
-                + _kind_hint_score(query, chunk) * 0.05,
-            )
-            for chunk, vector in zip(embedding_pool, document_embeddings.data, strict=True)
-        ]
+    if query_embedding.ok:
+        vector_result = search_vector_index(
+            query_embedding.data,
+            chunks_by_id,
+            manifest_path=settings.vector_index_manifest,
+            data_path=settings.vector_index_data,
+            limit=embedding_pool_size,
+        )
     else:
-        diagnostics["embedding_error"] = query_embedding.error or document_embeddings.error
-        scored = lexical_ranked
+        vector_result = None
+
+    if query_embedding.ok and vector_result and vector_result.ok:
+        diagnostics["embedding_used"] = True
+        diagnostics["vector_index_used"] = True
+        diagnostics["vector_index_chunks"] = vector_result.total_vectors
+        diagnostics["vector_index_dim"] = vector_result.dim
+        scored = _merge_vector_and_lexical_scores(query, vector_result.matches, lexical_ranked)
+    else:
+        if not query_embedding.ok:
+            diagnostics["embedding_error"] = query_embedding.error
+        elif vector_result and vector_result.error:
+            diagnostics["vector_index_error"] = vector_result.error
+        document_embeddings = embed_texts(
+            base_url=settings.embedding_base_url,
+            model=settings.embedding_model,
+            texts=[chunk.search_text for chunk in embedding_pool],
+            api_key=settings.embedding_api_key,
+            timeout=settings.request_timeout_seconds,
+        )
+
+        if query_embedding.ok and document_embeddings.ok:
+            diagnostics["embedding_used"] = True
+            diagnostics["embedding_fallback"] = "per_query_candidate_embeddings"
+            scored = [
+                (
+                    chunk,
+                    _cosine(query_embedding.data, vector)
+                    + _board_hint_score(query, chunk) * 0.15
+                    + _kind_hint_score(query, chunk) * 0.05,
+                )
+                for chunk, vector in zip(embedding_pool, document_embeddings.data, strict=True)
+            ]
+        else:
+            diagnostics["embedding_error"] = query_embedding.error or document_embeddings.error
+            scored = lexical_ranked
 
     ranked = sorted(scored, key=lambda item: item[1], reverse=True)
     diagnostics["initial_top"] = [
@@ -85,6 +112,37 @@ def retrieve(
 
     diagnostics["citations"] = [chunk.id for chunk in top]
     return top, diagnostics
+
+
+def _merge_vector_and_lexical_scores(
+    query: str,
+    vector_matches,
+    lexical_ranked: list[tuple[KnowledgeChunk, float]],
+) -> list[tuple[KnowledgeChunk, float]]:
+    lexical_by_id = {chunk.id: score for chunk, score in lexical_ranked}
+    candidates: dict[str, KnowledgeChunk] = {}
+    vector_by_id: dict[str, float] = {}
+
+    for match in vector_matches:
+        candidates[match.chunk.id] = match.chunk
+        vector_by_id[match.chunk.id] = match.score
+
+    for chunk, _score in lexical_ranked[: len(vector_matches)]:
+        candidates.setdefault(chunk.id, chunk)
+
+    scored: list[tuple[KnowledgeChunk, float]] = []
+    for chunk in candidates.values():
+        vector_score = vector_by_id.get(chunk.id)
+        lexical_score = lexical_by_id.get(chunk.id, 0.0)
+        if vector_score is None:
+            score = min(lexical_score, 2.5) * 0.25
+        else:
+            score = vector_score + min(lexical_score, 2.5) * 0.12
+        score += _board_hint_score(query, chunk) * 0.15
+        score += _kind_hint_score(query, chunk) * 0.05
+        scored.append((chunk, score))
+
+    return scored
 
 
 def _lexical_prefilter(

@@ -21,7 +21,7 @@ def summarize_image(image: Image.Image | None) -> dict[str, Any]:
         "mode": mode,
         "aspect_ratio": aspect,
         "note": (
-            "Image received and routed to the multimodal embedding endpoint when available."
+            "Image received and routed to multimodal retrieval and the final agent when available."
         ),
     }
 
