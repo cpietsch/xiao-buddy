@@ -65,7 +65,10 @@ def install_vector_artifact(
     timeout: float = 60.0,
 ) -> ArtifactInstallResult:
     target_data_path.parent.mkdir(parents=True, exist_ok=True)
-    downloaded_path, cleanup_download = _materialize_artifact(artifact_url, timeout=timeout)
+    try:
+        downloaded_path, cleanup_download = _materialize_artifact(artifact_url, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 - callers surface this as an install failure.
+        return ArtifactInstallResult(ok=False, detail=f"could not read artifact {artifact_url}: {exc}")
     try:
         expected_sha = _normalize_sha256(artifact_sha256)
         if expected_sha:
@@ -120,9 +123,15 @@ def _materialize_artifact(artifact_url: str, *, timeout: float) -> tuple[Path, b
         return temp_path, True
 
     if parsed.scheme == "file":
-        return Path(unquote(parsed.path)).expanduser(), False
+        path = Path(unquote(parsed.path)).expanduser()
+        if not path.exists():
+            raise FileNotFoundError(path)
+        return path, False
 
-    return Path(artifact_url).expanduser(), False
+    path = Path(artifact_url).expanduser()
+    if not path.exists():
+        raise FileNotFoundError(path)
+    return path, False
 
 
 def _extract_tar_member(archive_path: Path, target_path: Path, member_name: str) -> None:

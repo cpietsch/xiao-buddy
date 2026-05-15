@@ -132,8 +132,9 @@ Run endpoint-free syntax and offline retrieval smoke checks before committing:
 make smoke
 ```
 
-This checks Python syntax plus a strict lexical subset of the retrieval eval
-that does not require hosted embedding, reranker, or agent endpoints.
+This checks Python syntax, the vector artifact package/install flow, and a
+strict lexical subset of the retrieval eval that does not require hosted
+embedding, reranker, or agent endpoints.
 
 Check local readiness, corpus/index coverage, manifest source hash, and generated-artifact state:
 

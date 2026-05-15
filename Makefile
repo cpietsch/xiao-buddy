@@ -4,6 +4,7 @@ PYTHON ?= .venv/bin/python
 
 smoke:
 	$(PYTHON) -m py_compile app.py xiao_copilot/*.py scripts/*.py
+	$(PYTHON) scripts/test_vector_artifacts.py
 	OFFLINE_EVAL=1 STRICT_EVAL=1 EVAL_LIMIT=9 $(PYTHON) scripts/eval_smoke.py
 
 health:
