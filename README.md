@@ -164,6 +164,16 @@ To reuse a generated-answer eval case directly:
 APP_SMOKE_CASE_ID=answer-grove-vision-ai-trigger-actions make app-smoke
 ```
 
+If GitHub push access is unavailable, export the unpushed local commits before
+moving machines or sharing the workspace:
+
+```bash
+make export-local
+```
+
+This writes an ignored `dist/local-export/` folder containing a verified git
+bundle, a `git format-patch` series, and a manifest with base/head commit IDs.
+
 Run the strict live retrieval gate before demos, imports, or ranking changes:
 
 ```bash

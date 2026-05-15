@@ -1,4 +1,4 @@
-.PHONY: smoke health health-live app-smoke eval-gate answer-eval eval-all rerank-benchmark vector-artifact install-vector-artifact
+.PHONY: smoke health health-live app-smoke eval-gate answer-eval eval-all rerank-benchmark vector-artifact install-vector-artifact export-local
 
 PYTHON ?= .venv/bin/python
 
@@ -35,3 +35,6 @@ vector-artifact:
 install-vector-artifact:
 	test -n "$$VECTOR_INDEX_ARCHIVE_URL"
 	$(PYTHON) scripts/install_vector_artifact.py --url "$$VECTOR_INDEX_ARCHIVE_URL" --sha256 "$$VECTOR_INDEX_ARCHIVE_SHA256"
+
+export-local:
+	$(PYTHON) scripts/export_local_changes.py
