@@ -1,4 +1,4 @@
-.PHONY: smoke health health-live app-smoke eval-gate answer-eval eval-all rerank-benchmark vector-artifact install-vector-artifact export-local
+.PHONY: smoke health health-live app-smoke eval-gate answer-eval eval-all verify-live rerank-benchmark vector-artifact install-vector-artifact export-local
 
 PYTHON ?= .venv/bin/python
 
@@ -25,6 +25,8 @@ answer-eval:
 	$(PYTHON) scripts/eval_answer_quality.py
 
 eval-all: eval-gate answer-eval
+
+verify-live: smoke health-live app-smoke eval-all
 
 rerank-benchmark:
 	$(PYTHON) scripts/benchmark_rerank_window.py --windows $${RERANK_BENCHMARK_WINDOWS:-900,1600,2400,3200}

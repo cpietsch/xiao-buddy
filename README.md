@@ -164,6 +164,15 @@ To reuse a generated-answer eval case directly:
 APP_SMOKE_CASE_ID=answer-grove-vision-ai-trigger-actions make app-smoke
 ```
 
+Run the complete local and live verification sequence before a demo or handoff:
+
+```bash
+REQUEST_TIMEOUT_SECONDS=90 make verify-live
+```
+
+This runs `make smoke`, `make health-live`, `make app-smoke`, the strict
+retrieval gate, and the generated-answer gate.
+
 If GitHub push access is unavailable, export the unpushed local commits before
 moving machines or sharing the workspace:
 
@@ -337,4 +346,4 @@ variables rather than committing them to the repo.
 
 - Runtime target: AMD Developer Cloud / MI300X hosted vLLM endpoints for embedding, reranking, and agent generation.
 - Public demo target: Hugging Face Space running this Gradio app and connecting to the hosted endpoints.
-- Benchmark hooks: `make eval-gate` checks retrieval over `data/corpus/eval_queries.jsonl`; `make answer-eval` checks generated answers over `data/corpus/answer_eval_queries.jsonl`.
+- Benchmark hooks: `make eval-gate` checks retrieval over `data/corpus/eval_queries.jsonl`; `make answer-eval` checks generated answers over `data/corpus/answer_eval_queries.jsonl`; `make verify-live` runs the full pre-demo live gate.
