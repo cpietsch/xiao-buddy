@@ -15,6 +15,12 @@ def main() -> None:
     settings = load_settings()
     offline = os.environ.get("OFFLINE_EVAL", "1") == "1"
     strict = os.environ.get("STRICT_EVAL", "0") == "1"
+    limit = int(os.environ.get("EVAL_LIMIT", "0"))
+    case_ids = {
+        case_id.strip()
+        for case_id in os.environ.get("EVAL_CASE_IDS", "").split(",")
+        if case_id.strip()
+    }
     if offline:
         settings = type(settings)(
             embedding_base_url="",
@@ -25,13 +31,20 @@ def main() -> None:
         )
 
     eval_path = Path(__file__).resolve().parents[1] / "data" / "corpus" / "eval_queries.jsonl"
+    cases = [json.loads(line) for line in eval_path.read_text().splitlines() if line.strip()]
+    if case_ids:
+        cases = [case for case in cases if case["id"] in case_ids]
+    if limit:
+        cases = cases[:limit]
+    if not cases:
+        raise SystemExit("No eval cases selected.")
+
     total = 0
     board_hits = 0
     content_hits = 0
     citation_hits = 0
     failures: list[str] = []
-    for line in eval_path.read_text().splitlines():
-        case = json.loads(line)
+    for case in cases:
         chunks, diag = retrieve(case["query"], settings)
         retrieved = {chunk.board_id for chunk in chunks}
         expected_board_id = case.get("expected_board_id", "")

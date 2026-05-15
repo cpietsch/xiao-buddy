@@ -124,6 +124,15 @@ python scripts/build_wiki_vector_index.py --backend hnsw --batch-size 32
 
 ## Retrieval Gate
 
+Run endpoint-free syntax and offline retrieval smoke checks before committing:
+
+```bash
+make smoke
+```
+
+This checks Python syntax plus a strict lexical subset of the retrieval eval
+that does not require hosted embedding, reranker, or agent endpoints.
+
 Run the strict live retrieval gate before demos, imports, or ranking changes:
 
 ```bash
