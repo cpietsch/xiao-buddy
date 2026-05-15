@@ -26,6 +26,7 @@ def main() -> None:
     citations = _csv_env("APP_SMOKE_MUST_CITE", DEFAULT_CITATIONS)
     timeout = float(os.environ.get("APP_SMOKE_TIMEOUT_SECONDS", settings.request_timeout_seconds or 90))
     require_stream = os.environ.get("APP_SMOKE_REQUIRE_STREAM", "1") == "1"
+    require_inline_citation = os.environ.get("APP_SMOKE_REQUIRE_INLINE_CITATION", "1") == "1"
 
     event_id = _start_call(base_url, query, timeout=timeout)
     events = list(_stream_call(base_url, event_id, timeout=timeout))
@@ -40,6 +41,8 @@ def main() -> None:
 
     _require_terms("answer", answer, terms)
     _require_terms("source trail", source_text, citations)
+    if require_inline_citation:
+        _require_inline_citation(answer, source_text, citations)
     if require_stream:
         stream_events = [
             event
@@ -62,6 +65,7 @@ def main() -> None:
         f"events={len(events)} "
         f"chars={len(answer)} "
         f"sources={source_text.count('- [')} "
+        f"inline_citation={require_inline_citation} "
         f"total_ms={diagnostics.get('timings_ms', {}).get('total', 0)}"
     )
 
@@ -118,6 +122,47 @@ def _require_terms(label: str, text: str, terms: tuple[str, ...]) -> None:
     missing = [term for term in terms if _normalize(term) not in normalized]
     if missing:
         raise SystemExit(f"{label} missing required terms: {', '.join(missing)}")
+
+
+def _require_inline_citation(answer: str, source_text: str, citations: tuple[str, ...]) -> None:
+    source_ids = _source_ids_for_required_citations(source_text, citations)
+    if not source_ids:
+        source_ids = _source_ids_from_source_text(source_text)
+    if not any(f"[{source_id}]" in answer for source_id in source_ids):
+        expected = ", ".join(f"[{source_id}]" for source_id in source_ids) or "a retrieved source id"
+        raise SystemExit(f"answer missing inline citation for {expected}")
+
+
+def _source_ids_for_required_citations(source_text: str, citations: tuple[str, ...]) -> list[str]:
+    if not citations:
+        return []
+    required = [_normalize(citation) for citation in citations]
+    source_ids: list[str] = []
+    for line in source_text.splitlines():
+        normalized_line = _normalize(line)
+        if any(citation in normalized_line for citation in required):
+            source_id = _source_id_from_line(line)
+            if source_id:
+                source_ids.append(source_id)
+    return source_ids
+
+
+def _source_ids_from_source_text(source_text: str) -> list[str]:
+    return [
+        source_id
+        for line in source_text.splitlines()
+        if (source_id := _source_id_from_line(line))
+    ]
+
+
+def _source_id_from_line(line: str) -> str:
+    line = line.strip()
+    if not line.startswith("- ["):
+        return ""
+    end = line.find("]")
+    if end <= 3:
+        return ""
+    return line[3:end]
 
 
 def _normalize(text: str) -> str:

@@ -149,14 +149,15 @@ make health-live
 URL.
 
 Check the running Gradio `/ask` API wiring, streamed answer events, source
-panel, diagnostics, and progress HTML:
+panel, inline source IDs, diagnostics, and progress HTML:
 
 ```bash
 make app-smoke
 ```
 
 Override `APP_SMOKE_URL`, `APP_SMOKE_QUERY`, `APP_SMOKE_MUST_INCLUDE`, and
-`APP_SMOKE_MUST_CITE` to target another app URL or scenario.
+`APP_SMOKE_MUST_CITE` to target another app URL or scenario. Set
+`APP_SMOKE_REQUIRE_INLINE_CITATION=0` only when testing a non-grounded fallback.
 
 Run the strict live retrieval gate before demos, imports, or ranking changes:
 
