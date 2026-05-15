@@ -79,9 +79,14 @@ def install_vector_artifact(
                     detail=f"artifact sha256 mismatch: expected {expected_sha}, got {actual_sha}",
                 )
 
-        tmp_data = target_data_path.with_name(f".{target_data_path.name}.tmp")
-        if tmp_data.exists():
-            tmp_data.unlink()
+        tmp_handle = tempfile.NamedTemporaryFile(
+            prefix=f".{target_data_path.name}.",
+            suffix=".tmp",
+            dir=target_data_path.parent,
+            delete=False,
+        )
+        tmp_data = Path(tmp_handle.name)
+        tmp_handle.close()
 
         try:
             if tarfile.is_tarfile(downloaded_path):
