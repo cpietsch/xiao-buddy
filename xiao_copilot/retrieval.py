@@ -51,6 +51,9 @@ def retrieve(
             chunks_by_id,
             manifest_path=settings.vector_index_manifest,
             data_path=settings.vector_index_data,
+            archive_url=settings.vector_index_archive_url,
+            archive_sha256=settings.vector_index_archive_sha256,
+            archive_timeout=settings.request_timeout_seconds,
             limit=embedding_pool_size,
         )
     else:

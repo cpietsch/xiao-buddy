@@ -47,6 +47,8 @@ class Settings:
     candidate_k: int = int(_env("CANDIDATE_K", "8"))
     vector_index_manifest: str = _env("VECTOR_INDEX_MANIFEST", "data/index/xiao_vectors.json")
     vector_index_data: str = _env("VECTOR_INDEX_DATA")
+    vector_index_archive_url: str = _env("VECTOR_INDEX_ARCHIVE_URL")
+    vector_index_archive_sha256: str = _env("VECTOR_INDEX_ARCHIVE_SHA256")
     vector_candidate_k: int = int(_env("VECTOR_CANDIDATE_K", "96"))
     gradio_server_name: str = _env("GRADIO_SERVER_NAME", "127.0.0.1")
     gradio_server_port: int = int(_env("GRADIO_SERVER_PORT", "7860"))

@@ -1,4 +1,4 @@
-.PHONY: smoke health health-live eval-gate answer-eval eval-all rerank-benchmark
+.PHONY: smoke health health-live eval-gate answer-eval eval-all rerank-benchmark vector-artifact install-vector-artifact
 
 PYTHON ?= .venv/bin/python
 
@@ -22,3 +22,10 @@ eval-all: eval-gate answer-eval
 
 rerank-benchmark:
 	$(PYTHON) scripts/benchmark_rerank_window.py --windows $${RERANK_BENCHMARK_WINDOWS:-900,1600,2400,3200}
+
+vector-artifact:
+	$(PYTHON) scripts/package_vector_artifact.py
+
+install-vector-artifact:
+	test -n "$$VECTOR_INDEX_ARCHIVE_URL"
+	$(PYTHON) scripts/install_vector_artifact.py --url "$$VECTOR_INDEX_ARCHIVE_URL" --sha256 "$$VECTOR_INDEX_ARCHIVE_SHA256"

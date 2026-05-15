@@ -41,6 +41,11 @@ candidate pool per request.
 
 The HNSW/FAISS data files are local generated artifacts and are ignored by git.
 Run the build command after cloning or after changing `wiki_chunks.jsonl`.
+For deployment hosts that should not rebuild the index, run
+`make vector-artifact`, upload the archive, and set
+`VECTOR_INDEX_ARCHIVE_URL` plus `VECTOR_INDEX_ARCHIVE_SHA256`. The app can
+restore the missing manifest-named data file from that artifact at runtime, or
+you can install it explicitly with `make install-vector-artifact`.
 
 For tiny/local indexes you can still build an exact flat file:
 

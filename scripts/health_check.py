@@ -33,7 +33,14 @@ def main() -> None:
     checks: list[Check] = []
     corpus_checks, chunks = _check_corpus()
     checks.extend(corpus_checks)
-    checks.extend(_check_vector_index(settings.vector_index_manifest, settings.vector_index_data, chunks))
+    checks.extend(
+        _check_vector_index(
+            settings.vector_index_manifest,
+            settings.vector_index_data,
+            chunks,
+            artifact_url=settings.vector_index_archive_url,
+        )
+    )
     checks.extend(_check_settings(settings))
     if args.live:
         checks.extend(_check_live_endpoints(settings, timeout=args.timeout))
@@ -91,6 +98,8 @@ def _check_vector_index(
     manifest_path: str,
     data_path: str,
     chunks: list[KnowledgeChunk],
+    *,
+    artifact_url: str,
 ) -> list[Check]:
     checks: list[Check] = []
     manifest, fallback_data = configured_index_paths(manifest_path, data_path)
@@ -153,7 +162,13 @@ def _check_vector_index(
     if data.exists():
         checks.append(Check("ok", "vector data", f"{data.name} exists ({_format_bytes(data.stat().st_size)})"))
     else:
-        checks.append(Check("warn", "vector data", f"missing {data}; run scripts/build_wiki_vector_index.py"))
+        detail = f"missing {data}; run scripts/build_wiki_vector_index.py"
+        if artifact_url:
+            detail = f"missing {data}; runtime artifact restore is configured"
+        checks.append(Check("warn", "vector data", detail))
+
+    if artifact_url:
+        checks.append(Check("ok", "vector artifact URL", "configured"))
 
     if backend == "hnsw":
         try:

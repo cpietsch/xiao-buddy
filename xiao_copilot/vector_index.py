@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from xiao_copilot.knowledge_base import KnowledgeChunk
+from xiao_copilot.vector_artifacts import ensure_vector_data
 
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -71,9 +72,36 @@ def search_vector_index(
     *,
     manifest_path: str = "",
     data_path: str = "",
+    archive_url: str = "",
+    archive_sha256: str = "",
+    archive_timeout: float = 60.0,
     limit: int = 96,
 ) -> VectorSearchResult:
     manifest, data = configured_index_paths(manifest_path, data_path)
+    if archive_url and manifest.exists():
+        try:
+            meta = json.loads(manifest.read_text(encoding="utf-8"))
+            resolved_data = _resolve_data_path(meta, manifest, data, bool(data_path))
+            install_result = ensure_vector_data(
+                target_data_path=resolved_data,
+                artifact_url=archive_url,
+                artifact_sha256=archive_sha256,
+                member_name=resolved_data.name,
+                timeout=archive_timeout,
+            )
+            if not install_result.ok:
+                return VectorSearchResult(
+                    ok=False,
+                    matches=[],
+                    error=f"Vector artifact install failed: {install_result.detail}",
+                )
+        except Exception as exc:  # noqa: BLE001 - returned as retrieval diagnostics.
+            return VectorSearchResult(
+                ok=False,
+                matches=[],
+                error=f"Vector artifact install failed: {exc}",
+            )
+
     try:
         index = load_vector_index(str(manifest), str(data), bool(data_path))
     except Exception as exc:  # noqa: BLE001 - returned as retrieval diagnostics.

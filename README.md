@@ -56,6 +56,8 @@ CANDIDATE_K=8
 VECTOR_CANDIDATE_K=96
 VECTOR_INDEX_MANIFEST=data/index/xiao_vectors.json
 VECTOR_INDEX_DATA=
+VECTOR_INDEX_ARCHIVE_URL=
+VECTOR_INDEX_ARCHIVE_SHA256=
 REQUEST_TIMEOUT_SECONDS=60
 ```
 
@@ -194,6 +196,24 @@ they do not exceed normal Git hosting limits. Rebuild them after cloning or
 after changing the corpus. The manifest is kept in the repo so the app can
 report the intended backend and expected chunk IDs, but the local data file must
 exist for true ANN search.
+
+For deployments where rebuilding the index on the app host is inconvenient,
+package the local vector data file, upload the archive to object storage or a
+release asset, then set `VECTOR_INDEX_ARCHIVE_URL` and
+`VECTOR_INDEX_ARCHIVE_SHA256`:
+
+```bash
+make vector-artifact
+```
+
+At runtime, if the manifest exists but the local vector data file is missing,
+the app downloads the artifact, verifies the archive checksum when configured,
+extracts the manifest-named data file, and then loads HNSW/FAISS normally. To
+install the same artifact explicitly during deployment:
+
+```bash
+make install-vector-artifact
+```
 
 At query time the app embeds only the user/photo query, searches this local
 vector index, merges vector candidates with lexical/high-trust curated matches,
