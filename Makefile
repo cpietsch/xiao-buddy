@@ -13,7 +13,7 @@ health:
 	$(PYTHON) scripts/health_check.py
 
 health-live:
-	$(PYTHON) scripts/health_check.py --live --app
+	$(PYTHON) scripts/health_check.py --live --app --strict-warnings
 
 app-smoke:
 	$(PYTHON) scripts/app_smoke.py

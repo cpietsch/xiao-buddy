@@ -145,8 +145,8 @@ make health-live
 ```
 
 `make health-live` also checks the configured hosted endpoints, verifies that
-`/v1/models` exposes the configured model IDs, and checks the local Gradio app
-URL.
+`/v1/models` exposes the configured model IDs, checks the local Gradio app URL,
+and exits non-zero on warnings.
 
 Check the running Gradio `/ask` API wiring, streamed answer events, source
 panel, inline source IDs, diagnostics, and progress HTML:
