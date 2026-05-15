@@ -162,6 +162,12 @@ The gate requires the embedding endpoint and local vector index to be available.
 It checks board/target match, required content, and required citation for every
 case in `data/corpus/eval_queries.jsonl`.
 
+Run a focused retrieval case while tuning:
+
+```bash
+EVAL_CASE_IDS=eval-c5-dual-band make eval-gate
+```
+
 Run the smaller generated-answer gate when changing prompts, agent endpoints, or
 streaming behavior:
 
@@ -173,6 +179,12 @@ This calls the full RAG pipeline and checks that final answers include required
 facts, required source URLs, matching inline `[source-id]` citations, live agent
 output, and streamed token updates for the cases in
 `data/corpus/answer_eval_queries.jsonl`.
+
+Run one generated-answer case while debugging a prompt or endpoint:
+
+```bash
+ANSWER_EVAL_CASE_IDS=answer-c5-dual-band make answer-eval
+```
 
 To tune reranker context length against latency, compare windows over the strict
 retrieval eval set:

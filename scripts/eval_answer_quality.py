@@ -15,10 +15,19 @@ def main() -> None:
     require_agent = os.environ.get("ANSWER_EVAL_REQUIRE_AGENT", "1") == "1"
     require_stream = os.environ.get("ANSWER_EVAL_REQUIRE_STREAM", "1") == "1"
     limit = int(os.environ.get("ANSWER_EVAL_LIMIT", "0"))
+    case_ids = {
+        case_id.strip()
+        for case_id in os.environ.get("ANSWER_EVAL_CASE_IDS", "").split(",")
+        if case_id.strip()
+    }
 
     cases = [json.loads(line) for line in eval_path.read_text().splitlines() if line.strip()]
+    if case_ids:
+        cases = [case for case in cases if case["id"] in case_ids]
     if limit:
         cases = cases[:limit]
+    if not cases:
+        raise SystemExit("No answer eval cases selected.")
 
     total = 0
     fact_hits = 0
