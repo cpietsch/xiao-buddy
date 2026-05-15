@@ -83,9 +83,28 @@ CSS = """
 .gradio-container {
     max-width: 1220px !important;
     background: linear-gradient(180deg, #f8fafc 0%, #eefdf6 42%, #f8fafc 100%);
+    padding-left: max(1rem, env(safe-area-inset-left)) !important;
+    padding-right: max(1rem, env(safe-area-inset-right)) !important;
 }
 .dark .gradio-container {
     background: linear-gradient(180deg, #020617 0%, #052e16 42%, #020617 100%);
+}
+.skip-link {
+    background: #0f8f6b;
+    border-radius: 8px;
+    color: #ffffff;
+    font-weight: 720;
+    left: 1rem;
+    padding: 0.65rem 0.85rem;
+    position: absolute;
+    top: 0.75rem;
+    transform: translateY(-140%);
+    z-index: 20;
+}
+.skip-link:focus-visible {
+    outline: 3px solid #34d399;
+    outline-offset: 2px;
+    transform: translateY(0);
 }
 .hero {
     padding: 1.5rem 0 0.65rem;
@@ -348,9 +367,25 @@ CSS = """
 }
 button {
     border-radius: 8px !important;
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+    touch-action: manipulation;
 }
 .gr-button-primary {
     font-weight: 720 !important;
+}
+textarea,
+input,
+select {
+    font-size: 16px !important;
+}
+button:focus-visible,
+textarea:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+    outline: 3px solid #34d399 !important;
+    outline-offset: 2px !important;
 }
 @media (max-width: 760px) {
     .hero h1 {
@@ -370,6 +405,7 @@ def build_demo() -> gr.Blocks:
     with gr.Blocks(title="XIAO Buddy") as demo:
         gr.HTML(
             """
+<a class="skip-link" href="#support-bench">Skip to support bench</a>
 <section class="hero">
   <h1>XIAO Buddy</h1>
   <p>Photo-aware support for Seeed XIAO boards, pinouts, wireless bring-up, power checks, and field recovery.</p>
@@ -398,7 +434,7 @@ def build_demo() -> gr.Blocks:
 
         with gr.Row(equal_height=False):
             with gr.Column(scale=5, min_width=330):
-                gr.HTML('<p class="bench-label">Support bench</p>')
+                gr.HTML('<p class="bench-label" id="support-bench">Support bench</p>')
                 image = gr.Image(
                     label="Board or wiring photo",
                     type="pil",
@@ -407,7 +443,7 @@ def build_demo() -> gr.Blocks:
                 )
                 question = gr.Textbox(
                     label="Hardware question",
-                    placeholder="Example: My XIAO RP2350 will not enter BOOT mode. What should I check?",
+                    placeholder="Example: My XIAO RP2350 will not enter BOOT mode. What should I check? …",
                     lines=4,
                     max_lines=8,
                 )
