@@ -45,6 +45,7 @@ def main() -> None:
     citation_hits = 0
     failures: list[str] = []
     for case in cases:
+        print(f"RUN  {case['id']}", flush=True)
         chunks, diag = retrieve(case["query"], settings)
         retrieved = {chunk.board_id for chunk in chunks}
         expected_board_id = case.get("expected_board_id", "")
@@ -68,14 +69,15 @@ def main() -> None:
         expected_label = expected_board_id or "content/citation target"
         print(
             f"{status} {case['id']}: {expected_label} in "
-            f"{sorted(retrieved)} [{checks}; backend={backend}]"
+            f"{sorted(retrieved)} [{checks}; backend={backend}]",
+            flush=True,
         )
 
-    print(f"\nretrieval board-hit rate: {board_hits}/{total} = {board_hits / total:.0%}")
-    print(f"retrieval content-hit rate: {content_hits}/{total} = {content_hits / total:.0%}")
-    print(f"retrieval citation-hit rate: {citation_hits}/{total} = {citation_hits / total:.0%}")
+    print(f"\nretrieval board-hit rate: {board_hits}/{total} = {board_hits / total:.0%}", flush=True)
+    print(f"retrieval content-hit rate: {content_hits}/{total} = {content_hits / total:.0%}", flush=True)
+    print(f"retrieval citation-hit rate: {citation_hits}/{total} = {citation_hits / total:.0%}", flush=True)
     if strict and failures:
-        print(f"\nstrict failures: {', '.join(failures)}")
+        print(f"\nstrict failures: {', '.join(failures)}", flush=True)
         raise SystemExit(1)
 
 

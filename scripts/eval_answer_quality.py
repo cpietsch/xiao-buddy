@@ -28,6 +28,7 @@ def main() -> None:
     failures: list[str] = []
 
     for case in cases:
+        print(f"RUN  {case['id']}", flush=True)
         answer, citations, diagnostics = answer_question(None, case["query"])
         fact_ok = _contains_all_terms(answer, case.get("must_include", []))
         citation_ok = _contains_any_citation(citations, case.get("must_cite", []))
@@ -55,15 +56,16 @@ def main() -> None:
             f"stream={'ok' if stream_ok else 'miss'} "
             f"chunks={agent.get('stream_chunks', 0)} "
             f"chars={agent.get('stream_chars', len(answer))} "
-            f"total_ms={timings.get('total', 0)}"
+            f"total_ms={timings.get('total', 0)}",
+            flush=True,
         )
 
-    print(f"\nanswer fact-hit rate: {fact_hits}/{total} = {fact_hits / total:.0%}")
-    print(f"answer citation-hit rate: {citation_hits}/{total} = {citation_hits / total:.0%}")
-    print(f"answer agent-hit rate: {agent_hits}/{total} = {agent_hits / total:.0%}")
-    print(f"answer stream-hit rate: {stream_hits}/{total} = {stream_hits / total:.0%}")
+    print(f"\nanswer fact-hit rate: {fact_hits}/{total} = {fact_hits / total:.0%}", flush=True)
+    print(f"answer citation-hit rate: {citation_hits}/{total} = {citation_hits / total:.0%}", flush=True)
+    print(f"answer agent-hit rate: {agent_hits}/{total} = {agent_hits / total:.0%}", flush=True)
+    print(f"answer stream-hit rate: {stream_hits}/{total} = {stream_hits / total:.0%}", flush=True)
     if failures:
-        print(f"\nanswer eval failures: {', '.join(failures)}")
+        print(f"\nanswer eval failures: {', '.join(failures)}", flush=True)
         raise SystemExit(1)
 
 
