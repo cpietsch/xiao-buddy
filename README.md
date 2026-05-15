@@ -11,15 +11,15 @@ pinned: false
 
 # XIAO Field Copilot
 
-A hackathon-simple Hugging Face Space for multimodal hardware support around Seeed Studio XIAO boards.
+A hackathon-simple Hugging Face Space for multimodal hardware support around Seeed Studio XIAO boards and connected Seeed wiki hardware.
 
-The app accepts a board photo plus a question, retrieves cited XIAO support notes, optionally reranks them,
-and produces a field-ready answer through an OpenAI-compatible Qwen agent endpoint. It also works without
+The app accepts a board photo plus a question, retrieves cited Seeed support notes, optionally reranks them,
+and produces a field-ready answer through an OpenAI-compatible agent endpoint. It also works without
 the optional hosted reranker/agent services by falling back to lexical retrieval and a deterministic cited response.
 
 Positioning:
 
-> A multimodal field support copilot that identifies XIAO edge hardware from images, retrieves the right documentation, and guides troubleshooting in a grounded, citation-backed workflow connected to hosted vLLM deployments.
+> A multimodal field support copilot that identifies XIAO edge hardware from images, retrieves the right Seeed wiki documentation for boards, sensors, LoRa, robotics, and SenseCraft workflows, and guides troubleshooting in a grounded, citation-backed workflow connected to hosted vLLM deployments.
 
 ## Architecture
 
@@ -132,9 +132,10 @@ Run endpoint-free syntax and offline retrieval smoke checks before committing:
 make smoke
 ```
 
-This checks Python syntax, vector artifact package/install behavior, health
-parser behavior, and a strict lexical subset of the retrieval eval that does not
-require hosted embedding, reranker, or agent endpoints.
+This checks Python syntax, first-screen scope copy, vector artifact
+package/install behavior, health parser behavior, and a strict lexical subset of
+the retrieval eval that does not require hosted embedding, reranker, or agent
+endpoints.
 
 Check local readiness, corpus/index coverage, manifest source hash, and generated-artifact state:
 
@@ -301,6 +302,10 @@ variables rather than committing them to the repo.
 2. Ask: "My XIAO ESP32C3 analog reading on A3 is noisy. Should I move pins?"
 3. Ask: "How do I switch my XIAO ESP32C6 to the external antenna?"
 4. Ask: "Which supported XIAO board should I pick for an image and audio TinyML demo?"
+5. Ask: "What are the key radio specs and MCU interface for the Wio-SX1262 module?"
+6. Ask: "What trigger actions can Grove Vision AI V2 perform from SenseCraft AI model output settings?"
+7. Ask: "Which Arduino libraries and function are used to read Grove SHT40 data on Wio Terminal?"
+8. Ask: "In the XIAO RS485 Expansion Board ESP32C3 example, which pins are used for RS485 UART RX/TX and enable?"
 
 ## Submission Notes
 

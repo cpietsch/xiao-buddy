@@ -59,10 +59,26 @@ EXAMPLES = [
         None,
         "What visible markings should I photograph so you can identify a XIAO board?",
     ],
+    [
+        None,
+        "What are the key radio specs and MCU interface for the Wio-SX1262 module?",
+    ],
+    [
+        None,
+        "What trigger actions can Grove Vision AI V2 perform from SenseCraft AI model output settings?",
+    ],
+    [
+        None,
+        "Which Arduino libraries and function are used to read Grove SHT40 data on Wio Terminal?",
+    ],
+    [
+        None,
+        "In the XIAO RS485 Expansion Board ESP32C3 example, which pins are used for RS485 UART RX/TX and enable?",
+    ],
 ]
 
 INITIAL_ANSWER = (
-    "Ask about a XIAO board, accessory, pinout, upload issue, power symptom, or wireless requirement."
+    "Ask about a XIAO board, Seeed sensor, robotics kit, LoRa module, pinout, upload issue, or power symptom."
 )
 
 
@@ -408,16 +424,16 @@ def build_demo() -> gr.Blocks:
 <a class="skip-link" href="#support-bench">Skip to support bench</a>
 <section class="hero">
   <h1>XIAO Buddy</h1>
-  <p>Photo-aware support for Seeed XIAO boards, pinouts, wireless bring-up, power checks, and field recovery.</p>
+  <p>Photo-aware support for Seeed XIAO boards plus connected sensors, robotics kits, LoRa modules, SenseCraft workflows, and field recovery.</p>
   <div class="chips">
     <span class="chip">ESP32S3 Sense</span>
     <span class="chip">ESP32C6</span>
     <span class="chip">ESP32C5</span>
     <span class="chip">nRF54L15</span>
-    <span class="chip">MG24</span>
-    <span class="chip">RA4M1</span>
-    <span class="chip">RP2350</span>
-    <span class="chip">W5500 adapter</span>
+    <span class="chip">Wio-SX1262</span>
+    <span class="chip">Grove Vision AI V2</span>
+    <span class="chip">RS485 expansion</span>
+    <span class="chip">SenseCraft AI</span>
   </div>
 </section>
 """,
@@ -425,8 +441,8 @@ def build_demo() -> gr.Blocks:
         gr.HTML(
             """
 <section class="bench-strip">
-  <div class="bench-card"><strong>Corpus</strong>Curated Seeed XIAO board notes, pinouts, boot modes, power limits, and accessories.</div>
-  <div class="bench-card"><strong>Routes</strong>Identify, troubleshoot, compare, or answer wiring questions with cited source chunks.</div>
+  <div class="bench-card"><strong>Corpus</strong>Curated XIAO facts plus full Seeed wiki chunks for sensors, robotics, LoRa, and AI workflows.</div>
+  <div class="bench-card"><strong>Routes</strong>Identify, troubleshoot, compare, or answer wiring, sensor, and robotics questions with cited source chunks.</div>
   <div class="bench-card"><strong>Runtime</strong>Hosted Qwen embedding, reranking, and agent calls served from an AMD MI300X stack.</div>
 </section>
 """,
@@ -443,12 +459,12 @@ def build_demo() -> gr.Blocks:
                 )
                 question = gr.Textbox(
                     label="Hardware question",
-                    placeholder="Example: My XIAO RP2350 will not enter BOOT mode. What should I check? …",
+                    placeholder="Example: Which pins does the XIAO RS485 Expansion Board use for UART and enable? …",
                     lines=4,
                     max_lines=8,
                 )
                 with gr.Row():
-                    submit = gr.Button("Diagnose XIAO", variant="primary")
+                    submit = gr.Button("Ask Buddy", variant="primary")
                     clear = gr.ClearButton([image, question], value="Reset")
 
             with gr.Column(scale=7, min_width=360):
