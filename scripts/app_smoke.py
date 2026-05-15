@@ -16,14 +16,13 @@ from xiao_copilot.config import load_settings
 DEFAULT_QUERY = "Which XIAO should I choose for 5 GHz WiFi?"
 DEFAULT_TERMS = ("XIAO ESP32-C5", "5 GHz", "Wi-Fi 6")
 DEFAULT_CITATIONS = ("https://wiki.seeedstudio.com/xiao_esp32c5_wifi_usage/",)
+DEFAULT_EVAL_PATH = Path("data/corpus/answer_eval_queries.jsonl")
 
 
 def main() -> None:
     settings = load_settings()
     base_url = os.environ.get("APP_SMOKE_URL") or _app_url(settings)
-    query = os.environ.get("APP_SMOKE_QUERY", DEFAULT_QUERY)
-    terms = _csv_env("APP_SMOKE_MUST_INCLUDE", DEFAULT_TERMS)
-    citations = _csv_env("APP_SMOKE_MUST_CITE", DEFAULT_CITATIONS)
+    query, terms, citations, case_id = _load_case_from_env()
     timeout = float(os.environ.get("APP_SMOKE_TIMEOUT_SECONDS", settings.request_timeout_seconds or 90))
     require_stream = os.environ.get("APP_SMOKE_REQUIRE_STREAM", "1") == "1"
     require_inline_citation = os.environ.get("APP_SMOKE_REQUIRE_INLINE_CITATION", "1") == "1"
@@ -63,11 +62,45 @@ def main() -> None:
     print(
         "PASS app smoke: "
         f"events={len(events)} "
+        f"case={case_id or 'custom'} "
         f"chars={len(answer)} "
         f"sources={source_text.count('- [')} "
         f"inline_citation={require_inline_citation} "
         f"total_ms={diagnostics.get('timings_ms', {}).get('total', 0)}"
     )
+
+
+def _load_case_from_env() -> tuple[str, tuple[str, ...], tuple[str, ...], str]:
+    case_id = os.environ.get("APP_SMOKE_CASE_ID", "").strip()
+    if case_id:
+        case = _load_answer_eval_case(
+            path=Path(os.environ.get("APP_SMOKE_EVAL_PATH", str(DEFAULT_EVAL_PATH))),
+            case_id=case_id,
+        )
+        return (
+            str(case["query"]),
+            tuple(str(term) for term in case.get("must_include", [])),
+            tuple(str(citation) for citation in case.get("must_cite", [])),
+            case_id,
+        )
+    return (
+        os.environ.get("APP_SMOKE_QUERY", DEFAULT_QUERY),
+        _csv_env("APP_SMOKE_MUST_INCLUDE", DEFAULT_TERMS),
+        _csv_env("APP_SMOKE_MUST_CITE", DEFAULT_CITATIONS),
+        "",
+    )
+
+
+def _load_answer_eval_case(path: Path, case_id: str) -> dict[str, object]:
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parents[1] / path
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        case = json.loads(line)
+        if case.get("id") == case_id:
+            return case
+    raise SystemExit(f"App smoke case {case_id!r} was not found in {path}.")
 
 
 def _start_call(base_url: str, query: str, *, timeout: float) -> str:
