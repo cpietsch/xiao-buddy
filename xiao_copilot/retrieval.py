@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from time import perf_counter
 
 from xiao_copilot.clients import embed_query, embed_texts, rerank
 from xiao_copilot.config import Settings
@@ -11,6 +12,9 @@ from xiao_copilot.vector_index import search_vector_index
 
 
 TOKEN_RE = re.compile(r"[a-zA-Z0-9_+.-]+")
+DEFAULT_RERANK_TEXT_CHARS = 3200
+RERANK_WEIGHT = 1.0
+INITIAL_RETRIEVAL_WEIGHT = 0.25
 
 
 def retrieve(
@@ -55,6 +59,7 @@ def retrieve(
     if query_embedding.ok and vector_result and vector_result.ok:
         diagnostics["embedding_used"] = True
         diagnostics["vector_index_used"] = True
+        diagnostics["vector_index_backend"] = vector_result.backend
         diagnostics["vector_index_chunks"] = vector_result.total_vectors
         diagnostics["vector_index_dim"] = vector_result.dim
         scored = _merge_vector_and_lexical_scores(query, vector_result.matches, lexical_ranked)
@@ -92,26 +97,88 @@ def retrieve(
         {"id": chunk.id, "score": round(float(score), 4)}
         for chunk, score in ranked[: settings.candidate_k]
     ]
-    top = [chunk for chunk, _score in ranked[: settings.candidate_k]]
+    top_scored = ranked[: settings.candidate_k]
+    top = [chunk for chunk, _score in top_scored]
 
+    rerank_text_chars = max(200, settings.rerank_text_chars or DEFAULT_RERANK_TEXT_CHARS)
+    rerank_documents = [_rerank_text(chunk, rerank_text_chars) for chunk in top]
+    diagnostics["reranker_candidate_count"] = len(rerank_documents)
+    diagnostics["reranker_text_chars"] = rerank_text_chars
+    diagnostics["reranker_input_chars"] = {
+        "max": max((len(document) for document in rerank_documents), default=0),
+        "total": sum(len(document) for document in rerank_documents),
+    }
+    rerank_started_at = perf_counter()
     rerank_result = rerank(
         base_url=settings.rerank_base_url,
         model=settings.rerank_model,
         query=query,
-        documents=[chunk.search_text for chunk in top],
+        documents=rerank_documents,
         api_key=settings.rerank_api_key,
         timeout=settings.request_timeout_seconds,
     )
+    diagnostics["reranker_ms"] = _elapsed_ms(rerank_started_at)
     if rerank_result.ok and rerank_result.data:
         diagnostics["reranker_used"] = True
-        ordered = [top[index] for index, _score in sorted(rerank_result.data, key=lambda item: item[1], reverse=True)]
+        diagnostics["reranker_mode"] = (rerank_result.meta or {}).get("mode", "unknown")
+        if rerank_result.meta and rerank_result.meta.get("native_error"):
+            diagnostics["reranker_native_error"] = rerank_result.meta["native_error"]
+        hybrid_scores = _hybrid_rerank_scores(rerank_result.data, top_scored)
+        diagnostics["reranker_scores"] = [
+            {
+                "id": top[index].id,
+                "score": round(float(score), 4),
+                "combined_score": round(float(combined_score), 4),
+            }
+            for index, score, combined_score in hybrid_scores
+            if 0 <= index < len(top)
+        ]
+        ordered = [
+            top[index]
+            for index, _score, _combined_score in hybrid_scores
+            if 0 <= index < len(top)
+        ]
         top = ordered[: settings.top_k]
     else:
+        if rerank_result.meta:
+            diagnostics["reranker_mode"] = rerank_result.meta.get("mode", "unknown")
         diagnostics["reranker_error"] = rerank_result.error
         top = top[: settings.top_k]
 
     diagnostics["citations"] = [chunk.id for chunk in top]
     return top, diagnostics
+
+
+def _rerank_text(chunk: KnowledgeChunk, max_chars: int) -> str:
+    text = chunk.text.strip()
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip()
+    return f"{chunk.title}\n{chunk.source}\n{text}".strip()
+
+
+def _elapsed_ms(started_at: float) -> float:
+    return round((perf_counter() - started_at) * 1000, 1)
+
+
+def _hybrid_rerank_scores(
+    rerank_scores: list[tuple[int, float]],
+    initial_scores: list[tuple[KnowledgeChunk, float]],
+) -> list[tuple[int, float, float]]:
+    raw_initial = [float(score) for _chunk, score in initial_scores]
+    if not raw_initial:
+        return []
+    min_initial = min(raw_initial)
+    max_initial = max(raw_initial)
+    span = max_initial - min_initial
+    combined: list[tuple[int, float, float]] = []
+    for index, rerank_score in rerank_scores:
+        if index < 0 or index >= len(raw_initial):
+            continue
+        initial_score = raw_initial[index]
+        normalized_initial = (initial_score - min_initial) / span if span > 0 else 0.0
+        combined_score = RERANK_WEIGHT * float(rerank_score) + INITIAL_RETRIEVAL_WEIGHT * normalized_initial
+        combined.append((index, float(rerank_score), combined_score))
+    return sorted(combined, key=lambda item: item[2], reverse=True)
 
 
 def _merge_vector_and_lexical_scores(
@@ -135,11 +202,15 @@ def _merge_vector_and_lexical_scores(
         vector_score = vector_by_id.get(chunk.id)
         lexical_score = lexical_by_id.get(chunk.id, 0.0)
         if vector_score is None:
-            score = min(lexical_score, 2.5) * 0.25
+            # Curated facts can be absent from the ANN top-N when a query is
+            # phrased as a broad capability choice. Keep strong lexical matches
+            # competitive so exact board facts are not buried by generic wiki pages.
+            score = min(lexical_score, 2.5) * 0.45
         else:
             score = vector_score + min(lexical_score, 2.5) * 0.12
         score += _board_hint_score(query, chunk) * 0.15
         score += _kind_hint_score(query, chunk) * 0.05
+        score += _capability_hint_score(query, chunk) * 0.45
         scored.append((chunk, score))
 
     return scored
@@ -228,6 +299,62 @@ def _kind_hint_score(query: str, chunk: KnowledgeChunk) -> float:
     if any(term in q for term in ("not detected", "not responding", "fails", "error", "reset", "brownout", "boot")):
         if chunk.kind in {"gotchas", "support", "note"}:
             score += 0.35
+
+    return score
+
+
+def _capability_hint_score(query: str, chunk: KnowledgeChunk) -> float:
+    q = query.lower()
+    text = chunk.search_text.lower()
+    score = 0.0
+
+    image_query = any(term in q for term in ("image", "vision", "camera", "photo"))
+    audio_query = any(term in q for term in ("audio", "microphone", "mic", "speech", "keyword"))
+    query_tokens = set(_tokens(q))
+    tinyml_query = (
+        any(term in q for term in ("tinyml", "machine learning", "edge impulse", "classification"))
+        or "ml" in query_tokens
+    )
+    choice_query = any(term in q for term in ("which", "choose", "pick", "best", "should"))
+    board_choice_query = any(
+        term in q
+        for term in ("which supported", "which xiao", "which board", "choose", "pick", "best board", "board should")
+    )
+    if not (image_query or audio_query or tinyml_query or choice_query):
+        return 0.0
+
+    image_match = any(term in text for term in ("image", "vision", "camera", "photo"))
+    audio_match = any(term in text for term in ("audio", "microphone", "mic", "pdm", "speech", "keyword"))
+    tinyml_match = any(
+        term in text
+        for term in ("tinyml", "machine learning", "embedded ml", "edge impulse", "classification")
+    )
+
+    if image_query and image_match:
+        score += 0.4
+    if audio_query and audio_match:
+        score += 0.4
+    if tinyml_query and tinyml_match:
+        score += 0.25
+    if "imu" in query_tokens and "imu" in text:
+        score += 0.3
+    if any(term in q for term in ("package", "library")) and (
+        "mbed-enabled" in text or "board package" in text
+    ):
+        score += 0.7
+    if image_query and audio_query and image_match and audio_match:
+        score += 0.8
+        if board_choice_query:
+            if chunk.board_id == "xiao-esp32s3":
+                score += 0.6
+            if "xiao esp32s3 sense" in text:
+                score += 0.4
+            if tinyml_query and "speech recognition" in text and "image processing" in text:
+                score += 0.3
+    if chunk.kind == "vision":
+        score += 0.5
+    elif chunk.kind == "identity" and choice_query:
+        score += 0.1
 
     return score
 

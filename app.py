@@ -3,7 +3,7 @@ from __future__ import annotations
 import gradio as gr
 
 from xiao_copilot.config import load_settings
-from xiao_copilot.pipeline import answer_question
+from xiao_copilot.pipeline import answer_question_stream, format_progress
 
 
 EXAMPLES = [
@@ -60,6 +60,10 @@ EXAMPLES = [
         "What visible markings should I photograph so you can identify a XIAO board?",
     ],
 ]
+
+INITIAL_ANSWER = (
+    "Ask about a XIAO board, accessory, pinout, upload issue, power symptom, or wireless requirement."
+)
 
 
 THEME = gr.themes.Soft(
@@ -183,6 +187,115 @@ CSS = """
 .dark .panel-copy {
     color: #94a3b8;
 }
+.progress-box {
+    margin-bottom: 0.75rem;
+}
+.progress-panel {
+    background: #ffffff;
+    border: 1px solid #dbe7e1;
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+}
+.dark .progress-panel {
+    background: #0f172a;
+    border-color: #334155;
+}
+.progress-title {
+    color: #0f513f;
+    font-size: 0.76rem;
+    font-weight: 760;
+    letter-spacing: 0.08em;
+    margin: 0 0 0.65rem;
+    text-transform: uppercase;
+}
+.dark .progress-title {
+    color: #10b981;
+}
+.progress-list {
+    display: grid;
+    gap: 0.45rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.progress-step {
+    align-items: center;
+    color: #64748b;
+    display: grid;
+    gap: 0.6rem;
+    grid-template-columns: 1.6rem minmax(0, 1fr);
+    min-height: 2.3rem;
+}
+.progress-number {
+    align-items: center;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    display: inline-flex;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 760;
+    height: 1.6rem;
+    justify-content: center;
+    width: 1.6rem;
+}
+.progress-step strong {
+    color: #334155;
+    display: block;
+    font-size: 0.9rem;
+    line-height: 1.15;
+}
+.progress-step small {
+    color: #64748b;
+    display: block;
+    font-size: 0.78rem;
+    line-height: 1.2;
+    margin-top: 0.12rem;
+    overflow-wrap: anywhere;
+}
+.progress-step-active .progress-number {
+    background: #0f8f6b;
+    border-color: #0f8f6b;
+    color: #ffffff;
+}
+.progress-step-active strong {
+    color: #0f513f;
+}
+.progress-step-done .progress-number {
+    background: #ecfdf5;
+    border-color: #34d399;
+    color: #0f513f;
+}
+.progress-step-done strong {
+    color: #0f172a;
+}
+.dark .progress-step {
+    color: #94a3b8;
+}
+.dark .progress-number {
+    border-color: #475569;
+}
+.dark .progress-step strong {
+    color: #cbd5e1;
+}
+.dark .progress-step small {
+    color: #94a3b8;
+}
+.dark .progress-step-active .progress-number {
+    background: #10b981;
+    border-color: #10b981;
+    color: #052e16;
+}
+.dark .progress-step-active strong {
+    color: #34d399;
+}
+.dark .progress-step-done .progress-number {
+    background: #052e16;
+    border-color: #10b981;
+    color: #86efac;
+}
+.dark .progress-step-done strong {
+    color: #f8fafc;
+}
 .result-box {
     background-color: #ffffff;
     border: 1px solid #dbe7e1;
@@ -304,8 +417,12 @@ def build_demo() -> gr.Blocks:
 
             with gr.Column(scale=7, min_width=360):
                 gr.HTML('<p class="bench-label">Field answer</p>')
+                progress = gr.HTML(
+                    value=format_progress(),
+                    elem_classes=["progress-box"],
+                )
                 answer = gr.Markdown(
-                    value="Ask about a XIAO board, accessory, pinout, upload issue, power symptom, or wireless requirement.",
+                    value=INITIAL_ANSWER,
                     label="Answer",
                     elem_classes=["result-box"],
                 )
@@ -320,19 +437,32 @@ def build_demo() -> gr.Blocks:
         )
 
         submit.click(
-            fn=answer_question,
+            fn=answer_question_stream,
             inputs=[image, question],
-            outputs=[answer, citations, diagnostics],
+            outputs=[answer, citations, diagnostics, progress],
             api_name="ask",
         )
         question.submit(
-            fn=answer_question,
+            fn=answer_question_stream,
             inputs=[image, question],
-            outputs=[answer, citations, diagnostics],
-            api_name=False,
+            outputs=[answer, citations, diagnostics, progress],
+            api_name=None,
+            api_visibility="private",
+        )
+        clear.click(
+            fn=_reset_outputs,
+            outputs=[answer, citations, diagnostics, progress],
+            api_name=None,
+            api_visibility="private",
+            queue=False,
+            show_progress="hidden",
         )
 
-    return demo
+    return demo.queue()
+
+
+def _reset_outputs() -> tuple[str, str, dict[str, object], str]:
+    return INITIAL_ANSWER, "", {}, format_progress()
 
 
 demo = build_demo()

@@ -16,6 +16,7 @@ DEFAULT_OUTPUT = ROOT / "data" / "corpus" / "wiki_chunks.jsonl"
 WIKI_REPO = "https://github.com/Seeed-Studio/wiki-documents.git"
 WIKI_BRANCH = "docusaurus-version"
 XIAO_SPARSE_PATH = "sites/en/docs/Sensor/SeeedStudio_XIAO"
+ALL_DOCS_SPARSE_PATH = "sites/en/docs"
 RAW_BASE_URL = (
     "https://raw.githubusercontent.com/Seeed-Studio/wiki-documents/"
     f"{WIKI_BRANCH}/"
@@ -30,9 +31,13 @@ class BoardHint:
     aliases: list[str]
 
 
+def log(message: str) -> None:
+    print(message, flush=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Import XIAO-only Seeed wiki markdown into compact retrieval chunks."
+        description="Import Seeed wiki markdown into compact retrieval chunks."
     )
     parser.add_argument(
         "--wiki-root",
@@ -40,30 +45,40 @@ def main() -> None:
         help="Existing wiki checkout root or sites/en/docs directory. If omitted, a sparse checkout is created in .cache/seeed-wiki.",
     )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--scope",
+        choices=["xiao", "all"],
+        default="xiao",
+        help="Import only XIAO docs or the full Seeed wiki docs tree.",
+    )
     parser.add_argument("--refresh", action="store_true", help="Fetch the latest sparse wiki checkout before importing.")
     parser.add_argument("--limit", type=int, default=0, help="Limit docs for a quick smoke run.")
     args = parser.parse_args()
 
-    wiki_root = args.wiki_root or ensure_wiki_checkout(refresh=args.refresh)
+    wiki_root = args.wiki_root or ensure_wiki_checkout(refresh=args.refresh, scope=args.scope)
     docs_root = resolve_docs_root(wiki_root)
     board_hints = load_board_hints()
-    docs = discover_xiao_docs(docs_root)
+    docs = discover_docs(docs_root, scope=args.scope)
     if args.limit:
         docs = docs[: args.limit]
 
+    log(f"Importing {len(docs)} Seeed wiki docs with scope={args.scope}")
     chunks: list[dict[str, object]] = []
-    for path in docs:
+    for index, path in enumerate(docs, start=1):
         chunks.extend(chunks_for_doc(path, docs_root, board_hints))
+        if index == 1 or index % 25 == 0 or index == len(docs):
+            log(f"  processed {index}/{len(docs)} docs -> {len(chunks)} chunks")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8") as handle:
         for chunk in chunks:
             handle.write(json.dumps(chunk, ensure_ascii=False, sort_keys=True) + "\n")
 
-    print(f"Imported {len(chunks)} chunks from {len(docs)} XIAO wiki docs -> {args.output}")
+    log(f"Imported {len(chunks)} chunks from {len(docs)} Seeed wiki docs -> {args.output}")
 
 
-def ensure_wiki_checkout(refresh: bool = False) -> Path:
+def ensure_wiki_checkout(refresh: bool = False, scope: str = "xiao") -> Path:
+    sparse_path = ALL_DOCS_SPARSE_PATH if scope == "all" else XIAO_SPARSE_PATH
     if not DEFAULT_CHECKOUT.exists():
         DEFAULT_CHECKOUT.parent.mkdir(parents=True, exist_ok=True)
         run(
@@ -80,9 +95,10 @@ def ensure_wiki_checkout(refresh: bool = False) -> Path:
                 str(DEFAULT_CHECKOUT),
             ]
         )
-        run(["git", "-C", str(DEFAULT_CHECKOUT), "sparse-checkout", "set", XIAO_SPARSE_PATH])
+        run(["git", "-C", str(DEFAULT_CHECKOUT), "sparse-checkout", "set", sparse_path])
     elif refresh:
         run(["git", "-C", str(DEFAULT_CHECKOUT), "pull", "--ff-only"])
+        run(["git", "-C", str(DEFAULT_CHECKOUT), "sparse-checkout", "set", sparse_path])
     return DEFAULT_CHECKOUT
 
 
@@ -110,12 +126,15 @@ def load_board_hints() -> list[BoardHint]:
     return hints
 
 
-def discover_xiao_docs(docs_root: Path) -> list[Path]:
+def discover_docs(docs_root: Path, scope: str = "xiao") -> list[Path]:
     candidates = sorted(
         path
         for path in docs_root.rglob("*")
         if path.suffix.lower() in {".md", ".mdx"} and not path.name.startswith("_")
     )
+    if scope == "all":
+        return candidates
+
     docs = []
     for path in candidates:
         rel = path.relative_to(docs_root).as_posix()
@@ -293,6 +312,14 @@ def split_long_text(text: str) -> list[str]:
     current: list[str] = []
     current_len = 0
     for block in blocks:
+        if len(block) > MAX_CHARS:
+            if current:
+                parts.append("\n\n".join(current).strip())
+                current = []
+                current_len = 0
+            parts.extend(split_oversized_block(block))
+            continue
+
         extra = len(block) + 2
         if current and current_len + extra > MAX_CHARS:
             parts.append("\n\n".join(current).strip())
@@ -304,6 +331,38 @@ def split_long_text(text: str) -> list[str]:
     if current:
         parts.append("\n\n".join(current).strip())
     return parts
+
+
+def split_oversized_block(block: str) -> list[str]:
+    lines = block.splitlines()
+    if len(lines) > 1:
+        parts: list[str] = []
+        current: list[str] = []
+        current_len = 0
+        for line in lines:
+            extra = len(line) + 1
+            if extra > MAX_CHARS:
+                if current:
+                    parts.append("\n".join(current).strip())
+                    current = []
+                    current_len = 0
+                parts.extend(split_fixed_width(line))
+            elif current and current_len + extra > MAX_CHARS:
+                parts.append("\n".join(current).strip())
+                current = [line]
+                current_len = len(line)
+            else:
+                current.append(line)
+                current_len += extra
+        if current:
+            parts.append("\n".join(current).strip())
+        return [part for part in parts if part]
+
+    return split_fixed_width(block)
+
+
+def split_fixed_width(text: str) -> list[str]:
+    return [text[start : start + MAX_CHARS].strip() for start in range(0, len(text), MAX_CHARS)]
 
 
 def infer_board(text: str, board_hints: list[BoardHint]) -> tuple[str, list[str]]:

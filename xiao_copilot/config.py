@@ -36,6 +36,7 @@ class Settings:
     rerank_base_url: str = _env("RERANK_BASE_URL")
     rerank_model: str = _env("RERANK_MODEL", "qwen3-vl-reranker-2b")
     rerank_api_key: str = _env("RERANK_API_KEY")
+    rerank_text_chars: int = int(_env("RERANK_TEXT_CHARS", "3200"))
 
     agent_base_url: str = _env("AGENT_BASE_URL")
     agent_model: str = _env("AGENT_MODEL", "qwen3.5-small")
@@ -45,7 +46,7 @@ class Settings:
     top_k: int = int(_env("TOP_K", "5"))
     candidate_k: int = int(_env("CANDIDATE_K", "8"))
     vector_index_manifest: str = _env("VECTOR_INDEX_MANIFEST", "data/index/xiao_vectors.json")
-    vector_index_data: str = _env("VECTOR_INDEX_DATA", "data/index/xiao_vectors.f16")
+    vector_index_data: str = _env("VECTOR_INDEX_DATA")
     vector_candidate_k: int = int(_env("VECTOR_CANDIDATE_K", "96"))
     gradio_server_name: str = _env("GRADIO_SERVER_NAME", "127.0.0.1")
     gradio_server_port: int = int(_env("GRADIO_SERVER_PORT", "7860"))
