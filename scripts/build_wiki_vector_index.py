@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import array
-import hashlib
 import json
 import math
 import struct
@@ -14,7 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from xiao_copilot.clients import embed_texts
 from xiao_copilot.config import load_settings
-from xiao_copilot.knowledge_base import KnowledgeChunk, load_knowledge_base
+from xiao_copilot.index_corpus import hash_chunks, indexable_chunks
+from xiao_copilot.knowledge_base import load_knowledge_base
 from xiao_copilot.vector_index import configured_index_paths
 
 
@@ -145,6 +145,7 @@ def main() -> None:
         "ids": ids,
         "data_file": data_path.name,
         "source_hash": source_hash,
+        "include_field_notes": bool(args.include_field_notes),
         "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         **backend_meta,
     }
@@ -155,27 +156,6 @@ def main() -> None:
     mb = data_path.stat().st_size / (1024 * 1024)
     log(f"Saved {len(ids)} x {dim} {backend} index to {data_path} ({mb:.1f} MiB)")
     log(f"Saved manifest to {manifest_path}")
-
-
-def indexable_chunks(
-    chunks: list[KnowledgeChunk],
-    *,
-    include_field_notes: bool,
-) -> list[KnowledgeChunk]:
-    allowed = {"identity", "pinout", "gotchas", "support", "wiki"}
-    if include_field_notes:
-        allowed.add("note")
-    return [chunk for chunk in chunks if chunk.kind in allowed]
-
-
-def hash_chunks(chunks: list[KnowledgeChunk]) -> str:
-    digest = hashlib.sha256()
-    for chunk in chunks:
-        digest.update(chunk.id.encode())
-        digest.update(b"\0")
-        digest.update(chunk.search_text.encode())
-        digest.update(b"\0")
-    return digest.hexdigest()[:16]
 
 
 def default_data_path(manifest_path: Path, backend: str) -> Path:

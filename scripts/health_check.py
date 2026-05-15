@@ -12,7 +12,8 @@ import requests
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from xiao_copilot.config import load_settings
-from xiao_copilot.knowledge_base import load_knowledge_base
+from xiao_copilot.index_corpus import hash_chunks, indexable_chunks
+from xiao_copilot.knowledge_base import KnowledgeChunk, load_knowledge_base
 from xiao_copilot.vector_index import configured_index_paths
 
 
@@ -30,8 +31,9 @@ def main() -> None:
     args = _parse_args()
     settings = load_settings()
     checks: list[Check] = []
-    checks.extend(_check_corpus())
-    checks.extend(_check_vector_index(settings.vector_index_manifest, settings.vector_index_data))
+    corpus_checks, chunks = _check_corpus()
+    checks.extend(corpus_checks)
+    checks.extend(_check_vector_index(settings.vector_index_manifest, settings.vector_index_data, chunks))
     checks.extend(_check_settings(settings))
     if args.live:
         checks.extend(_check_live_endpoints(settings, timeout=args.timeout))
@@ -59,8 +61,9 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _check_corpus() -> list[Check]:
+def _check_corpus() -> tuple[list[Check], list[KnowledgeChunk]]:
     checks: list[Check] = []
+    chunks: list[KnowledgeChunk] = []
     board_path = ROOT / "data" / "corpus" / "xiao_boards.json"
     wiki_path = ROOT / "data" / "corpus" / "wiki_chunks.jsonl"
     eval_path = ROOT / "data" / "corpus" / "eval_queries.jsonl"
@@ -81,10 +84,14 @@ def _check_corpus() -> list[Check]:
         if path.exists():
             rows = sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
             checks.append(Check("ok", name, f"{rows} rows"))
-    return checks
+    return checks, chunks
 
 
-def _check_vector_index(manifest_path: str, data_path: str) -> list[Check]:
+def _check_vector_index(
+    manifest_path: str,
+    data_path: str,
+    chunks: list[KnowledgeChunk],
+) -> list[Check]:
     checks: list[Check] = []
     manifest, fallback_data = configured_index_paths(manifest_path, data_path)
     if not manifest.exists():
@@ -107,6 +114,41 @@ def _check_vector_index(manifest_path: str, data_path: str) -> list[Check]:
         checks.append(Check("fail", "vector manifest", f"count={count} but ids={len(ids)}"))
     else:
         checks.append(Check("ok", "vector manifest", f"{count} ids, backend={backend}"))
+
+    duplicate_count = len(ids) - len(set(ids))
+    if duplicate_count:
+        checks.append(Check("fail", "vector manifest ids", f"{duplicate_count} duplicate ids"))
+
+    if chunks:
+        include_field_notes = bool(meta.get("include_field_notes", False))
+        indexable = indexable_chunks(chunks, include_field_notes=include_field_notes)
+        expected_ids = {chunk.id for chunk in indexable}
+        actual_ids = set(ids)
+        missing = sorted(expected_ids - actual_ids)
+        extra = sorted(actual_ids - expected_ids)
+        if missing or extra:
+            detail = f"{len(missing)} missing, {len(extra)} extra"
+            sample = (missing or extra)[:3]
+            if sample:
+                detail = f"{detail}; sample={', '.join(sample)}"
+            checks.append(Check("fail", "vector corpus coverage", detail))
+        else:
+            checks.append(Check("ok", "vector corpus coverage", f"{len(indexable)} indexable chunks"))
+
+        expected_hash = hash_chunks(indexable)
+        manifest_hash = str(meta.get("source_hash") or "")
+        if not manifest_hash:
+            checks.append(Check("warn", "vector source hash", "manifest has no source_hash"))
+        elif manifest_hash != expected_hash:
+            checks.append(
+                Check(
+                    "fail",
+                    "vector source hash",
+                    f"manifest={manifest_hash} expected={expected_hash}; rebuild vector index",
+                )
+            )
+        else:
+            checks.append(Check("ok", "vector source hash", manifest_hash))
 
     if data.exists():
         checks.append(Check("ok", "vector data", f"{data.name} exists ({_format_bytes(data.stat().st_size)})"))

@@ -27,3 +27,6 @@ jobs:
 
       - name: Run endpoint-free smoke checks
         run: make smoke PYTHON=python
+
+      - name: Run repository health checks
+        run: make health PYTHON=python
