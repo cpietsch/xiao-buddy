@@ -133,6 +133,16 @@ make smoke
 This checks Python syntax plus a strict lexical subset of the retrieval eval
 that does not require hosted embedding, reranker, or agent endpoints.
 
+Check local readiness and generated-artifact state:
+
+```bash
+make health
+make health-live
+```
+
+`make health-live` also checks the configured hosted endpoints and local Gradio
+app URL.
+
 Run the strict live retrieval gate before demos, imports, or ranking changes:
 
 ```bash
