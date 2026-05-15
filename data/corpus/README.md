@@ -17,7 +17,7 @@ This is a hackathon-simple Seeed hardware corpus for a multimodal support copilo
 - `wiki_chunks.jsonl`: generated chunks from official Seeed wiki markdown. Rebuild the XIAO subset with `python scripts/import_seeed_wiki_xiao.py --refresh`, or the full wiki with `python scripts/import_seeed_wiki_xiao.py --scope all --refresh`.
 - `support_examples.jsonl`: few-shot style question/answer examples with expected citations.
 - `eval_queries.jsonl`: strict retrieval evaluation set for board, citation, and full-wiki content checks.
-- `answer_eval_queries.jsonl`: generated-answer evaluation set for final answer facts, citations, agent usage, and streaming.
+- `answer_eval_queries.jsonl`: generated-answer evaluation set for final answer facts, source URLs, inline citation IDs, agent usage, and streaming.
 - `rejected_eval_candidates.jsonl`: hardening backlog of proposed eval cases that did not yet pass top-k retrieval validation.
 
 To import the whole Seeed wiki instead of the XIAO-only docs:

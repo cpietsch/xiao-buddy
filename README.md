@@ -170,8 +170,9 @@ make answer-eval
 ```
 
 This calls the full RAG pipeline and checks that final answers include required
-facts, source URLs, live agent output, and streamed token updates for the cases
-in `data/corpus/answer_eval_queries.jsonl`.
+facts, required source URLs, matching inline `[source-id]` citations, live agent
+output, and streamed token updates for the cases in
+`data/corpus/answer_eval_queries.jsonl`.
 
 To tune reranker context length against latency, compare windows over the strict
 retrieval eval set:
