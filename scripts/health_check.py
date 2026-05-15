@@ -194,15 +194,15 @@ def _check_settings(settings) -> list[Check]:
 def _check_live_endpoints(settings, timeout: float) -> list[Check]:
     checks: list[Check] = []
     endpoints = [
-        ("embedding models", _models_url(settings.embedding_base_url)),
-        ("reranker models", _models_url(settings.rerank_base_url)),
-        ("agent models", _models_url(settings.agent_base_url)),
+        ("embedding models", _models_url(settings.embedding_base_url), settings.embedding_model),
+        ("reranker models", _models_url(settings.rerank_base_url), settings.rerank_model),
+        ("agent models", _models_url(settings.agent_base_url), settings.agent_model),
     ]
-    for name, url in endpoints:
+    for name, url, expected_model in endpoints:
         if not url:
             checks.append(Check("warn", name, "not configured"))
             continue
-        checks.append(_http_check(name, url, timeout=timeout))
+        checks.append(_http_model_check(name, url, expected_model, timeout=timeout))
     return checks
 
 
@@ -230,6 +230,49 @@ def _http_check(name: str, url: str, timeout: float) -> Check:
         return Check("warn", name, f"{response.status_code} {url}")
     except Exception as exc:  # noqa: BLE001
         return Check("warn", name, f"{url}: {exc}")
+
+
+def _http_model_check(name: str, url: str, expected_model: str, timeout: float) -> Check:
+    try:
+        response = requests.get(url, timeout=timeout)
+        if not 200 <= response.status_code < 400:
+            return Check("warn", name, f"{response.status_code} {url}")
+        if not expected_model:
+            return Check("ok", name, f"{response.status_code} {url}")
+
+        model_names = _extract_model_names(response.json())
+        if expected_model in model_names:
+            return Check("ok", name, f"{response.status_code} {url}; model={expected_model}")
+
+        sample = ", ".join(sorted(model_names)[:5]) or "none"
+        return Check("fail", name, f"{response.status_code} {url}; missing model={expected_model}; found={sample}")
+    except Exception as exc:  # noqa: BLE001
+        return Check("warn", name, f"{url}: {exc}")
+
+
+def _extract_model_names(body: object) -> set[str]:
+    names: set[str] = set()
+    if isinstance(body, list):
+        for item in body:
+            names.update(_extract_model_names(item))
+        return names
+    if not isinstance(body, dict):
+        return names
+
+    for key in ("id", "name", "model"):
+        value = body.get(key)
+        if isinstance(value, str) and value:
+            names.add(value)
+    aliases = body.get("aliases")
+    if isinstance(aliases, list):
+        names.update(alias for alias in aliases if isinstance(alias, str) and alias)
+
+    for key in ("data", "models"):
+        value = body.get(key)
+        if isinstance(value, list):
+            for item in value:
+                names.update(_extract_model_names(item))
+    return names
 
 
 def _models_url(base_url: str) -> str:

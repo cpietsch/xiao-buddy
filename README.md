@@ -132,9 +132,9 @@ Run endpoint-free syntax and offline retrieval smoke checks before committing:
 make smoke
 ```
 
-This checks Python syntax, the vector artifact package/install flow, and a
-strict lexical subset of the retrieval eval that does not require hosted
-embedding, reranker, or agent endpoints.
+This checks Python syntax, vector artifact package/install behavior, health
+parser behavior, and a strict lexical subset of the retrieval eval that does not
+require hosted embedding, reranker, or agent endpoints.
 
 Check local readiness, corpus/index coverage, manifest source hash, and generated-artifact state:
 
@@ -143,8 +143,9 @@ make health
 make health-live
 ```
 
-`make health-live` also checks the configured hosted endpoints and local Gradio
-app URL.
+`make health-live` also checks the configured hosted endpoints, verifies that
+`/v1/models` exposes the configured model IDs, and checks the local Gradio app
+URL.
 
 Run the strict live retrieval gate before demos, imports, or ranking changes:
 
