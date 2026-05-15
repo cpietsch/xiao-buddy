@@ -148,6 +148,16 @@ make health-live
 `/v1/models` exposes the configured model IDs, and checks the local Gradio app
 URL.
 
+Check the running Gradio `/ask` API wiring, streamed answer events, source
+panel, diagnostics, and progress HTML:
+
+```bash
+make app-smoke
+```
+
+Override `APP_SMOKE_URL`, `APP_SMOKE_QUERY`, `APP_SMOKE_MUST_INCLUDE`, and
+`APP_SMOKE_MUST_CITE` to target another app URL or scenario.
+
 Run the strict live retrieval gate before demos, imports, or ranking changes:
 
 ```bash

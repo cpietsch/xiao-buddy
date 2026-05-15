@@ -1,4 +1,4 @@
-.PHONY: smoke health health-live eval-gate answer-eval eval-all rerank-benchmark vector-artifact install-vector-artifact
+.PHONY: smoke health health-live app-smoke eval-gate answer-eval eval-all rerank-benchmark vector-artifact install-vector-artifact
 
 PYTHON ?= .venv/bin/python
 
@@ -14,6 +14,9 @@ health:
 
 health-live:
 	$(PYTHON) scripts/health_check.py --live --app
+
+app-smoke:
+	$(PYTHON) scripts/app_smoke.py
 
 eval-gate:
 	./scripts/eval_gate.sh
