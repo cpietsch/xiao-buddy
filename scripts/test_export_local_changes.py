@@ -154,6 +154,11 @@ def _assert_quality_reports_manifest(work: Path) -> None:
     reranker_report = work / "dist" / "reranker-quality" / "all.json"
     answer_report.parent.mkdir(parents=True)
     reranker_report.parent.mkdir(parents=True)
+    _write_jsonl(
+        work / "data" / "corpus" / "answer_eval_queries.jsonl",
+        [{"id": "answer-one"}, {"id": "answer-two"}],
+    )
+    _write_jsonl(work / "data" / "corpus" / "eval_queries.jsonl", [{"id": "rerank-one"}])
     answer_payload = {
         "summary": {"cases": 2, "passes": 2, "failures": [], "p50_ms": 123.4},
         "results": [{"id": "answer-one", "ok": True}, {"id": "answer-two", "ok": True}],
@@ -168,13 +173,44 @@ def _assert_quality_reports_manifest(work: Path) -> None:
     reports = _quality_reports(work)
     _assert(set(reports) == {"answer_quality", "reranker_quality"}, f"unexpected quality reports: {reports}")
     _assert(reports["answer_quality"]["path"] == "dist/answer-quality/all.json", "answer report path should be relative")
+    _assert(
+        reports["answer_quality"]["eval_path"] == "data/corpus/answer_eval_queries.jsonl",
+        "answer report eval path should be recorded",
+    )
     _assert(reports["answer_quality"]["sha256"] == sha256_file(answer_report), "answer report sha should match file")
     _assert(reports["answer_quality"]["cases"] == 2, "answer report case count should come from summary")
+    _assert(reports["answer_quality"]["expected_cases"] == 2, "answer report expected case count should match eval file")
+    _assert(
+        reports["answer_quality"]["case_ids"] == ["answer-one", "answer-two"],
+        "answer report should record covered case ids",
+    )
     _assert(reports["answer_quality"]["failures"] == [], "answer report failures should come from summary")
     _assert(reports["reranker_quality"]["failures"] == [], "reranker report failures should come from summary")
 
     _verify_quality_reports({"quality_reports": reports}, work)
 
+    partial_payload = {
+        "summary": {"cases": 1, "passes": 1, "failures": [], "p50_ms": 12.3},
+        "results": [{"id": "answer-one", "ok": True}],
+    }
+    answer_report.write_text(json.dumps(partial_payload), encoding="utf-8")
+    _assert_raises_system_exit(lambda: _quality_reports(work), "partial quality report should block export")
+    partial_reports = {
+        "answer_quality": {
+            "path": "dist/answer-quality/all.json",
+            "eval_path": "data/corpus/answer_eval_queries.jsonl",
+            "sha256": sha256_file(answer_report),
+            "cases": 1,
+            "expected_cases": 2,
+            "case_ids": ["answer-one"],
+            "failures": [],
+            "summary": partial_payload["summary"],
+        },
+        "reranker_quality": reports["reranker_quality"],
+    }
+    _assert_raises_assertion(lambda: _verify_quality_reports({"quality_reports": partial_reports}, work), "covers")
+
+    answer_report.write_text(json.dumps(answer_payload), encoding="utf-8")
     failing_payload = {
         "summary": {"cases": 1, "passes": 0, "failures": ["rerank-one"], "min_margin": -0.1},
         "results": [{"id": "rerank-one", "ok": False}],
@@ -182,10 +218,23 @@ def _assert_quality_reports_manifest(work: Path) -> None:
     reranker_report.write_text(json.dumps(failing_payload), encoding="utf-8")
     _assert_raises_system_exit(lambda: _quality_reports(work), "failing quality report should block export")
     failed_reports = {
+        "answer_quality": {
+            "path": "dist/answer-quality/all.json",
+            "eval_path": "data/corpus/answer_eval_queries.jsonl",
+            "sha256": sha256_file(answer_report),
+            "cases": 2,
+            "expected_cases": 2,
+            "case_ids": ["answer-one", "answer-two"],
+            "failures": [],
+            "summary": answer_payload["summary"],
+        },
         "reranker_quality": {
             "path": "dist/reranker-quality/all.json",
+            "eval_path": "data/corpus/eval_queries.jsonl",
             "sha256": sha256_file(reranker_report),
             "cases": 1,
+            "expected_cases": 1,
+            "case_ids": ["rerank-one"],
             "failures": ["rerank-one"],
             "summary": failing_payload["summary"],
         }
@@ -259,6 +308,11 @@ def _write_png(path: Path, *, size: tuple[int, int], color: tuple[int, int, int]
                 (color[2] + x * 2 + y * 7) % 256,
             )
     image.save(path)
+
+
+def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
 
 
 def _git(repo: Path, *args: str) -> str:

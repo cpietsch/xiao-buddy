@@ -16,8 +16,14 @@ from xiao_copilot.vector_artifacts import sha256_file
 
 DEFAULT_OUTPUT_DIR = ROOT / "dist" / "local-export"
 QUALITY_REPORTS = {
-    "answer_quality": Path("dist/answer-quality/all.json"),
-    "reranker_quality": Path("dist/reranker-quality/all.json"),
+    "answer_quality": {
+        "report_path": Path("dist/answer-quality/all.json"),
+        "eval_path": Path("data/corpus/answer_eval_queries.jsonl"),
+    },
+    "reranker_quality": {
+        "report_path": Path("dist/reranker-quality/all.json"),
+        "eval_path": Path("data/corpus/eval_queries.jsonl"),
+    },
 }
 BROWSER_SCREENSHOTS = {
     "desktop": Path("dist/browser-smoke/desktop.png"),
@@ -106,11 +112,18 @@ def _parse_args() -> argparse.Namespace:
 
 def _quality_reports(root: Path = ROOT) -> dict[str, object]:
     reports: dict[str, object] = {}
-    for name, default_path in QUALITY_REPORTS.items():
-        path = root / default_path
+    missing: list[str] = []
+    for name, spec in QUALITY_REPORTS.items():
+        path = root / spec["report_path"]
         if not path.exists():
+            missing.append(str(spec["report_path"]))
             continue
-        reports[name] = _quality_report_entry(path, root)
+        reports[name] = _quality_report_entry(name, path, root, spec["eval_path"])
+    if missing:
+        raise SystemExit(
+            "Missing required quality report(s): "
+            f"{', '.join(missing)}. Run `make answer-eval` and `make rerank-quality-all` before export."
+        )
     return reports
 
 
@@ -153,7 +166,7 @@ def _sample_color_count(image) -> int:
     return 4097 if colors is None else len(colors)
 
 
-def _quality_report_entry(path: Path, root: Path) -> dict[str, object]:
+def _quality_report_entry(name: str, path: Path, root: Path, eval_path: Path) -> dict[str, object]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001 - malformed local evidence should block handoff export.
@@ -166,6 +179,8 @@ def _quality_report_entry(path: Path, root: Path) -> dict[str, object]:
         raise SystemExit(
             f"Quality report must include summary object and results list: {_relative_to_root(path, root)}"
         )
+    expected_case_ids = _jsonl_case_ids(root / eval_path, root, f"{name} eval cases")
+    result_ids = _quality_report_result_ids(results, path, root)
     cases_value = summary.get("cases", len(results))
     try:
         cases = int(cases_value)
@@ -173,6 +188,20 @@ def _quality_report_entry(path: Path, root: Path) -> dict[str, object]:
         raise SystemExit(f"Quality report summary.cases must be numeric: {_relative_to_root(path, root)}") from exc
     if cases <= 0:
         raise SystemExit(f"Quality report must include at least one case: {_relative_to_root(path, root)}")
+    if cases != len(results):
+        raise SystemExit(
+            f"Quality report summary.cases={cases} but results={len(results)}: {_relative_to_root(path, root)}"
+        )
+    if cases != len(expected_case_ids):
+        raise SystemExit(
+            f"Quality report {name} covers {cases}/{len(expected_case_ids)} expected cases: "
+            f"{_relative_to_root(path, root)}"
+        )
+    if set(result_ids) != set(expected_case_ids):
+        raise SystemExit(
+            f"Quality report {name} case coverage mismatch: "
+            f"{_quality_case_mismatch(expected_case_ids, result_ids)}"
+        )
     failures = summary.get("failures", [])
     if not isinstance(failures, list):
         raise SystemExit(f"Quality report summary.failures must be a list: {_relative_to_root(path, root)}")
@@ -185,11 +214,68 @@ def _quality_report_entry(path: Path, root: Path) -> dict[str, object]:
         )
     return {
         "path": _relative_to_root(path, root),
+        "eval_path": str(eval_path),
         "sha256": sha256_file(path),
         "cases": cases,
+        "expected_cases": len(expected_case_ids),
+        "case_ids": result_ids,
         "failures": [str(item) for item in failures],
         "summary": summary,
     }
+
+
+def _jsonl_case_ids(path: Path, root: Path, label: str) -> list[str]:
+    if not path.exists():
+        raise SystemExit(f"{label} file is missing: {_relative_to_root(path, root)}")
+    ids: list[str] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"{label} has invalid JSON on line {line_number}: {path}") from exc
+        if not isinstance(row, dict) or not row.get("id"):
+            raise SystemExit(f"{label} line {line_number} must include an id: {path}")
+        ids.append(str(row["id"]))
+    if not ids:
+        raise SystemExit(f"{label} file has no cases: {path}")
+    duplicates = sorted({case_id for case_id in ids if ids.count(case_id) > 1})
+    if duplicates:
+        raise SystemExit(f"{label} has duplicate ids: {', '.join(duplicates)}")
+    return ids
+
+
+def _quality_report_result_ids(results: list[object], path: Path, root: Path) -> list[str]:
+    ids: list[str] = []
+    for index, result in enumerate(results):
+        if not isinstance(result, dict) or not result.get("id"):
+            raise SystemExit(f"Quality report result {index} must include an id: {_relative_to_root(path, root)}")
+        ids.append(str(result["id"]))
+    duplicates = sorted({case_id for case_id in ids if ids.count(case_id) > 1})
+    if duplicates:
+        raise SystemExit(
+            f"Quality report has duplicate result ids: {_relative_to_root(path, root)}: {', '.join(duplicates)}"
+        )
+    return ids
+
+
+def _quality_case_mismatch(expected: list[str], actual: list[str]) -> str:
+    actual_set = set(actual)
+    expected_set = set(expected)
+    missing = [case_id for case_id in expected if case_id not in actual_set]
+    unexpected = [case_id for case_id in actual if case_id not in expected_set]
+    parts: list[str] = []
+    if missing:
+        parts.append(f"missing={_format_case_sample(missing)}")
+    if unexpected:
+        parts.append(f"unexpected={_format_case_sample(unexpected)}")
+    return "; ".join(parts) or "case order differs"
+
+
+def _format_case_sample(case_ids: list[str]) -> str:
+    sample = ", ".join(case_ids[:5])
+    return f"{sample}, ..." if len(case_ids) > 5 else sample
 
 
 def _quality_report_pass_count(summary: dict[str, object], path: Path, root: Path) -> int | None:

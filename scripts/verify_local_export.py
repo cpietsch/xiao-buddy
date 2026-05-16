@@ -14,6 +14,16 @@ from xiao_copilot.vector_artifacts import sha256_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
+QUALITY_REPORTS = {
+    "answer_quality": {
+        "report_path": Path("dist/answer-quality/all.json"),
+        "eval_path": Path("data/corpus/answer_eval_queries.jsonl"),
+    },
+    "reranker_quality": {
+        "report_path": Path("dist/reranker-quality/all.json"),
+        "eval_path": Path("data/corpus/eval_queries.jsonl"),
+    },
+}
 
 
 def main() -> None:
@@ -91,6 +101,8 @@ def _verify_patch_series(manifest: dict[str, Any]) -> None:
 def _verify_quality_reports(manifest: dict[str, Any], root: Path = ROOT) -> None:
     reports = manifest.get("quality_reports", {})
     _assert(isinstance(reports, dict), "quality_reports must be an object")
+    missing_reports = sorted(set(QUALITY_REPORTS) - set(reports))
+    _assert(not missing_reports, f"quality_reports missing required report(s): {', '.join(missing_reports)}")
     for name, report in reports.items():
         _assert(isinstance(report, dict), f"quality report {name} must be an object")
         path = _resolve_path_at(str(report.get("path") or ""), root)
@@ -104,9 +116,28 @@ def _verify_quality_reports(manifest: dict[str, Any], root: Path = ROOT) -> None
         results = payload.get("results")
         _assert(isinstance(summary, dict), f"quality report {name} missing summary object")
         _assert(isinstance(results, list), f"quality report {name} missing results list")
+        result_ids = _quality_report_result_ids(results, name)
+        eval_path = _quality_report_eval_path(name, report, root)
+        expected_case_ids = _jsonl_case_ids(eval_path, f"quality report {name} eval cases")
         cases = _quality_report_case_count(summary, results, name)
         _assert(int(report.get("cases") or 0) == cases, f"quality report {name} cases mismatch")
         _assert(cases > 0, f"quality report {name} must include at least one case")
+        _assert(cases == len(results), f"quality report {name} summary.cases={cases} but results={len(results)}")
+        _assert(
+            int(report.get("expected_cases") or 0) == len(expected_case_ids),
+            f"quality report {name} expected case count mismatch",
+        )
+        _assert(
+            cases == len(expected_case_ids),
+            f"quality report {name} covers {cases}/{len(expected_case_ids)} expected cases",
+        )
+        _assert(
+            set(result_ids) == set(expected_case_ids),
+            f"quality report {name} case coverage mismatch: "
+            f"{_quality_case_mismatch(expected_case_ids, result_ids)}",
+        )
+        manifest_case_ids = report.get("case_ids")
+        _assert(manifest_case_ids == result_ids, f"quality report {name} manifest case_ids mismatch")
         failures = _quality_report_failures(summary, name)
         _assert(report.get("failures") == failures, f"quality report {name} failures mismatch")
         _assert(not failures, f"quality report {name} has failures: {failures}")
@@ -157,6 +188,58 @@ def _quality_report_case_count(summary: dict[str, Any], results: list[Any], name
         return int(cases_value)
     except (TypeError, ValueError) as exc:
         raise AssertionError(f"quality report {name} summary.cases must be numeric") from exc
+
+
+def _quality_report_eval_path(name: str, report: dict[str, Any], root: Path) -> Path:
+    eval_path_value = report.get("eval_path") or (QUALITY_REPORTS.get(name) or {}).get("eval_path")
+    _assert(eval_path_value, f"quality report {name} missing eval_path")
+    return _resolve_path_at(str(eval_path_value), root)
+
+
+def _jsonl_case_ids(path: Path, label: str) -> list[str]:
+    _assert(path.exists(), f"{label} file is missing: {path}")
+    ids: list[str] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise AssertionError(f"{label} has invalid JSON on line {line_number}: {path}") from exc
+        _assert(isinstance(row, dict) and bool(row.get("id")), f"{label} line {line_number} must include an id")
+        ids.append(str(row["id"]))
+    _assert(ids, f"{label} file has no cases: {path}")
+    duplicates = sorted({case_id for case_id in ids if ids.count(case_id) > 1})
+    _assert(not duplicates, f"{label} has duplicate ids: {', '.join(duplicates)}")
+    return ids
+
+
+def _quality_report_result_ids(results: list[Any], name: str) -> list[str]:
+    ids: list[str] = []
+    for index, result in enumerate(results):
+        _assert(isinstance(result, dict) and bool(result.get("id")), f"quality report {name} result {index} missing id")
+        ids.append(str(result["id"]))
+    duplicates = sorted({case_id for case_id in ids if ids.count(case_id) > 1})
+    _assert(not duplicates, f"quality report {name} has duplicate result ids: {', '.join(duplicates)}")
+    return ids
+
+
+def _quality_case_mismatch(expected: list[str], actual: list[str]) -> str:
+    actual_set = set(actual)
+    expected_set = set(expected)
+    missing = [case_id for case_id in expected if case_id not in actual_set]
+    unexpected = [case_id for case_id in actual if case_id not in expected_set]
+    parts: list[str] = []
+    if missing:
+        parts.append(f"missing={_format_case_sample(missing)}")
+    if unexpected:
+        parts.append(f"unexpected={_format_case_sample(unexpected)}")
+    return "; ".join(parts) or "case order differs"
+
+
+def _format_case_sample(case_ids: list[str]) -> str:
+    sample = ", ".join(case_ids[:5])
+    return f"{sample}, ..." if len(case_ids) > 5 else sample
 
 
 def _quality_report_failures(summary: dict[str, Any], name: str) -> list[str]:
