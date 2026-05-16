@@ -55,7 +55,7 @@ class Settings:
 
     request_timeout_seconds: float = _typed_env_field(float, "REQUEST_TIMEOUT_SECONDS", "20")
     top_k: int = _typed_env_field(int, "TOP_K", "5")
-    candidate_k: int = _typed_env_field(int, "CANDIDATE_K", "16")
+    candidate_k: int = _typed_env_field(int, "CANDIDATE_K", "12")
     vector_index_manifest: str = _env_field("VECTOR_INDEX_MANIFEST", "data/index/xiao_vectors.json")
     vector_index_data: str = _env_field("VECTOR_INDEX_DATA")
     vector_index_archive_url: str = _env_field("VECTOR_INDEX_ARCHIVE_URL")

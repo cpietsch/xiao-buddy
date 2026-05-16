@@ -53,7 +53,7 @@ AGENT_API_KEY=
 AGENT_MAX_TOKENS=350
 
 TOP_K=5
-CANDIDATE_K=16
+CANDIDATE_K=12
 VECTOR_CANDIDATE_K=96
 VECTOR_INDEX_MANIFEST=data/index/xiao_vectors.json
 VECTOR_INDEX_DATA=
@@ -320,8 +320,10 @@ retrieval eval set:
 make rerank-benchmark
 ```
 
-The production default is `RERANK_TEXT_CHARS=3200`, which keeps richer evidence
-available to the reranker while still bounding each candidate payload.
+The production defaults are `CANDIDATE_K=12` and `RERANK_TEXT_CHARS=3200`, which
+keep richer evidence available to the reranker while bounding reranker latency.
+`CANDIDATE_K=8` is faster but currently fails the full answer quality gate on an
+MG24 deep-sleep recovery case.
 
 To verify the live reranker is helping on representative Seeed wiki topics, run
 the focused reranker quality gate:
