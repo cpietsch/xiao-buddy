@@ -338,11 +338,11 @@ This writes:
 - `data/index/xiao_vectors.json` - vector index manifest, chunk IDs, source hash
 - `data/index/xiao_vectors.hnsw` - local ANN graph over normalized chunk embeddings
 
-The HNSW/FAISS index data files are generated artifacts and are git-ignored so
-they do not exceed normal Git hosting limits. Rebuild them after cloning or
-after changing the corpus. The manifest is kept in the repo so the app can
-report the intended backend and expected chunk IDs, but the local data file must
-exist for true ANN search.
+The `.f16`, HNSW, and FAISS index data files are generated artifacts and are
+git-ignored so they do not exceed normal Git hosting limits. Rebuild them after
+cloning or after changing the corpus. The manifest is kept in the repo so the
+app can report the intended backend and expected chunk IDs, but the local data
+file must exist for true ANN search.
 
 For deployments where rebuilding the index on the app host is inconvenient,
 package the local vector data file, upload the archive to object storage or a

@@ -5,5 +5,6 @@ __pycache__/
 .DS_Store
 .cache/
 dist/
+data/index/*.f16
 data/index/*.hnsw
 data/index/*.faiss

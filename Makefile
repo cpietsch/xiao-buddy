@@ -7,6 +7,7 @@ smoke:
 	$(PYTHON) scripts/test_config.py
 	$(PYTHON) scripts/test_env_template.py
 	$(PYTHON) scripts/test_export_local_changes.py
+	$(PYTHON) scripts/test_generated_artifacts.py
 	$(PYTHON) scripts/test_clients.py
 	$(PYTHON) scripts/test_retrieval.py
 	$(PYTHON) scripts/test_app_scope.py
