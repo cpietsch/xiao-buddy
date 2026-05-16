@@ -53,6 +53,7 @@ def main() -> None:
         "bare endpoint should resolve to /v1/models",
     )
     _assert_strict_warnings_exit_nonzero()
+    _assert_missing_vector_data_warns_without_artifact()
     _assert_artifact_backed_strict_health_ok()
     _assert_corrupt_local_vector_data_fails_health()
 
@@ -80,6 +81,60 @@ def _assert_strict_warnings_exit_nonzero() -> None:
         )
     _assert(result.returncode == 2, f"strict warnings should exit 2, got {result.returncode}")
     _assert("summary:" in result.stdout and "warn" in result.stdout, "strict warning run should print warning summary")
+
+
+def _assert_missing_vector_data_warns_without_artifact() -> None:
+    with tempfile.TemporaryDirectory(prefix="xiao-health-missing-data-") as temp_dir:
+        work = Path(temp_dir)
+        manifest_path = work / "index" / "test_vectors.json"
+        data_path = work / "index" / "test_vectors.f16"
+        _write_artifact_backed_manifest(manifest_path, data_path)
+        data_path.unlink()
+
+        env = {
+            **os.environ,
+            "VECTOR_INDEX_MANIFEST": str(manifest_path),
+            "VECTOR_INDEX_DATA": "",
+            "VECTOR_INDEX_ARCHIVE_URL": "",
+            "VECTOR_INDEX_ARCHIVE_SHA256": "",
+        }
+        command = [
+            sys.executable,
+            str(ROOT / "scripts" / "health_check.py"),
+        ]
+        result = subprocess.run(
+            command,
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        strict_result = subprocess.run(
+            [*command, "--strict-warnings"],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    _assert(
+        result.returncode == 0,
+        f"missing vector data without strict warnings should pass health, got {result.returncode}",
+    )
+    _assert(
+        "WARN vector data:" in result.stdout and "run scripts/build_wiki_vector_index.py" in result.stdout,
+        "health should tell fresh clones to build the local vector index",
+    )
+    _assert(
+        "runtime artifact restore is configured" not in result.stdout,
+        "health should not report artifact restore readiness without artifact env vars",
+    )
+    _assert(
+        strict_result.returncode == 2,
+        f"strict missing-vector-data warning should exit 2, got {strict_result.returncode}",
+    )
 
 
 def _assert_artifact_backed_strict_health_ok() -> None:
