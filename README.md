@@ -224,6 +224,13 @@ audit writes `dist/reranker-quality/all.json` and fails on any retrieval-eval
 case where the live reranker does not rank citation-matched positives above
 hard lexical negatives.
 
+For a release or machine handoff, run the full demo gate, verify the packaged
+vector index artifact, and refresh the local bundle/patch export in one pass:
+
+```bash
+REQUEST_TIMEOUT_SECONDS=90 make verify-handoff
+```
+
 If GitHub push access is unavailable, export the unpushed local commits before
 moving machines or sharing the workspace:
 

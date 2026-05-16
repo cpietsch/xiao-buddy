@@ -1,4 +1,4 @@
-.PHONY: smoke ui-smoke corpus-scope browser-smoke browser-agent-smoke health health-live health-functional app-smoke eval-gate answer-eval eval-all verify-live verify-demo import-wiki-xiao import-wiki-all build-hnsw build-faiss-pq rerank-benchmark rerank-quality rerank-quality-all vector-artifact verify-vector-artifact install-vector-artifact export-local
+.PHONY: smoke ui-smoke corpus-scope browser-smoke browser-agent-smoke health health-live health-functional app-smoke eval-gate answer-eval eval-all verify-live verify-demo verify-handoff import-wiki-xiao import-wiki-all build-hnsw build-faiss-pq rerank-benchmark rerank-quality rerank-quality-all vector-artifact verify-vector-artifact install-vector-artifact export-local
 
 PYTHON ?= .venv/bin/python
 
@@ -53,6 +53,9 @@ verify-demo: verify-live
 	$(MAKE) health-functional PYTHON=$(PYTHON)
 	$(MAKE) rerank-quality-all PYTHON=$(PYTHON)
 	$(MAKE) browser-agent-smoke PYTHON=$(PYTHON)
+
+verify-handoff: verify-demo verify-vector-artifact
+	$(MAKE) export-local PYTHON=$(PYTHON)
 
 import-wiki-xiao:
 	$(PYTHON) scripts/import_seeed_wiki.py --scope xiao --refresh
