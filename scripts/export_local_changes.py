@@ -10,7 +10,15 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from xiao_copilot.vector_artifacts import sha256_file
+
 DEFAULT_OUTPUT_DIR = ROOT / "dist" / "local-export"
+QUALITY_REPORTS = {
+    "answer_quality": Path("dist/answer-quality/all.json"),
+    "reranker_quality": Path("dist/reranker-quality/all.json"),
+}
 
 
 def main() -> None:
@@ -58,6 +66,7 @@ def main() -> None:
             "keep_bundles": max(1, args.keep_bundles),
             "pruned": pruned_bundles,
         },
+        "quality_reports": _quality_reports(ROOT),
         "vector_artifact": _matching_vector_artifact(ROOT),
         "remote": _git_one("remote", "get-url", "origin", allow_failure=True),
         "commits": [
@@ -87,6 +96,46 @@ def _parse_args() -> argparse.Namespace:
         help="Number of xiao-buddy-*.bundle files to retain in the output directory, including the current export.",
     )
     return parser.parse_args()
+
+
+def _quality_reports(root: Path = ROOT) -> dict[str, object]:
+    reports: dict[str, object] = {}
+    for name, default_path in QUALITY_REPORTS.items():
+        path = root / default_path
+        if not path.exists():
+            continue
+        reports[name] = _quality_report_entry(path, root)
+    return reports
+
+
+def _quality_report_entry(path: Path, root: Path) -> dict[str, object]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 - malformed local evidence should block handoff export.
+        raise SystemExit(f"Quality report is not valid JSON: {_relative_to_root(path, root)}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise SystemExit(f"Quality report must be a JSON object: {_relative_to_root(path, root)}")
+    summary = payload.get("summary")
+    results = payload.get("results")
+    if not isinstance(summary, dict) or not isinstance(results, list):
+        raise SystemExit(
+            f"Quality report must include summary object and results list: {_relative_to_root(path, root)}"
+        )
+    cases_value = summary.get("cases", len(results))
+    try:
+        cases = int(cases_value)
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f"Quality report summary.cases must be numeric: {_relative_to_root(path, root)}") from exc
+    failures = summary.get("failures", [])
+    if not isinstance(failures, list):
+        raise SystemExit(f"Quality report summary.failures must be a list: {_relative_to_root(path, root)}")
+    return {
+        "path": _relative_to_root(path, root),
+        "sha256": sha256_file(path),
+        "cases": cases,
+        "failures": [str(item) for item in failures],
+        "summary": summary,
+    }
 
 
 def _require_clean_worktree() -> None:

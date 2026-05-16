@@ -9,11 +9,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.export_local_changes import _matching_vector_artifact, _prune_old_bundles
-from scripts.verify_local_export import _patch_series_shas, _verify_patch_series_applies
+from scripts.export_local_changes import _matching_vector_artifact, _prune_old_bundles, _quality_reports
+from scripts.verify_local_export import _patch_series_shas, _verify_patch_series_applies, _verify_quality_reports
+from xiao_copilot.vector_artifacts import sha256_file
 
 
 def main() -> None:
+    _assert_direct_export_cli_import()
+
     with tempfile.TemporaryDirectory(prefix="xiao-export-") as temp_dir:
         work = Path(temp_dir)
         current = _write_bundle(work / "xiao-buddy-current.bundle", mtime=30)
@@ -37,10 +40,32 @@ def main() -> None:
         _assert(not older.exists(), "oldest previous bundle should be pruned when keep_bundles=2")
 
         _assert_matching_vector_artifact_manifest(work)
+        _assert_quality_reports_manifest(work)
         _assert_patch_series_sha_extraction(work)
         _assert_patch_series_tree_verification(work)
 
     print("PASS export-local manifest regression")
+
+
+def _assert_direct_export_cli_import() -> None:
+    root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    result = subprocess.run(
+        [sys.executable, "scripts/export_local_changes.py", "--help"],
+        cwd=root,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    _assert(
+        result.returncode == 0,
+        "direct export script invocation should load local modules without PYTHONPATH\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
+    )
+    _assert("Export unpushed local commits" in result.stdout, "export script help text should be printed")
 
 
 def _assert_matching_vector_artifact_manifest(work: Path) -> None:
@@ -96,6 +121,33 @@ def _assert_matching_vector_artifact_manifest(work: Path) -> None:
     _assert(artifact["data_sha256"] == "current-data-sha", "export manifest should include data sha")
     _assert(artifact["count"] == 42, "export manifest should include vector count")
     _assert(artifact["env"]["VECTOR_INDEX_ARCHIVE_SHA256"] == "current-sha", "env sha should match artifact sha")
+
+
+def _assert_quality_reports_manifest(work: Path) -> None:
+    answer_report = work / "dist" / "answer-quality" / "all.json"
+    reranker_report = work / "dist" / "reranker-quality" / "all.json"
+    answer_report.parent.mkdir(parents=True)
+    reranker_report.parent.mkdir(parents=True)
+    answer_payload = {
+        "summary": {"cases": 2, "failures": [], "p50_ms": 123.4},
+        "results": [{"id": "answer-one", "ok": True}, {"id": "answer-two", "ok": True}],
+    }
+    reranker_payload = {
+        "summary": {"cases": 1, "failures": ["rerank-one"], "min_margin": -0.1},
+        "results": [{"id": "rerank-one", "ok": False}],
+    }
+    answer_report.write_text(json.dumps(answer_payload), encoding="utf-8")
+    reranker_report.write_text(json.dumps(reranker_payload), encoding="utf-8")
+
+    reports = _quality_reports(work)
+    _assert(set(reports) == {"answer_quality", "reranker_quality"}, f"unexpected quality reports: {reports}")
+    _assert(reports["answer_quality"]["path"] == "dist/answer-quality/all.json", "answer report path should be relative")
+    _assert(reports["answer_quality"]["sha256"] == sha256_file(answer_report), "answer report sha should match file")
+    _assert(reports["answer_quality"]["cases"] == 2, "answer report case count should come from summary")
+    _assert(reports["answer_quality"]["failures"] == [], "answer report failures should come from summary")
+    _assert(reports["reranker_quality"]["failures"] == ["rerank-one"], "reranker report failures should come from summary")
+
+    _verify_quality_reports({"quality_reports": reports}, work)
 
 
 def _assert_patch_series_sha_extraction(work: Path) -> None:

@@ -23,6 +23,7 @@ def main() -> None:
 
     _verify_git_export(manifest)
     _verify_patch_series(manifest)
+    _verify_quality_reports(manifest)
     _verify_vector_artifact(manifest)
 
     print(f"PASS local export: {manifest_path.relative_to(ROOT)}")
@@ -84,6 +85,46 @@ def _verify_patch_series(manifest: dict[str, Any]) -> None:
         patches,
         ROOT,
     )
+
+
+def _verify_quality_reports(manifest: dict[str, Any], root: Path = ROOT) -> None:
+    reports = manifest.get("quality_reports", {})
+    _assert(isinstance(reports, dict), "quality_reports must be an object")
+    for name, report in reports.items():
+        _assert(isinstance(report, dict), f"quality report {name} must be an object")
+        path = _resolve_path_at(str(report.get("path") or ""), root)
+        _assert(path.exists(), f"quality report missing: {path}")
+        expected_sha = str(report.get("sha256") or "")
+        _assert(expected_sha, f"quality report {name} missing sha256")
+        _assert(sha256_file(path) == expected_sha, f"quality report {name} sha256 mismatch")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        _assert(isinstance(payload, dict), f"quality report {name} must be a JSON object")
+        summary = payload.get("summary")
+        results = payload.get("results")
+        _assert(isinstance(summary, dict), f"quality report {name} missing summary object")
+        _assert(isinstance(results, list), f"quality report {name} missing results list")
+        _assert(
+            int(report.get("cases") or 0) == _quality_report_case_count(summary, results, name),
+            f"quality report {name} cases mismatch",
+        )
+        _assert(
+            report.get("failures") == _quality_report_failures(summary, name),
+            f"quality report {name} failures mismatch",
+        )
+
+
+def _quality_report_case_count(summary: dict[str, Any], results: list[Any], name: str) -> int:
+    cases_value = summary.get("cases", len(results))
+    try:
+        return int(cases_value)
+    except (TypeError, ValueError) as exc:
+        raise AssertionError(f"quality report {name} summary.cases must be numeric") from exc
+
+
+def _quality_report_failures(summary: dict[str, Any], name: str) -> list[str]:
+    failures = summary.get("failures", [])
+    _assert(isinstance(failures, list), f"quality report {name} summary.failures must be a list")
+    return [str(item) for item in failures]
 
 
 def _verify_vector_artifact(manifest: dict[str, Any]) -> None:
@@ -216,10 +257,14 @@ def _split_commit_row(row: str) -> tuple[str, str]:
 
 
 def _resolve_path(value: str) -> Path:
+    return _resolve_path_at(value, ROOT)
+
+
+def _resolve_path_at(value: str, root: Path) -> Path:
     _assert(value, "path value is empty")
     path = Path(value).expanduser()
     if not path.is_absolute():
-        path = ROOT / path
+        path = root / path
     return path
 
 
