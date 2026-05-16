@@ -218,8 +218,11 @@ When the dev browser dependency is installed, run the full demo gate as well:
 REQUEST_TIMEOUT_SECONDS=90 make verify-demo
 ```
 
-This runs the live API/retrieval gates, the functional endpoint smoke, and then
-the agent-backed browser smoke.
+This runs the live API/retrieval gates, the functional endpoint smoke, the
+all-case reranker audit, and then the agent-backed browser smoke. The reranker
+audit writes `dist/reranker-quality/all.json` and fails on any retrieval-eval
+case where the live reranker does not rank citation-matched positives above
+hard lexical negatives.
 
 If GitHub push access is unavailable, export the unpushed local commits before
 moving machines or sharing the workspace:

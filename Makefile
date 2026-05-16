@@ -51,7 +51,7 @@ verify-live: smoke health-live app-smoke eval-all
 
 verify-demo: verify-live
 	$(MAKE) health-functional PYTHON=$(PYTHON)
-	$(MAKE) rerank-quality PYTHON=$(PYTHON)
+	$(MAKE) rerank-quality-all PYTHON=$(PYTHON)
 	$(MAKE) browser-agent-smoke PYTHON=$(PYTHON)
 
 import-wiki-xiao:
