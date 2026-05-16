@@ -11,6 +11,7 @@ from xiao_copilot.clients import (
     _chat_delta_content,
     _chat_message_content,
     _content_to_text,
+    _embedding_url,
     _parse_native_rerank_scores,
     _parse_yes_no_score,
     _provider_error_message,
@@ -20,6 +21,7 @@ from xiao_copilot.clients import (
 
 def main() -> None:
     _assert_chat_payload_is_deterministic()
+    _assert_embedding_url_variants()
     _assert_chat_content_variants()
     _assert_stream_content_variants()
     _assert_provider_error_variants()
@@ -32,6 +34,26 @@ def _assert_chat_payload_is_deterministic() -> None:
     payload = _chat_payload("test-model", [{"role": "user", "content": "hello"}])
     _assert(payload["temperature"] == 0.0, "agent chat payload should be deterministic for eval stability")
     _assert(payload["chat_template_kwargs"] == {"enable_thinking": False}, "chat payload should disable thinking")
+
+
+def _assert_embedding_url_variants() -> None:
+    _assert(
+        _embedding_url("https://embed.example.test") == "https://embed.example.test/v1/embeddings",
+        "embedding client should accept service-root URLs",
+    )
+    _assert(
+        _embedding_url("https://embed.example.test/") == "https://embed.example.test/v1/embeddings",
+        "embedding client should trim trailing slashes before appending the OpenAI path",
+    )
+    _assert(
+        _embedding_url("https://embed.example.test/v1") == "https://embed.example.test/v1/embeddings",
+        "embedding client should accept /v1 base URLs",
+    )
+    _assert(
+        _embedding_url("https://embed.example.test/v1/embeddings")
+        == "https://embed.example.test/v1/embeddings",
+        "embedding client should preserve exact embeddings endpoint URLs",
+    )
 
 
 def _assert_chat_content_variants() -> None:

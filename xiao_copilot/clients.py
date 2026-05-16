@@ -33,6 +33,13 @@ def _join_url(base_url: str, path: str) -> str:
     return f"{base_url}{path}"
 
 
+def _embedding_url(base_url: str) -> str:
+    base_url = base_url.rstrip("/")
+    if base_url.endswith("/embeddings"):
+        return base_url
+    return _join_url(base_url, "/v1/embeddings")
+
+
 def _response_detail(response: requests.Response | None) -> str:
     if response is None:
         return ""
@@ -58,7 +65,7 @@ def embed_texts(
 
     try:
         response = requests.post(
-            base_url,
+            _embedding_url(base_url),
             headers=_headers(api_key),
             json=payload,
             timeout=timeout,
@@ -110,7 +117,7 @@ def embed_query(
 
     try:
         response = requests.post(
-            base_url,
+            _embedding_url(base_url),
             headers=_headers(api_key),
             json=payload,
             timeout=timeout,

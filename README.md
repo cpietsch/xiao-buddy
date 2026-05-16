@@ -38,7 +38,7 @@ photo + question
 Set these as Space secrets or variables:
 
 ```bash
-EMBEDDING_BASE_URL=https://your-embed-host/v1/embeddings
+EMBEDDING_BASE_URL=https://your-embed-host
 EMBEDDING_MODEL=qwen3-vl-embedding-2b
 EMBEDDING_API_KEY=
 
@@ -70,7 +70,7 @@ Endpoint URLs are intentionally environment-only. Do not commit local IPs or tun
 
 Expected hosted protocols:
 
-- Embeddings: OpenAI-compatible text embeddings with `input`, plus Qwen/vLLM multimodal embeddings with `messages` containing an `image_url` and text.
+- Embeddings: OpenAI-compatible `POST /v1/embeddings` text embeddings with `input`, plus Qwen/vLLM multimodal embeddings with `messages` containing an `image_url` and text. `EMBEDDING_BASE_URL` may be either the service root, `/v1`, or the exact `/v1/embeddings` URL.
 - Reranker: native `POST /v1/rerank` scores when available, with a compatibility fallback to `POST /v1/completions` yes/no logprobs for older deployments.
 - Agent: OpenAI-compatible `POST /v1/chat/completions`.
 
