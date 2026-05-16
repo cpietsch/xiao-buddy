@@ -245,6 +245,9 @@ make export-local
 
 This writes an ignored `dist/local-export/` folder containing a verified git
 bundle, a `git format-patch` series, and a manifest with base/head commit IDs.
+By default each export keeps only the current `xiao-buddy-*.bundle`; set
+`EXPORT_LOCAL_KEEP_BUNDLES` or pass `--keep-bundles` to retain more local bundle
+history.
 
 Run the strict live retrieval gate before demos, imports, or ranking changes:
 

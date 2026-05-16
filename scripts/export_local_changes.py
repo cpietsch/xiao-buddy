@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -43,6 +44,7 @@ def main() -> None:
         bundle_path.unlink()
     _run_git("bundle", "create", str(bundle_path), "HEAD", f"^{base_ref}")
     _run_git("bundle", "verify", str(bundle_path))
+    pruned_bundles = _prune_old_bundles(output_dir, bundle_path, args.keep_bundles)
 
     manifest = {
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -52,6 +54,10 @@ def main() -> None:
         "commit_count": len(commits),
         "bundle": str(bundle_path.relative_to(ROOT)),
         "patches_dir": str(patches_dir.relative_to(ROOT)),
+        "bundle_retention": {
+            "keep_bundles": max(1, args.keep_bundles),
+            "pruned": pruned_bundles,
+        },
         "remote": _git_one("remote", "get-url", "origin", allow_failure=True),
         "commits": [
             {"sha": row.split("\t", 1)[0], "subject": row.split("\t", 1)[1]}
@@ -64,6 +70,8 @@ def main() -> None:
     print(f"Bundle: {bundle_path}")
     print(f"Patches: {patches_dir}")
     print(f"Manifest: {manifest_path}")
+    if pruned_bundles:
+        print(f"Pruned old bundles: {len(pruned_bundles)}")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -71,6 +79,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--base-ref", default="origin/main", help="Base ref to export from.")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR.relative_to(ROOT)), help="Output directory.")
     parser.add_argument("--allow-dirty", action="store_true", help="Allow exporting with uncommitted work present.")
+    parser.add_argument(
+        "--keep-bundles",
+        type=int,
+        default=int(os.environ.get("EXPORT_LOCAL_KEEP_BUNDLES", "1")),
+        help="Number of xiao-buddy-*.bundle files to retain in the output directory, including the current export.",
+    )
     return parser.parse_args()
 
 
@@ -90,6 +104,23 @@ def _git_one(*args: str, allow_failure: bool = False) -> str:
 def _git_lines(*args: str) -> list[str]:
     output = _git_one(*args)
     return [line for line in output.splitlines() if line.strip()]
+
+
+def _prune_old_bundles(output_dir: Path, current_bundle: Path, keep_bundles: int) -> list[str]:
+    keep_bundles = max(1, keep_bundles)
+    current_bundle = current_bundle.resolve()
+    bundles = sorted(
+        output_dir.glob("xiao-buddy-*.bundle"),
+        key=lambda path: (path.resolve() == current_bundle, path.stat().st_mtime_ns),
+        reverse=True,
+    )
+    pruned: list[str] = []
+    for bundle in bundles[keep_bundles:]:
+        if bundle.resolve() == current_bundle:
+            continue
+        bundle.unlink()
+        pruned.append(bundle.name)
+    return pruned
 
 
 def _run_git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
