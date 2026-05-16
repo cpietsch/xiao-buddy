@@ -71,6 +71,8 @@ def main() -> None:
         agent_first_visible_ms = _agent_first_visible_ms(diagnostics)
         draft_visible_ms = _draft_visible_ms(diagnostics)
         source_draft_build_ms = _source_draft_build_ms(diagnostics)
+        retrieve_preview_ms = _timing_ms(diagnostics, "retrieve_preview")
+        source_draft_preview_build_ms = _timing_ms(diagnostics, "source_draft_preview")
         retrieval_timings_ms = _retrieval_timings_ms(diagnostics)
         required_source_ids = _source_ids_for_required_citations(citations, required_citations)
         all_source_ids = _source_ids_from_citations(citations)
@@ -90,6 +92,8 @@ def main() -> None:
             "stream_chars": int(agent.get("stream_chars", len(answer)) or 0),
             "draft_visible_ms": draft_visible_ms,
             "source_draft_build_ms": source_draft_build_ms,
+            "retrieve_preview_ms": retrieve_preview_ms,
+            "source_draft_preview_build_ms": source_draft_preview_build_ms,
             "first_token_ms": first_token_ms,
             "agent_first_visible_ms": agent_first_visible_ms,
             "retrieval_timings_ms": retrieval_timings_ms,
@@ -136,6 +140,12 @@ def main() -> None:
         f"answer source-draft build latency: p50_ms={summary['p50_source_draft_build_ms']:.1f} "
         f"p95_ms={summary['p95_source_draft_build_ms']:.1f} "
         f"max_ms={summary['max_source_draft_build_ms']:.1f}",
+        flush=True,
+    )
+    print(
+        f"answer pre-rerank preview latency: p50_ms={summary['p50_retrieve_preview_ms']:.1f} "
+        f"p95_ms={summary['p95_retrieve_preview_ms']:.1f} "
+        f"max_ms={summary['max_retrieve_preview_ms']:.1f}",
         flush=True,
     )
     print(
@@ -212,6 +222,11 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         for result in results
         if isinstance(value := result.get("source_draft_build_ms"), (int, float))
     ]
+    retrieve_preview_ms = [
+        float(value)
+        for result in results
+        if isinstance(value := result.get("retrieve_preview_ms"), (int, float))
+    ]
     return {
         "cases": total,
         "passes": sum(1 for result in results if bool(result["ok"])),
@@ -227,6 +242,9 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         "p50_source_draft_build_ms": _percentile(source_draft_build_ms, 50),
         "p95_source_draft_build_ms": _percentile(source_draft_build_ms, 95),
         "max_source_draft_build_ms": max(source_draft_build_ms) if source_draft_build_ms else 0.0,
+        "p50_retrieve_preview_ms": _percentile(retrieve_preview_ms, 50),
+        "p95_retrieve_preview_ms": _percentile(retrieve_preview_ms, 95),
+        "max_retrieve_preview_ms": max(retrieve_preview_ms) if retrieve_preview_ms else 0.0,
         "p50_first_token_ms": _percentile(first_token_ms, 50),
         "p95_first_token_ms": _percentile(first_token_ms, 95),
         "max_first_token_ms": max(first_token_ms) if first_token_ms else 0.0,
@@ -275,8 +293,12 @@ def _agent_first_visible_ms(diagnostics: dict[str, object]) -> float | None:
 
 
 def _source_draft_build_ms(diagnostics: dict[str, object]) -> float | None:
+    return _timing_ms(diagnostics, "source_draft")
+
+
+def _timing_ms(diagnostics: dict[str, object], key: str) -> float | None:
     timings = diagnostics.get("timings_ms")
-    value = timings.get("source_draft") if isinstance(timings, dict) else None
+    value = timings.get(key) if isinstance(timings, dict) else None
     if isinstance(value, (int, float)):
         return float(value)
     return None

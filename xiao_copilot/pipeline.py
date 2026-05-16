@@ -10,7 +10,7 @@ from xiao_copilot.clients import EndpointResult, chat_completion, chat_completio
 from xiao_copilot.config import load_settings
 from xiao_copilot.image_utils import image_to_data_url, summarize_image
 from xiao_copilot.knowledge_base import KnowledgeChunk
-from xiao_copilot.retrieval import retrieve
+from xiao_copilot.retrieval import retrieve_progressive
 
 
 SYSTEM_PROMPT = """You are XIAO Field Copilot, a concise hardware support assistant.
@@ -110,7 +110,60 @@ def answer_question_stream(
         format_progress(stage="retrieve", intent=intent),
     )
 
-    chunks, retrieval_diagnostics = retrieve(question, settings, image_data_url=image_data_url)
+    chunks: list[KnowledgeChunk] = []
+    retrieval_diagnostics: dict[str, object] = {}
+    draft_first_visible_ms: float | None = None
+    draft_chars = 0
+    for retrieval_stage in retrieve_progressive(question, settings, image_data_url=image_data_url):
+        if retrieval_stage.stage == "pre_rerank":
+            preview_chunks = retrieval_stage.chunks
+            if not preview_chunks:
+                continue
+            preview_diagnostics = retrieval_stage.diagnostics
+            preview_backend = str(preview_diagnostics.get("vector_index_backend") or "lexical")
+            preview_detail = _retrieval_progress_detail(
+                preview_diagnostics,
+                preview_backend,
+                len(preview_chunks),
+            )
+            preview_draft_started_at = perf_counter()
+            preview_draft = _draft_answer(question, image_summary, preview_chunks)
+            timings_ms["source_draft_preview"] = _elapsed_ms(preview_draft_started_at)
+            timings_ms["retrieve_preview"] = _elapsed_ms(retrieve_started_at)
+            if preview_draft and draft_first_visible_ms is None:
+                draft_first_visible_ms = _elapsed_ms(run_started_at)
+                draft_chars = len(preview_draft)
+                yield (
+                    preview_draft,
+                    _format_citations(preview_chunks),
+                    _run_diagnostics(
+                        status="running",
+                        stage="generate",
+                        intent=intent,
+                        image_summary=image_summary,
+                        agent_multimodal=bool(image_data_url),
+                        retrieval_diagnostics=preview_diagnostics,
+                        chunks=preview_chunks,
+                        timings_ms=timings_ms,
+                        run_started_at=run_started_at,
+                        agent_status="waiting",
+                        agent_streaming=False,
+                        draft_chars=draft_chars,
+                        draft_first_visible_ms=draft_first_visible_ms,
+                    ),
+                    format_progress(
+                        stage="generate",
+                        backend=preview_backend,
+                        source_count=len(preview_chunks),
+                        retrieval_detail=preview_detail,
+                        draft_chars=draft_chars,
+                        draft_first_visible_ms=draft_first_visible_ms,
+                    ),
+                )
+            continue
+        chunks = retrieval_stage.chunks
+        retrieval_diagnostics = retrieval_stage.diagnostics
+
     timings_ms["retrieve"] = _elapsed_ms(retrieve_started_at)
     citations = _format_citations(chunks)
     backend = str(retrieval_diagnostics.get("vector_index_backend") or "lexical")
@@ -149,10 +202,10 @@ def answer_question_stream(
     draft_started_at = perf_counter()
     draft_answer = _draft_answer(question, image_summary, chunks)
     timings_ms["source_draft"] = _elapsed_ms(draft_started_at)
-    draft_chars = len(draft_answer) if draft_answer else 0
-    draft_first_visible_ms: float | None = None
+    draft_chars = len(draft_answer) if draft_answer else draft_chars
     if draft_answer:
-        draft_first_visible_ms = _elapsed_ms(run_started_at)
+        if draft_first_visible_ms is None:
+            draft_first_visible_ms = _elapsed_ms(run_started_at)
         yield (
             draft_answer,
             citations,
@@ -398,7 +451,7 @@ def _progress_detail(
         if draft_chars:
             prefix = retrieval_detail or f"{source_count} sources via {backend}"
             draft_ms = f" in {draft_first_visible_ms:.0f} ms" if draft_first_visible_ms is not None else ""
-            return f"{prefix}; source draft {draft_chars} chars{draft_ms}; agent running"
+            return f"{prefix}; source draft {draft_chars} chars{draft_ms}; preparing agent"
         if source_count:
             prefix = retrieval_detail or f"{source_count} sources via {backend}"
             return f"{prefix}; agent running"
@@ -425,6 +478,8 @@ def _retrieval_progress_detail(
     base = f"{source_count} sources via {backend}"
     timing_parts = _retrieval_timing_parts(retrieval_diagnostics)
     timing_suffix = f"; {'; '.join(timing_parts)}" if timing_parts else ""
+    if retrieval_diagnostics.get("reranker_pending"):
+        return f"{base}; pre-rerank preview{timing_suffix}"
     if retrieval_diagnostics.get("reranker_used"):
         mode = str(retrieval_diagnostics.get("reranker_mode") or "rerank")
         return f"{base}; {mode} rerank{timing_suffix}"

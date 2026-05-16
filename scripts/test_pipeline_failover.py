@@ -10,6 +10,7 @@ import xiao_copilot.pipeline as pipeline
 from xiao_copilot.clients import EndpointResult
 from xiao_copilot.config import Settings
 from xiao_copilot.knowledge_base import KnowledgeChunk
+from xiao_copilot.retrieval import RetrievalStage
 
 
 def main() -> None:
@@ -20,11 +21,11 @@ def main() -> None:
     _assert_success_stream_reports_first_token_latency()
 
     original_load_settings = pipeline.load_settings
-    original_retrieve = pipeline.retrieve
+    original_retrieve_progressive = pipeline.retrieve_progressive
     original_generate_stream = pipeline._generate_with_agent_stream
     try:
         pipeline.load_settings = _fake_settings  # type: ignore[assignment]
-        pipeline.retrieve = _fake_retrieve  # type: ignore[assignment]
+        pipeline.retrieve_progressive = _fake_retrieve_progressive  # type: ignore[assignment]
         pipeline._generate_with_agent_stream = _broken_agent_stream  # type: ignore[assignment]
 
         events = list(pipeline.answer_question_stream(None, "Which pin should I check?"))
@@ -41,7 +42,7 @@ def main() -> None:
         _assert("fallback answer" in progress_html, "progress should report fallback final mode")
     finally:
         pipeline.load_settings = original_load_settings  # type: ignore[assignment]
-        pipeline.retrieve = original_retrieve  # type: ignore[assignment]
+        pipeline.retrieve_progressive = original_retrieve_progressive  # type: ignore[assignment]
         pipeline._generate_with_agent_stream = original_generate_stream  # type: ignore[assignment]
 
     print("PASS pipeline failover regression")
@@ -49,7 +50,7 @@ def main() -> None:
 
 def _assert_success_stream_reports_first_token_latency() -> None:
     original_load_settings = pipeline.load_settings
-    original_retrieve = pipeline.retrieve
+    original_retrieve_progressive = pipeline.retrieve_progressive
     original_generate_stream = pipeline._generate_with_agent_stream
     original_perf_counter = pipeline.perf_counter
     clock = {"now": 0.0}
@@ -60,7 +61,7 @@ def _assert_success_stream_reports_first_token_latency() -> None:
 
     try:
         pipeline.load_settings = _fake_settings  # type: ignore[assignment]
-        pipeline.retrieve = _fake_retrieve  # type: ignore[assignment]
+        pipeline.retrieve_progressive = _fake_retrieve_progressive  # type: ignore[assignment]
         pipeline._generate_with_agent_stream = _good_agent_stream  # type: ignore[assignment]
         pipeline.perf_counter = fake_perf_counter  # type: ignore[assignment]
 
@@ -87,6 +88,14 @@ def _assert_success_stream_reports_first_token_latency() -> None:
             events.index(draft_events[0]) < events.index(stream_events[0]),
             "source-backed draft should appear before the first hosted agent token",
         )
+        _assert(
+            draft_events[0][2].get("retrieval", {}).get("preliminary") is True,
+            "first source-backed draft should use preliminary pre-rerank sources",
+        )
+        _assert(
+            any(not event[2].get("retrieval", {}).get("preliminary") for event in draft_events[1:]),
+            "pipeline should refresh the source-backed draft after rerank finishes",
+        )
         first_token_ms = stream_events[0][2]["agent"]["first_token_ms"]
         _assert(isinstance(first_token_ms, float), "first-token latency should be numeric")
         _assert(first_token_ms > 0, "first-token latency should be positive once streaming starts")
@@ -103,7 +112,7 @@ def _assert_success_stream_reports_first_token_latency() -> None:
         _assert("rerank 34 ms" in progress_html, "final progress should expose reranker latency")
     finally:
         pipeline.load_settings = original_load_settings  # type: ignore[assignment]
-        pipeline.retrieve = original_retrieve  # type: ignore[assignment]
+        pipeline.retrieve_progressive = original_retrieve_progressive  # type: ignore[assignment]
         pipeline._generate_with_agent_stream = original_generate_stream  # type: ignore[assignment]
         pipeline.perf_counter = original_perf_counter  # type: ignore[assignment]
 
@@ -161,7 +170,11 @@ def _fake_settings() -> Settings:
     )
 
 
-def _fake_retrieve(_question: str, _settings: Settings, image_data_url: str | None = None):
+def _fake_retrieve_progressive(
+    _question: str,
+    _settings: Settings,
+    image_data_url: str | None = None,
+) -> Iterator[RetrievalStage]:
     chunk = KnowledgeChunk(
         id="test-source",
         title="Test source",
@@ -169,7 +182,18 @@ def _fake_retrieve(_question: str, _settings: Settings, image_data_url: str | No
         text="Use the cited source instead of incomplete streamed agent text.",
         kind="wiki",
     )
-    return [chunk], {
+    preview_diagnostics = {
+        "vector_index_backend": "lexical",
+        "image_used": bool(image_data_url),
+        "preliminary": True,
+        "reranker_pending": True,
+        "timings_ms": {
+            "query_embedding": 12.0,
+            "total": 16.0,
+        },
+    }
+    yield RetrievalStage(stage="pre_rerank", chunks=[chunk], diagnostics=preview_diagnostics)
+    final_diagnostics = {
         "vector_index_backend": "lexical",
         "image_used": bool(image_data_url),
         "reranker_used": True,
@@ -181,6 +205,7 @@ def _fake_retrieve(_question: str, _settings: Settings, image_data_url: str | No
             "total": 50.0,
         },
     }
+    yield RetrievalStage(stage="final", chunks=[chunk], diagnostics=final_diagnostics)
 
 
 def _broken_agent_stream(*_args, **_kwargs) -> Iterator[EndpointResult]:

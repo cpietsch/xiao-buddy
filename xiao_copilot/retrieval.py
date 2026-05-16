@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Iterator
 from collections import Counter
 from dataclasses import dataclass
 from time import perf_counter
@@ -89,6 +90,13 @@ class _QueryProfile:
     technical_terms: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class RetrievalStage:
+    stage: str
+    chunks: list[KnowledgeChunk]
+    diagnostics: dict[str, object]
+
+
 _CHUNK_SEARCH_TEXT_CACHE: dict[tuple[object, ...], str] = {}
 _CHUNK_SEARCH_LOWER_CACHE: dict[tuple[object, ...], str] = {}
 _CHUNK_TEXT_LOWER_CACHE: dict[tuple[object, ...], str] = {}
@@ -133,6 +141,19 @@ def retrieve(
     settings: Settings,
     image_data_url: str | None = None,
 ) -> tuple[list[KnowledgeChunk], dict[str, object]]:
+    final_stage: RetrievalStage | None = None
+    for stage in retrieve_progressive(query, settings, image_data_url=image_data_url):
+        final_stage = stage
+    if final_stage is None:
+        return [], {"status": "empty_retrieval"}
+    return final_stage.chunks, final_stage.diagnostics
+
+
+def retrieve_progressive(
+    query: str,
+    settings: Settings,
+    image_data_url: str | None = None,
+) -> Iterator[RetrievalStage]:
     retrieval_started_at = perf_counter()
     timing_ms: dict[str, float] = {}
     load_started_at = perf_counter()
@@ -233,6 +254,20 @@ def retrieve(
         for chunk, score in top_scored
     ]
     timing_ms["candidate_selection"] = _elapsed_ms(candidate_started_at)
+    preview_timings = dict(timing_ms)
+    preview_timings["total"] = _elapsed_ms(retrieval_started_at)
+    preview_top = top[: settings.top_k]
+    yield RetrievalStage(
+        stage="pre_rerank",
+        chunks=preview_top,
+        diagnostics={
+            **diagnostics,
+            "preliminary": True,
+            "reranker_pending": bool(top),
+            "citations": [chunk.id for chunk in preview_top],
+            "timings_ms": preview_timings,
+        },
+    )
 
     rerank_prepare_started_at = perf_counter()
     rerank_text_chars = max(200, settings.rerank_text_chars or DEFAULT_RERANK_TEXT_CHARS)
@@ -303,7 +338,7 @@ def retrieve(
     diagnostics["citations"] = [chunk.id for chunk in top]
     timing_ms["total"] = _elapsed_ms(retrieval_started_at)
     diagnostics["timings_ms"] = timing_ms
-    return top, diagnostics
+    yield RetrievalStage(stage="final", chunks=top, diagnostics=diagnostics)
 
 
 def _rerank_text(

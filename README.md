@@ -304,8 +304,8 @@ output, source-backed draft visibility, and streamed token updates for the cases
 `data/corpus/answer_eval_queries.jsonl`. It also writes a compact structured
 report to `dist/answer-quality/all.json`, including per-case pass flags, source
 IDs, stream counts, source-draft latency, hosted-agent first-token latency,
-agent-visible-from-request latency, source-draft build time, nested retrieval
-stage timings, and total latency percentiles.
+agent-visible-from-request latency, pre-rerank preview latency, source-draft
+build time, nested retrieval stage timings, and total latency percentiles.
 
 Run one generated-answer case while debugging a prompt or endpoint:
 
