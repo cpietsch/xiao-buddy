@@ -171,9 +171,18 @@ def _quality_report_entry(path: Path, root: Path) -> dict[str, object]:
         cases = int(cases_value)
     except (TypeError, ValueError) as exc:
         raise SystemExit(f"Quality report summary.cases must be numeric: {_relative_to_root(path, root)}") from exc
+    if cases <= 0:
+        raise SystemExit(f"Quality report must include at least one case: {_relative_to_root(path, root)}")
     failures = summary.get("failures", [])
     if not isinstance(failures, list):
         raise SystemExit(f"Quality report summary.failures must be a list: {_relative_to_root(path, root)}")
+    if failures:
+        raise SystemExit(f"Quality report has failures: {_relative_to_root(path, root)}: {failures}")
+    passes = _quality_report_pass_count(summary, path, root)
+    if passes is not None and passes != cases:
+        raise SystemExit(
+            f"Quality report passes={passes} does not match cases={cases}: {_relative_to_root(path, root)}"
+        )
     return {
         "path": _relative_to_root(path, root),
         "sha256": sha256_file(path),
@@ -181,6 +190,15 @@ def _quality_report_entry(path: Path, root: Path) -> dict[str, object]:
         "failures": [str(item) for item in failures],
         "summary": summary,
     }
+
+
+def _quality_report_pass_count(summary: dict[str, object], path: Path, root: Path) -> int | None:
+    if "passes" not in summary:
+        return None
+    try:
+        return int(summary["passes"])
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f"Quality report summary.passes must be numeric: {_relative_to_root(path, root)}") from exc
 
 
 def _require_clean_worktree() -> None:

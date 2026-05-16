@@ -163,8 +163,9 @@ the configured model IDs, checks the local Gradio app URL, and exits non-zero on
 warnings.
 
 To prove the hosted endpoints accept real inference payloads, run the functional
-endpoint smoke. It sends one small embedding request, one rerank request, and one
-short chat completion request:
+endpoint smoke. It sends one small embedding request, one rerank request, one
+short chat completion request, and one streamed chat completion request with
+first-token latency:
 
 ```bash
 REQUEST_TIMEOUT_SECONDS=90 make health-functional

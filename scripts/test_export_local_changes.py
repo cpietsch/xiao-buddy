@@ -155,12 +155,12 @@ def _assert_quality_reports_manifest(work: Path) -> None:
     answer_report.parent.mkdir(parents=True)
     reranker_report.parent.mkdir(parents=True)
     answer_payload = {
-        "summary": {"cases": 2, "failures": [], "p50_ms": 123.4},
+        "summary": {"cases": 2, "passes": 2, "failures": [], "p50_ms": 123.4},
         "results": [{"id": "answer-one", "ok": True}, {"id": "answer-two", "ok": True}],
     }
     reranker_payload = {
-        "summary": {"cases": 1, "failures": ["rerank-one"], "min_margin": -0.1},
-        "results": [{"id": "rerank-one", "ok": False}],
+        "summary": {"cases": 1, "passes": 1, "failures": [], "min_margin": 0.4},
+        "results": [{"id": "rerank-one", "ok": True}],
     }
     answer_report.write_text(json.dumps(answer_payload), encoding="utf-8")
     reranker_report.write_text(json.dumps(reranker_payload), encoding="utf-8")
@@ -171,9 +171,26 @@ def _assert_quality_reports_manifest(work: Path) -> None:
     _assert(reports["answer_quality"]["sha256"] == sha256_file(answer_report), "answer report sha should match file")
     _assert(reports["answer_quality"]["cases"] == 2, "answer report case count should come from summary")
     _assert(reports["answer_quality"]["failures"] == [], "answer report failures should come from summary")
-    _assert(reports["reranker_quality"]["failures"] == ["rerank-one"], "reranker report failures should come from summary")
+    _assert(reports["reranker_quality"]["failures"] == [], "reranker report failures should come from summary")
 
     _verify_quality_reports({"quality_reports": reports}, work)
+
+    failing_payload = {
+        "summary": {"cases": 1, "passes": 0, "failures": ["rerank-one"], "min_margin": -0.1},
+        "results": [{"id": "rerank-one", "ok": False}],
+    }
+    reranker_report.write_text(json.dumps(failing_payload), encoding="utf-8")
+    _assert_raises_system_exit(lambda: _quality_reports(work), "failing quality report should block export")
+    failed_reports = {
+        "reranker_quality": {
+            "path": "dist/reranker-quality/all.json",
+            "sha256": sha256_file(reranker_report),
+            "cases": 1,
+            "failures": ["rerank-one"],
+            "summary": failing_payload["summary"],
+        }
+    }
+    _assert_raises_assertion(lambda: _verify_quality_reports({"quality_reports": failed_reports}, work), "failures")
 
 
 def _assert_patch_series_sha_extraction(work: Path) -> None:
@@ -259,6 +276,23 @@ def _git(repo: Path, *args: str) -> str:
 def _assert(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
+
+
+def _assert_raises_system_exit(fn, message: str) -> None:
+    try:
+        fn()
+    except SystemExit:
+        return
+    raise AssertionError(message)
+
+
+def _assert_raises_assertion(fn, expected_message: str) -> None:
+    try:
+        fn()
+    except AssertionError as exc:
+        _assert(expected_message in str(exc), f"expected {expected_message!r} in {exc!r}")
+        return
+    raise AssertionError(f"expected AssertionError containing {expected_message!r}")
 
 
 if __name__ == "__main__":

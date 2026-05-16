@@ -104,14 +104,15 @@ def _verify_quality_reports(manifest: dict[str, Any], root: Path = ROOT) -> None
         results = payload.get("results")
         _assert(isinstance(summary, dict), f"quality report {name} missing summary object")
         _assert(isinstance(results, list), f"quality report {name} missing results list")
-        _assert(
-            int(report.get("cases") or 0) == _quality_report_case_count(summary, results, name),
-            f"quality report {name} cases mismatch",
-        )
-        _assert(
-            report.get("failures") == _quality_report_failures(summary, name),
-            f"quality report {name} failures mismatch",
-        )
+        cases = _quality_report_case_count(summary, results, name)
+        _assert(int(report.get("cases") or 0) == cases, f"quality report {name} cases mismatch")
+        _assert(cases > 0, f"quality report {name} must include at least one case")
+        failures = _quality_report_failures(summary, name)
+        _assert(report.get("failures") == failures, f"quality report {name} failures mismatch")
+        _assert(not failures, f"quality report {name} has failures: {failures}")
+        passes = _quality_report_pass_count(summary, name)
+        if passes is not None:
+            _assert(passes == cases, f"quality report {name} passes={passes} does not match cases={cases}")
 
 
 def _verify_browser_screenshots(manifest: dict[str, Any], root: Path = ROOT) -> None:
@@ -162,6 +163,15 @@ def _quality_report_failures(summary: dict[str, Any], name: str) -> list[str]:
     failures = summary.get("failures", [])
     _assert(isinstance(failures, list), f"quality report {name} summary.failures must be a list")
     return [str(item) for item in failures]
+
+
+def _quality_report_pass_count(summary: dict[str, Any], name: str) -> int | None:
+    if "passes" not in summary:
+        return None
+    try:
+        return int(summary["passes"])
+    except (TypeError, ValueError) as exc:
+        raise AssertionError(f"quality report {name} summary.passes must be numeric") from exc
 
 
 def _verify_vector_artifact(manifest: dict[str, Any]) -> None:
