@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import os
 import sys
 import tarfile
 from pathlib import Path
@@ -48,11 +49,18 @@ def main() -> None:
         "model": meta.get("model"),
         "source_hash": meta.get("source_hash"),
     }
+    pruned_artifacts = _prune_old_artifacts(output_dir, archive_path, args.keep_artifacts)
+    metadata["artifact_retention"] = {
+        "keep_artifacts": max(1, args.keep_artifacts),
+        "pruned": pruned_artifacts,
+    }
     metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
 
     print(f"wrote archive: {archive_path}")
     print(f"wrote metadata: {metadata_path}")
     print(f"VECTOR_INDEX_ARCHIVE_SHA256={metadata['archive_sha256']}")
+    if pruned_artifacts:
+        print(f"pruned old vector artifacts: {len(pruned_artifacts)}")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -61,6 +69,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--data", default="", help="Vector data path override.")
     parser.add_argument("--output-dir", default="dist/vector-index", help="Output directory.")
     parser.add_argument("--name", default="", help="Archive filename. Defaults to backend/source hash.")
+    parser.add_argument(
+        "--keep-artifacts",
+        type=int,
+        default=int(os.environ.get("VECTOR_ARTIFACT_KEEP", "1")),
+        help="Number of vector artifact archives to retain in the output directory, including the current archive.",
+    )
     return parser.parse_args()
 
 
@@ -99,6 +113,34 @@ def _default_archive_name(meta: dict[str, object], data_path: Path) -> str:
     backend = str(meta.get("backend") or meta.get("index_backend") or data_path.suffix.lstrip(".") or "vector")
     source_hash = str(meta.get("source_hash") or "unhashed")
     return f"{stem}-{backend}-{source_hash}.tar.gz"
+
+
+def _prune_old_artifacts(output_dir: Path, current_archive: Path, keep_artifacts: int) -> list[str]:
+    keep_artifacts = max(1, keep_artifacts)
+    current_archive = current_archive.resolve()
+    archives = sorted(
+        output_dir.glob("*.tar.gz"),
+        key=lambda path: (path.resolve() == current_archive, path.stat().st_mtime_ns),
+        reverse=True,
+    )
+    pruned: list[str] = []
+    for archive in archives[keep_artifacts:]:
+        if archive.resolve() == current_archive:
+            continue
+        metadata = archive.with_suffix(archive.suffix + ".json")
+        archive.unlink()
+        pruned.append(archive.name)
+        if metadata.exists():
+            metadata.unlink()
+            pruned.append(metadata.name)
+
+    for metadata in output_dir.glob("*.tar.gz.json"):
+        archive = metadata.with_suffix("")
+        if archive.exists() or archive.resolve() == current_archive:
+            continue
+        metadata.unlink()
+        pruned.append(metadata.name)
+    return pruned
 
 
 if __name__ == "__main__":

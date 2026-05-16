@@ -355,6 +355,9 @@ make vector-artifact
 
 The package step writes deterministic tarballs: if the index bytes and manifest
 source hash are unchanged, rerunning the command produces the same archive SHA.
+By default it keeps only the current `*.tar.gz` artifact plus metadata in
+`dist/vector-index`; set `VECTOR_ARTIFACT_KEEP` or pass `--keep-artifacts` to
+retain more local archive history.
 
 At runtime, if the manifest exists but the local vector data file is missing,
 the app downloads the artifact, verifies the archive checksum when configured,

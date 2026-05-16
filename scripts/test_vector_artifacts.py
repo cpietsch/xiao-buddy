@@ -82,6 +82,7 @@ def main() -> None:
         _assert(not raw_result.ok, "missing raw artifact should fail")
 
         _assert_metadata_manifest_matching(work)
+        _assert_artifact_pruning(work)
 
     print("PASS vector artifact package/install regression")
 
@@ -107,6 +108,34 @@ def _assert_metadata_manifest_matching(work: Path) -> None:
     )
 
 
+def _assert_artifact_pruning(work: Path) -> None:
+    manifest_path = work / "prune" / "index" / "test_vectors.json"
+    data_path = work / "prune" / "index" / "test_vectors.hnsw"
+    output_dir = work / "prune" / "out"
+    _write_test_index(manifest_path, data_path)
+    output_dir.mkdir(parents=True)
+    stale_archive = output_dir / "stale.tar.gz"
+    stale_metadata = output_dir / "stale.tar.gz.json"
+    stale_archive.write_bytes(b"stale")
+    stale_metadata.write_text("{}", encoding="utf-8")
+
+    archive_path = _package_test_index(
+        manifest_path,
+        data_path,
+        output_dir,
+        "current.tar.gz",
+        keep_artifacts=1,
+    )
+    metadata = json.loads(archive_path.with_suffix(archive_path.suffix + ".json").read_text(encoding="utf-8"))
+    _assert(archive_path.exists(), "current artifact archive should remain")
+    _assert(not stale_archive.exists(), "stale artifact archive should be pruned")
+    _assert(not stale_metadata.exists(), "stale artifact metadata should be pruned")
+    _assert(
+        metadata["artifact_retention"]["pruned"] == ["stale.tar.gz", "stale.tar.gz.json"],
+        "artifact retention metadata should list pruned files",
+    )
+
+
 def _write_test_index(manifest_path: Path, data_path: Path) -> None:
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     data_path.write_bytes(TEST_BYTES)
@@ -123,7 +152,14 @@ def _write_test_index(manifest_path: Path, data_path: Path) -> None:
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
 
-def _package_test_index(manifest_path: Path, data_path: Path, output_dir: Path, name: str) -> Path:
+def _package_test_index(
+    manifest_path: Path,
+    data_path: Path,
+    output_dir: Path,
+    name: str,
+    *,
+    keep_artifacts: int = 2,
+) -> Path:
     archive_path = output_dir / name
     subprocess.run(
         [
@@ -137,6 +173,8 @@ def _package_test_index(manifest_path: Path, data_path: Path, output_dir: Path, 
             str(output_dir),
             "--name",
             archive_path.name,
+            "--keep-artifacts",
+            str(keep_artifacts),
         ],
         check=True,
         cwd=ROOT,
