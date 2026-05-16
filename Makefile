@@ -1,4 +1,4 @@
-.PHONY: smoke ui-smoke browser-smoke browser-agent-smoke health health-live health-functional app-smoke eval-gate answer-eval eval-all verify-live verify-demo rerank-benchmark vector-artifact verify-vector-artifact install-vector-artifact export-local
+.PHONY: smoke ui-smoke corpus-scope browser-smoke browser-agent-smoke health health-live health-functional app-smoke eval-gate answer-eval eval-all verify-live verify-demo import-wiki-xiao import-wiki-all build-hnsw build-faiss-pq rerank-benchmark vector-artifact verify-vector-artifact install-vector-artifact export-local
 
 PYTHON ?= .venv/bin/python
 
@@ -6,6 +6,7 @@ smoke:
 	$(PYTHON) -m py_compile app.py xiao_copilot/*.py scripts/*.py
 	$(PYTHON) scripts/test_config.py
 	$(PYTHON) scripts/test_app_scope.py
+	$(PYTHON) scripts/test_corpus_scope.py
 	$(PYTHON) scripts/ui_contract_smoke.py
 	$(PYTHON) scripts/test_vector_artifacts.py
 	$(PYTHON) scripts/test_health_checks.py
@@ -13,6 +14,9 @@ smoke:
 
 ui-smoke:
 	$(PYTHON) scripts/ui_contract_smoke.py
+
+corpus-scope:
+	$(PYTHON) scripts/test_corpus_scope.py
 
 browser-smoke:
 	$(PYTHON) scripts/browser_smoke.py
@@ -45,6 +49,18 @@ verify-live: smoke health-live app-smoke eval-all
 verify-demo: verify-live
 	$(MAKE) health-functional PYTHON=$(PYTHON)
 	$(MAKE) browser-agent-smoke PYTHON=$(PYTHON)
+
+import-wiki-xiao:
+	$(PYTHON) scripts/import_seeed_wiki.py --scope xiao --refresh
+
+import-wiki-all:
+	$(PYTHON) scripts/import_seeed_wiki.py --scope all --refresh
+
+build-hnsw:
+	$(PYTHON) scripts/build_wiki_vector_index.py --backend hnsw --batch-size $${BATCH_SIZE:-32}
+
+build-faiss-pq:
+	$(PYTHON) scripts/build_wiki_vector_index.py --backend faiss-pq --batch-size $${BATCH_SIZE:-32}
 
 rerank-benchmark:
 	$(PYTHON) scripts/benchmark_rerank_window.py --windows $${RERANK_BENCHMARK_WINDOWS:-900,1600,2400,3200}

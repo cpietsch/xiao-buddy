@@ -87,28 +87,35 @@ corpus, then layers in compact chunks from the official Seeed wiki markdown.
 This reuses the strongest ingestion idea from the larger `seeed-rag` project
 without shipping the full wiki-scale stack.
 
-To refresh the imported XIAO wiki chunks:
+To refresh the imported full Seeed wiki chunks:
 
 ```bash
-python scripts/import_seeed_wiki_xiao.py --refresh
+make import-wiki-all
 ```
 
-To move from the XIAO-only demo corpus to the full Seeed wiki, import the whole
-docs tree and then rebuild the ANN index:
+For a tiny local smoke corpus, you can still import only the XIAO docs:
 
 ```bash
-python scripts/import_seeed_wiki_xiao.py --scope all --refresh
-python scripts/build_wiki_vector_index.py --backend hnsw --batch-size 32
+make import-wiki-xiao
 ```
+
+After any corpus refresh, rebuild the ANN index:
+
+```bash
+make build-hnsw
+```
+
+HNSW is the verified default artifact path. For compressed FAISS-PQ experiments,
+install `faiss-cpu` and run `make build-faiss-pq`; keep `make verify-demo` as
+the acceptance gate before using that index in a demo.
 
 The importer creates a sparse checkout of
-`Seeed-Studio/wiki-documents` under `.cache/seeed-wiki`, filters to
-`sites/en/docs/Sensor/SeeedStudio_XIAO` by default, cleans Docusaurus/MDX
-markdown, splits by headings, preserves source URLs and image URLs, infers the
-matching XIAO board family when possible, and writes
-`data/corpus/wiki_chunks.jsonl`. With `--scope all`, the sparse checkout expands
-to `sites/en/docs` and imports boards, sensors, robotics, and other Seeed docs
-into the same chunk file.
+`Seeed-Studio/wiki-documents` under `.cache/seeed-wiki`, imports
+`sites/en/docs` by default, cleans Docusaurus/MDX markdown, splits by headings,
+preserves source URLs and image URLs, infers the matching XIAO board family when
+possible, and writes `data/corpus/wiki_chunks.jsonl`. With `--scope xiao`, the
+sparse checkout narrows to `sites/en/docs/Sensor/SeeedStudio_XIAO` for quick
+local experiments.
 
 At runtime the app loads:
 
@@ -133,9 +140,9 @@ make smoke
 ```
 
 This checks Python syntax, first-screen scope copy, vector artifact
-package/install behavior, health parser behavior, and a strict lexical subset of
-the retrieval eval that does not require hosted embedding, reranker, or agent
-endpoints.
+package/install behavior, full-wiki corpus breadth, health parser behavior, and
+a strict lexical subset of the retrieval eval that does not require hosted
+embedding, reranker, or agent endpoints.
 
 Check local readiness, corpus/index coverage, manifest source hash, and generated-artifact state:
 
