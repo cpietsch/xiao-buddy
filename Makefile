@@ -5,6 +5,7 @@ PYTHON ?= .venv/bin/python
 smoke:
 	$(PYTHON) -m py_compile app.py xiao_copilot/*.py scripts/*.py
 	$(PYTHON) scripts/test_config.py
+	$(PYTHON) scripts/test_env_template.py
 	$(PYTHON) scripts/test_clients.py
 	$(PYTHON) scripts/test_retrieval.py
 	$(PYTHON) scripts/test_app_scope.py

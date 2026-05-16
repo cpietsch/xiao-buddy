@@ -59,7 +59,12 @@ VECTOR_INDEX_DATA=
 VECTOR_INDEX_ARCHIVE_URL=
 VECTOR_INDEX_ARCHIVE_SHA256=
 REQUEST_TIMEOUT_SECONDS=60
+GRADIO_SERVER_NAME=127.0.0.1
+GRADIO_SERVER_PORT=7860
 ```
+
+For local development, copy `.env.example` to `.env` and fill in the endpoint
+URLs. `.env` is ignored by Git.
 
 Endpoint URLs are intentionally environment-only. Do not commit local IPs or tunnel URLs.
 
