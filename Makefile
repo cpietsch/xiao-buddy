@@ -9,6 +9,7 @@ smoke:
 	$(PYTHON) scripts/test_export_local_changes.py
 	$(PYTHON) scripts/test_generated_artifacts.py
 	$(PYTHON) scripts/test_clients.py
+	$(PYTHON) scripts/test_eval_contracts.py
 	$(PYTHON) scripts/test_retrieval.py
 	$(PYTHON) scripts/test_answer_eval_quality.py
 	$(PYTHON) scripts/test_reranker_quality.py
