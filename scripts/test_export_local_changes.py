@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -9,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.export_local_changes import _matching_vector_artifact, _prune_old_bundles
-from scripts.verify_local_export import _patch_series_shas
+from scripts.verify_local_export import _patch_series_shas, _verify_patch_series_applies
 
 
 def main() -> None:
@@ -37,6 +38,7 @@ def main() -> None:
 
         _assert_matching_vector_artifact_manifest(work)
         _assert_patch_series_sha_extraction(work)
+        _assert_patch_series_tree_verification(work)
 
     print("PASS export-local manifest regression")
 
@@ -119,10 +121,46 @@ def _assert_patch_series_sha_extraction(work: Path) -> None:
     )
 
 
+def _assert_patch_series_tree_verification(work: Path) -> None:
+    repo = work / "patch-repo"
+    patches_dir = work / "patches"
+    repo.mkdir()
+    patches_dir.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "test@example.invalid")
+    _git(repo, "config", "user.name", "Test User")
+
+    (repo / "note.txt").write_text("one\n", encoding="utf-8")
+    _git(repo, "add", "note.txt")
+    _git(repo, "commit", "-q", "-m", "base")
+    base = _git(repo, "rev-parse", "HEAD")
+
+    (repo / "note.txt").write_text("one\ntwo\n", encoding="utf-8")
+    (repo / "extra.txt").write_text("extra\n", encoding="utf-8")
+    _git(repo, "add", "note.txt", "extra.txt")
+    _git(repo, "commit", "-q", "-m", "change")
+    head = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "format-patch", "-q", "-o", str(patches_dir), f"{base}..{head}")
+
+    _verify_patch_series_applies(base, head, sorted(patches_dir.glob("*.patch")), repo)
+
+
 def _write_bundle(path: Path, *, mtime: int) -> Path:
     path.write_text(path.name, encoding="utf-8")
     os.utime(path, (mtime, mtime))
     return path
+
+
+def _git(repo: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    return result.stdout.strip()
 
 
 def _assert(condition: bool, message: str) -> None:

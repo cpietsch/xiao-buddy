@@ -4,6 +4,7 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,12 @@ def _verify_patch_series(manifest: dict[str, Any]) -> None:
     patch_shas = _patch_series_shas(patches)
     manifest_shas = [sha for sha, _subject in _manifest_commit_rows(manifest)]
     _assert(patch_shas == manifest_shas, "patch series commit SHAs do not match manifest commit order")
+    _verify_patch_series_applies(
+        str(manifest.get("base") or ""),
+        str(manifest.get("head") or ""),
+        patches,
+        ROOT,
+    )
 
 
 def _verify_vector_artifact(manifest: dict[str, Any]) -> None:
@@ -171,6 +178,37 @@ def _patch_series_shas(patches: list[Path]) -> list[str]:
     return shas
 
 
+def _verify_patch_series_applies(
+    base: str,
+    head: str,
+    patches: list[Path],
+    repo_root: Path = ROOT,
+) -> None:
+    _assert(base, "manifest missing base")
+    _assert(head, "manifest missing head")
+    with tempfile.TemporaryDirectory(prefix="xiao-export-apply-") as temp_dir:
+        worktree = Path(temp_dir) / "worktree"
+        _run_git_at(repo_root, "worktree", "add", "--detach", "--quiet", str(worktree), base)
+        try:
+            if patches:
+                _run_git_at(
+                    worktree,
+                    "apply",
+                    "--index",
+                    "--binary",
+                    "--whitespace=nowarn",
+                    *[str(patch) for patch in patches],
+                )
+            applied_tree = _git_one_at(worktree, "write-tree")
+            expected_tree = _git_one_at(repo_root, "rev-parse", f"{head}^{{tree}}")
+            _assert(
+                applied_tree == expected_tree,
+                f"patch series tree={applied_tree} but manifest HEAD tree={expected_tree}",
+            )
+        finally:
+            _run_git_at(repo_root, "worktree", "remove", "--force", str(worktree), check=False)
+
+
 def _split_commit_row(row: str) -> tuple[str, str]:
     sha, separator, subject = row.partition("\t")
     _assert(separator == "\t" and sha and subject, f"malformed git log row: {row!r}")
@@ -186,8 +224,7 @@ def _resolve_path(value: str) -> Path:
 
 
 def _git_one(*args: str) -> str:
-    result = _run_git(*args)
-    return result.stdout.strip()
+    return _git_one_at(ROOT, *args)
 
 
 def _git_lines(*args: str) -> list[str]:
@@ -196,13 +233,22 @@ def _git_lines(*args: str) -> list[str]:
 
 
 def _run_git(*args: str) -> subprocess.CompletedProcess[str]:
+    return _run_git_at(ROOT, *args)
+
+
+def _git_one_at(repo_root: Path, *args: str) -> str:
+    result = _run_git_at(repo_root, *args)
+    return result.stdout.strip()
+
+
+def _run_git_at(repo_root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
-        cwd=ROOT,
+        cwd=repo_root,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        check=True,
+        check=check,
     )
 
 
