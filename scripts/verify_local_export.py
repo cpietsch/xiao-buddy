@@ -125,21 +125,29 @@ def _verify_browser_screenshots(manifest: dict[str, Any], root: Path = ROOT) -> 
         _assert(expected_sha, f"browser screenshot {name} missing sha256")
         _assert(sha256_file(path) == expected_sha, f"browser screenshot {name} sha256 mismatch")
         _assert(int(screenshot.get("bytes") or 0) == path.stat().st_size, f"browser screenshot {name} byte size mismatch")
-        width, height = _image_size(path, name)
+        width, height, color_count = _image_metadata(path, name)
         _assert(int(screenshot.get("width") or 0) == width, f"browser screenshot {name} width mismatch")
         _assert(int(screenshot.get("height") or 0) == height, f"browser screenshot {name} height mismatch")
+        _assert(color_count > 8, f"browser screenshot {name} appears blank")
+        _assert(
+            int(screenshot.get("sample_color_count") or 0) == color_count,
+            f"browser screenshot {name} sample color count mismatch",
+        )
 
 
-def _image_size(path: Path, name: str) -> tuple[int, int]:
+def _image_metadata(path: Path, name: str) -> tuple[int, int, int]:
     try:
         from PIL import Image
 
         with Image.open(path) as image:
             width, height = image.size
+            sample = image.convert("RGB").resize((64, 64))
+            colors = sample.getcolors(maxcolors=4096)
     except Exception as exc:  # noqa: BLE001
         raise AssertionError(f"browser screenshot {name} is not a valid image: {exc}") from exc
     _assert(width > 0 and height > 0, f"browser screenshot {name} has invalid dimensions")
-    return int(width), int(height)
+    color_count = 4097 if colors is None else len(colors)
+    return int(width), int(height), color_count
 
 
 def _quality_report_case_count(summary: dict[str, Any], results: list[Any], name: str) -> int:

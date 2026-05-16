@@ -144,6 +144,7 @@ def _assert_browser_screenshots_manifest(work: Path) -> None:
     _assert(desktop["sha256"] == sha256_file(screenshot_dir / "desktop.png"), "desktop screenshot sha should match")
     _assert(desktop["width"] == 144 and desktop["height"] == 96, "desktop screenshot dimensions should match")
     _assert(desktop["bytes"] == (screenshot_dir / "desktop.png").stat().st_size, "desktop screenshot size should match")
+    _assert(desktop["sample_color_count"] > 8, "desktop screenshot should be nonblank")
 
     _verify_browser_screenshots({"browser_screenshots": screenshots}, work)
 
@@ -232,6 +233,14 @@ def _write_png(path: Path, *, size: tuple[int, int], color: tuple[int, int, int]
     from PIL import Image
 
     image = Image.new("RGB", size, color)
+    pixels = image.load()
+    for x in range(size[0]):
+        for y in range(size[1]):
+            pixels[x, y] = (
+                (color[0] + x * 3 + y) % 256,
+                (color[1] + x + y * 5) % 256,
+                (color[2] + x * 2 + y * 7) % 256,
+            )
     image.save(path)
 
 

@@ -130,17 +130,27 @@ def _browser_screenshot_entry(path: Path, root: Path) -> dict[str, object]:
 
         with Image.open(path) as image:
             width, height = image.size
+            color_count = _sample_color_count(image)
     except Exception as exc:  # noqa: BLE001 - malformed local evidence should block handoff export.
         raise SystemExit(f"Browser screenshot is not a valid image: {_relative_to_root(path, root)}: {exc}") from exc
     if width <= 0 or height <= 0:
         raise SystemExit(f"Browser screenshot has invalid dimensions: {_relative_to_root(path, root)}")
+    if color_count <= 8:
+        raise SystemExit(f"Browser screenshot appears blank: {_relative_to_root(path, root)}")
     return {
         "path": _relative_to_root(path, root),
         "sha256": sha256_file(path),
         "bytes": path.stat().st_size,
         "width": int(width),
         "height": int(height),
+        "sample_color_count": color_count,
     }
+
+
+def _sample_color_count(image) -> int:
+    sample = image.convert("RGB").resize((64, 64))
+    colors = sample.getcolors(maxcolors=4096)
+    return 4097 if colors is None else len(colors)
 
 
 def _quality_report_entry(path: Path, root: Path) -> dict[str, object]:
