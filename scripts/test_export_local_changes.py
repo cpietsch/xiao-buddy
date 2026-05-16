@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -7,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.export_local_changes import _prune_old_bundles
+from scripts.export_local_changes import _matching_vector_artifact, _prune_old_bundles
 
 
 def main() -> None:
@@ -33,7 +34,64 @@ def main() -> None:
         _assert(newest.exists(), "newest previous bundle should be retained when keep_bundles=2")
         _assert(not older.exists(), "oldest previous bundle should be pruned when keep_bundles=2")
 
-    print("PASS export-local bundle pruning regression")
+        _assert_matching_vector_artifact_manifest(work)
+
+    print("PASS export-local manifest regression")
+
+
+def _assert_matching_vector_artifact_manifest(work: Path) -> None:
+    manifest_dir = work / "data" / "index"
+    artifact_dir = work / "dist" / "vector-index"
+    manifest_dir.mkdir(parents=True)
+    artifact_dir.mkdir(parents=True)
+
+    manifest_meta = {
+        "backend": "hnsw",
+        "count": 42,
+        "dim": 2048,
+        "model": "qwen3-vl-embedding-2b",
+        "source_hash": "current-source",
+    }
+    (manifest_dir / "xiao_vectors.json").write_text(json.dumps(manifest_meta), encoding="utf-8")
+
+    stale_archive = artifact_dir / "xiao-vectors-hnsw-stale.tar.gz"
+    stale_archive.write_bytes(b"stale")
+    stale_metadata = {
+        **manifest_meta,
+        "source_hash": "stale-source",
+        "archive": str(stale_archive),
+        "archive_sha256": "stale-sha",
+        "data_file": "xiao_vectors.hnsw",
+        "data_bytes": 5,
+        "data_sha256": "stale-data-sha",
+    }
+    (artifact_dir / "xiao-vectors-hnsw-stale.tar.gz.json").write_text(json.dumps(stale_metadata), encoding="utf-8")
+
+    current_archive = artifact_dir / "xiao-vectors-hnsw-current.tar.gz"
+    current_archive.write_bytes(b"current")
+    current_metadata = {
+        **manifest_meta,
+        "archive": str(current_archive),
+        "archive_sha256": "current-sha",
+        "data_file": "xiao_vectors.hnsw",
+        "data_bytes": 7,
+        "data_sha256": "current-data-sha",
+    }
+    (artifact_dir / "xiao-vectors-hnsw-current.tar.gz.json").write_text(
+        json.dumps(current_metadata),
+        encoding="utf-8",
+    )
+
+    artifact = _matching_vector_artifact(work)
+    _assert(artifact is not None, "matching vector artifact should be included in export manifest")
+    _assert(
+        artifact["archive"] == "dist/vector-index/xiao-vectors-hnsw-current.tar.gz",
+        f"unexpected artifact archive: {artifact}",
+    )
+    _assert(artifact["archive_sha256"] == "current-sha", "export manifest should include archive sha")
+    _assert(artifact["data_sha256"] == "current-data-sha", "export manifest should include data sha")
+    _assert(artifact["count"] == 42, "export manifest should include vector count")
+    _assert(artifact["env"]["VECTOR_INDEX_ARCHIVE_SHA256"] == "current-sha", "env sha should match artifact sha")
 
 
 def _write_bundle(path: Path, *, mtime: int) -> Path:

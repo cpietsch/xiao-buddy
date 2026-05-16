@@ -58,6 +58,7 @@ def main() -> None:
             "keep_bundles": max(1, args.keep_bundles),
             "pruned": pruned_bundles,
         },
+        "vector_artifact": _matching_vector_artifact(ROOT),
         "remote": _git_one("remote", "get-url", "origin", allow_failure=True),
         "commits": [
             {"sha": row.split("\t", 1)[0], "subject": row.split("\t", 1)[1]}
@@ -121,6 +122,82 @@ def _prune_old_bundles(output_dir: Path, current_bundle: Path, keep_bundles: int
         bundle.unlink()
         pruned.append(bundle.name)
     return pruned
+
+
+def _matching_vector_artifact(root: Path = ROOT) -> dict[str, object] | None:
+    manifest_path = root / "data" / "index" / "xiao_vectors.json"
+    artifact_dir = root / "dist" / "vector-index"
+    if not manifest_path.exists() or not artifact_dir.exists():
+        return None
+    try:
+        manifest_meta = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 - export should not fail when optional artifact metadata is unavailable.
+        return None
+
+    candidates = sorted(
+        artifact_dir.glob("*.tar.gz.json"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for metadata_path in candidates:
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        if not _vector_metadata_matches_manifest(metadata, manifest_meta):
+            continue
+        archive_path = _resolve_vector_archive_path(metadata, metadata_path, root)
+        if not archive_path.exists():
+            continue
+        return {
+            "archive": _relative_to_root(archive_path, root),
+            "metadata": _relative_to_root(metadata_path, root),
+            "archive_sha256": str(metadata.get("archive_sha256") or ""),
+            "data_file": str(metadata.get("data_file") or ""),
+            "data_bytes": int(metadata.get("data_bytes") or 0),
+            "data_sha256": str(metadata.get("data_sha256") or ""),
+            "backend": str(metadata.get("backend") or ""),
+            "count": int(metadata.get("count") or 0),
+            "dim": int(metadata.get("dim") or 0),
+            "model": str(metadata.get("model") or ""),
+            "source_hash": str(metadata.get("source_hash") or ""),
+            "env": {
+                "VECTOR_INDEX_ARCHIVE_URL": "<upload the archive and set its URL here>",
+                "VECTOR_INDEX_ARCHIVE_SHA256": str(metadata.get("archive_sha256") or ""),
+            },
+        }
+    return None
+
+
+def _vector_metadata_matches_manifest(
+    metadata: dict[str, object],
+    manifest_meta: dict[str, object],
+) -> bool:
+    fields = ("backend", "count", "dim", "model", "source_hash")
+    for field in fields:
+        manifest_value = manifest_meta.get(field)
+        if field == "backend":
+            manifest_value = manifest_meta.get("backend") or manifest_meta.get("index_backend")
+        if manifest_value is not None and metadata.get(field) != manifest_value:
+            return False
+    return True
+
+
+def _resolve_vector_archive_path(metadata: dict[str, object], metadata_path: Path, root: Path) -> Path:
+    archive = str(metadata.get("archive") or "")
+    if archive:
+        path = Path(archive).expanduser()
+        if not path.is_absolute():
+            path = root / path
+        return path
+    return metadata_path.with_suffix("")
+
+
+def _relative_to_root(path: Path, root: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(root.resolve()))
+    except ValueError:
+        return str(path)
 
 
 def _run_git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:

@@ -245,6 +245,9 @@ make export-local
 
 This writes an ignored `dist/local-export/` folder containing a verified git
 bundle, a `git format-patch` series, and a manifest with base/head commit IDs.
+When a matching vector artifact exists, the manifest also records the archive
+path, backend, vector count, model, source hash, and
+`VECTOR_INDEX_ARCHIVE_SHA256` needed after uploading the archive.
 By default each export keeps only the current `xiao-buddy-*.bundle`; set
 `EXPORT_LOCAL_KEEP_BUNDLES` or pass `--keep-bundles` to retain more local bundle
 history.
