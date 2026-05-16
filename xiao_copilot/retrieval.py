@@ -290,7 +290,19 @@ def _include_rerank_board_metadata(query: str, chunks: list[KnowledgeChunk]) -> 
 
 def _include_rerank_source_topic_metadata(query: str) -> bool:
     q = query.lower()
-    return any(term in q for term in ("3d case", "3d enclosure", "3d-printed", "3d printed enclosure"))
+    return any(
+        term in q
+        for term in (
+            "3d case",
+            "3d enclosure",
+            "3d-printed",
+            "3d printed enclosure",
+            "ai sensor",
+            "model output",
+            "sensecraft",
+            "sscmacore",
+        )
+    )
 
 
 def _source_topic_metadata(chunk: KnowledgeChunk) -> str:

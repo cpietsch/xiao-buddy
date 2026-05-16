@@ -67,7 +67,7 @@ def main() -> None:
         _run_case(case, corpus, settings, args.positives, args.negatives, args.min_margin)
         for case in cases
     ]
-    summary = _summarize_results(results)
+    summary = _summarize_results(results, close_margin=args.close_margin)
     _print_summary(summary)
     if args.json_output:
         args.json_output.parent.mkdir(parents=True, exist_ok=True)
@@ -87,7 +87,7 @@ def main() -> None:
         raise SystemExit(1)
 
 
-def _summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
+def _summarize_results(results: list[dict[str, Any]], close_margin: float = 0.05) -> dict[str, Any]:
     passes = [result for result in results if result["ok"]]
     margins = [float(result["margin"]) for result in results]
     latencies = [float(result["ms"]) for result in results]
@@ -112,12 +112,27 @@ def _summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         category_summary["pass_rate"] = passes_count / cases if cases else 0.0
         if category_summary["min_margin"] is None:
             category_summary["min_margin"] = 0.0
+    close_cases = [
+        {
+            "id": str(result["id"]),
+            "category": str(result["category"]),
+            "margin": float(result["margin"]),
+            "positive_id": str(result.get("positive_id", "")),
+            "best_negative_id": str(result.get("best_negative_id", "")),
+            "positive_title": str(result.get("positive_title", "")),
+            "best_negative_title": str(result.get("best_negative_title", "")),
+        }
+        for result in sorted(results, key=lambda item: float(item["margin"]))
+        if bool(result["ok"]) and 0 <= float(result["margin"]) < close_margin
+    ]
 
     return {
         "cases": len(results),
         "passes": len(passes),
         "failures": [str(result["id"]) for result in results if not result["ok"]],
         "pass_rate": len(passes) / len(results) if results else 0.0,
+        "close_margin": close_margin,
+        "close_cases": close_cases,
         "min_margin": min(margins) if margins else 0.0,
         "p50_margin": _percentile(margins, 50),
         "p50_ms": _percentile(latencies, 50),
@@ -149,6 +164,15 @@ def _print_summary(summary: dict[str, Any]) -> None:
             f"min_margin={float(category_summary['min_margin']):.4f}",
             flush=True,
         )
+    close_cases = list(summary.get("close_cases", []))
+    if close_cases:
+        print(f"reranker close margins (<{float(summary['close_margin']):.4f}):", flush=True)
+        for case in close_cases[:10]:
+            print(
+                f"  {case['id']}: margin={float(case['margin']):.4f} "
+                f"positive={case['positive_id']} negative={case['best_negative_id']}",
+                flush=True,
+            )
 
 
 def _parse_args() -> argparse.Namespace:
@@ -194,6 +218,12 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print threshold failures without exiting non-zero.",
     )
+    parser.add_argument(
+        "--close-margin",
+        type=float,
+        default=0.05,
+        help="Report passing cases below this positive-score margin as close calls.",
+    )
     parser.add_argument("--json-output", type=Path, help="Optional JSON report path.")
     args = parser.parse_args()
     if args.all_cases and args.case:
@@ -208,6 +238,8 @@ def _parse_args() -> argparse.Namespace:
         raise SystemExit("--min-pass-rate must be between 0 and 1.")
     if args.max_failures < 0:
         raise SystemExit("--max-failures must be non-negative.")
+    if args.close_margin < 0:
+        raise SystemExit("--close-margin must be non-negative.")
     selected = tuple(args.case or DEFAULT_CASE_IDS)
     args.case_ids = selected
     return args
@@ -239,7 +271,15 @@ def _run_case(
     terms = [str(term) for term in case.get("must_include", [])]
     print(f"RUN  {case_id}", flush=True)
     positives = _select_positives(case, corpus, citations, terms, positive_count)
-    negatives = _select_negatives(query, corpus, citations, positives[0], negative_count)
+    negatives = _select_negatives(
+        query,
+        corpus,
+        citations,
+        terms,
+        str(case.get("expected_board_id", "") or ""),
+        positives[0],
+        negative_count,
+    )
     candidates = [*positives, *negatives]
     include_board_metadata = _include_rerank_board_metadata(query, candidates)
     include_source_topic_metadata = _include_rerank_source_topic_metadata(query)
@@ -301,8 +341,10 @@ def _run_case(
         "positive_score": positive_score,
         "best_negative_score": best_negative_score,
         "positive_id": candidates[best_positive_index].id,
+        "positive_title": _short_title(candidates[best_positive_index]),
         "positive_ids": [chunk.id for chunk in positives],
         "best_negative_id": candidates[best_negative_index].id,
+        "best_negative_title": _short_title(candidates[best_negative_index]),
         "board_metadata": include_board_metadata,
         "source_topic_metadata": include_source_topic_metadata,
     }
@@ -347,6 +389,8 @@ def _select_negatives(
     query: str,
     corpus: list[KnowledgeChunk],
     citations: list[str],
+    terms: list[str],
+    expected_board_id: str,
     positive: KnowledgeChunk,
     count: int,
 ) -> list[KnowledgeChunk]:
@@ -356,6 +400,7 @@ def _select_negatives(
         for chunk in corpus
         if chunk.id != positive.id
         and not _matches_any_citation(chunk, citations)
+        and not _is_answer_equivalent_negative(chunk, terms, expected_board_id)
         and not _is_weekly_wiki_source(chunk)
         and _source_key(chunk) != positive_source
     ]
@@ -364,6 +409,14 @@ def _select_negatives(
     if len(selected) < count:
         raise SystemExit(f"Could not select {count} hard negatives for query: {query}")
     return selected
+
+
+def _is_answer_equivalent_negative(chunk: KnowledgeChunk, terms: list[str], expected_board_id: str = "") -> bool:
+    if not terms:
+        return False
+    if expected_board_id and chunk.board_id and chunk.board_id != expected_board_id:
+        return False
+    return _term_hits(chunk, terms) == len(terms)
 
 
 def _matches_any_citation(chunk: KnowledgeChunk, citations: list[str]) -> bool:

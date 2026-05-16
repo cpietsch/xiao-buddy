@@ -118,6 +118,10 @@ def _assert_source_topic_metadata_heuristic() -> None:
         "3D case queries should include source-topic metadata",
     )
     _assert(
+        _include_rerank_source_topic_metadata("For XIAO ESP32S3 Sense model output over I2C, what pins are used?"),
+        "model-output protocol queries should include source-topic metadata",
+    )
+    _assert(
         not _include_rerank_source_topic_metadata("What can the XIAO ESP32S3 Wio-SX1262 kit be used for?"),
         "generic kit queries should not include source-topic metadata",
     )

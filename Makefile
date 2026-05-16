@@ -10,6 +10,7 @@ smoke:
 	$(PYTHON) scripts/test_generated_artifacts.py
 	$(PYTHON) scripts/test_clients.py
 	$(PYTHON) scripts/test_retrieval.py
+	$(PYTHON) scripts/test_reranker_quality.py
 	$(PYTHON) scripts/test_app_scope.py
 	$(PYTHON) scripts/test_pipeline_failover.py
 	$(PYTHON) scripts/test_corpus_scope.py
