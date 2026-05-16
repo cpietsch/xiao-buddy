@@ -39,10 +39,12 @@ def main() -> None:
 
     for case in cases:
         print(f"RUN  {case['id']}", flush=True)
-        answer, citations, diagnostics = answer_question(None, case["query"])
-        missing_terms = _missing_terms(answer, case.get("must_include", []))
+        query = str(case["query"])
+        expected_terms = [str(term) for term in case.get("must_include", [])]
+        required_citations = [str(citation) for citation in case.get("must_cite", [])]
+        answer, citations, diagnostics = answer_question(None, query)
+        missing_terms = _missing_terms(answer, expected_terms)
         fact_ok = not missing_terms
-        required_citations = case.get("must_cite", [])
         citation_ok = _contains_any_citation(citations, required_citations)
         inline_citation_ok = _inline_cites_required_source(answer, citations, required_citations)
         agent_ok = not require_agent or bool(diagnostics.get("agent_used"))
@@ -75,6 +77,11 @@ def main() -> None:
             f"{' missing=' + ', '.join(missing_terms) if missing_terms else ''}",
             flush=True,
         )
+        if not ok:
+            print(
+                _format_failure_detail(case, answer, citations, missing_terms, required_citations),
+                flush=True,
+            )
 
     print(f"\nanswer fact-hit rate: {fact_hits}/{total} = {fact_hits / total:.0%}", flush=True)
     print(f"answer citation-hit rate: {citation_hits}/{total} = {citation_hits / total:.0%}", flush=True)
@@ -91,6 +98,32 @@ def main() -> None:
 
 def _contains_all_terms(text: str, terms: list[str]) -> bool:
     return not _missing_terms(text, terms)
+
+
+def _format_failure_detail(
+    case: dict[str, object],
+    answer: str,
+    citations_text: str,
+    missing_terms: list[str],
+    required_citations: list[str],
+) -> str:
+    required_source_ids = _source_ids_for_required_citations(citations_text, required_citations)
+    all_source_ids = _source_ids_from_citations(citations_text)
+    citation_lines = [line.strip() for line in citations_text.splitlines() if line.strip().startswith("- [")]
+    query_excerpt = _compact_text(str(case.get("query", "")), 240) or "<none>"
+    answer_excerpt = _compact_text(answer, 500) or "<none>"
+    citation_excerpt = _compact_text(" | ".join(citation_lines[:5]), 500) or "<none>"
+    detail = [
+        "  failure detail:",
+        f"    query: {query_excerpt}",
+        f"    missing_terms: {_format_list(missing_terms)}",
+        f"    required_citations: {_format_list(required_citations)}",
+        f"    required_source_ids: {_format_list(required_source_ids)}",
+        f"    all_source_ids: {_format_list(all_source_ids)}",
+        f"    answer_excerpt: {answer_excerpt}",
+        f"    citation_excerpt: {citation_excerpt}",
+    ]
+    return "\n".join(detail)
 
 
 def _missing_terms(text: str, terms: list[str]) -> list[str]:
@@ -146,6 +179,19 @@ def _source_id_from_line(line: str) -> str:
 
 def _normalize_match_text(text: str) -> str:
     return "".join(ch for ch in text.lower() if ch.isalnum())
+
+
+def _compact_text(text: str, limit: int) -> str:
+    compact = " ".join(text.split())
+    if len(compact) <= limit:
+        return compact
+    if limit <= 3:
+        return compact[:limit]
+    return compact[: limit - 3].rstrip() + "..."
+
+
+def _format_list(values: list[str]) -> str:
+    return ", ".join(values) if values else "<none>"
 
 
 if __name__ == "__main__":

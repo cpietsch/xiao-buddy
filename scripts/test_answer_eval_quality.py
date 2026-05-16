@@ -1,0 +1,174 @@
+from __future__ import annotations
+
+import contextlib
+import io
+import json
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import scripts.eval_answer_quality as answer_eval  # noqa: E402
+
+
+def main() -> None:
+    _assert_matching_helpers_are_normalized_and_source_specific()
+    _assert_failure_diagnostic_includes_actionable_context()
+    _assert_main_prints_failure_detail_on_miss()
+    print("PASS answer eval quality regression")
+
+
+def _assert_matching_helpers_are_normalized_and_source_specific() -> None:
+    answer = "Use the XIAO ESP32C6 for Matter-native Thread and Zigbee projects [esp32c6-guide]."
+    citations = "\n".join(
+        [
+            "- [esp32c6-guide] XIAO ESP32C6 Getting Started https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/",
+            "- [grove-sensor] Grove sensor reference https://wiki.seeedstudio.com/grove_sensor/",
+        ]
+    )
+
+    _assert(
+        answer_eval._missing_terms(answer, ["XIAO ESP32C6", "Matter native", "Thread", "Zigbee"]) == [],
+        "term matching should ignore case and punctuation",
+    )
+    _assert(
+        answer_eval._missing_terms(answer, ["802.15.4"]) == ["802.15.4"],
+        "missing terms should preserve the configured term text",
+    )
+    _assert(
+        answer_eval._contains_any_citation(
+            citations,
+            ["https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/"],
+        ),
+        "citation matching should accept required source URLs",
+    )
+    _assert(
+        answer_eval._inline_cites_required_source(answer, citations, ["xiao_esp32c6_getting_started"]),
+        "inline citation should pass when the answer cites the required source id",
+    )
+    _assert(
+        not answer_eval._inline_cites_required_source(
+            "Use a different source instead [grove-sensor].",
+            citations,
+            ["xiao_esp32c6_getting_started"],
+        ),
+        "inline citation should fail when the answer cites only a non-required source",
+    )
+
+
+def _assert_failure_diagnostic_includes_actionable_context() -> None:
+    detail = answer_eval._format_failure_detail(
+        case={
+            "id": "esp32c6-wireless",
+            "query": "Which XIAO board supports Zigbee, Thread, and Matter over 802.15.4?",
+        },
+        missing_terms=["802.15.4", "Matter native"],
+        required_citations=["https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/"],
+        answer="This answer cites a different source [grove-sensor].\n\nIt omits the radio detail.",
+        citations_text="\n".join(
+            [
+                "- [grove-sensor] Grove sensor reference https://wiki.seeedstudio.com/grove_sensor/",
+                "- [esp32c6-guide] XIAO ESP32C6 Getting Started https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/",
+            ]
+        ),
+    )
+
+    for expected in [
+        "failure detail:",
+        "query: Which XIAO board supports Zigbee, Thread, and Matter over 802.15.4?",
+        "missing_terms: 802.15.4, Matter native",
+        "required_citations: https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/",
+        "required_source_ids: esp32c6-guide",
+        "all_source_ids: grove-sensor, esp32c6-guide",
+        "answer_excerpt: This answer cites a different source [grove-sensor]. It omits the radio detail.",
+        "citation_excerpt: - [grove-sensor] Grove sensor reference https://wiki.seeedstudio.com/grove_sensor/ | - [esp32c6-guide] XIAO ESP32C6 Getting Started https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/",
+    ]:
+        _assert(expected in detail, f"failure diagnostic should include {expected!r}")
+
+
+def _assert_main_prints_failure_detail_on_miss() -> None:
+    original_answer_question = answer_eval.answer_question
+    env_keys = [
+        "ANSWER_EVAL_PATH",
+        "ANSWER_EVAL_CASE_IDS",
+        "ANSWER_EVAL_LIMIT",
+        "ANSWER_EVAL_REQUIRE_AGENT",
+        "ANSWER_EVAL_REQUIRE_STREAM",
+    ]
+    original_env = {key: os.environ.get(key) for key in env_keys}
+    with tempfile.TemporaryDirectory() as tmp:
+        eval_path = Path(tmp) / "answer_eval.jsonl"
+        eval_path.write_text(
+            json.dumps(
+                {
+                    "id": "synthetic-miss",
+                    "query": "Which protocol detail is required?",
+                    "must_include": ["802.15.4"],
+                    "must_cite": ["https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        def fake_answer_question(_image: object, _query: str) -> tuple[str, str, dict[str, object]]:
+            answer = "Use XIAO ESP32C6 for Thread and Zigbee [esp32c6-guide]."
+            citations = (
+                "- [esp32c6-guide] XIAO ESP32C6 Getting Started "
+                "https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/"
+            )
+            diagnostics = {
+                "agent_used": True,
+                "agent_streamed": True,
+                "agent": {"stream_chunks": 1, "stream_chars": len(answer)},
+                "timings_ms": {"total": 7},
+            }
+            return answer, citations, diagnostics
+
+        try:
+            answer_eval.answer_question = fake_answer_question
+            os.environ["ANSWER_EVAL_PATH"] = str(eval_path)
+            os.environ["ANSWER_EVAL_CASE_IDS"] = ""
+            os.environ["ANSWER_EVAL_LIMIT"] = "0"
+            os.environ["ANSWER_EVAL_REQUIRE_AGENT"] = "1"
+            os.environ["ANSWER_EVAL_REQUIRE_STREAM"] = "1"
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                try:
+                    answer_eval.main()
+                except SystemExit as exc:
+                    _assert(exc.code == 1, "answer eval should exit non-zero on a miss")
+                else:
+                    raise AssertionError("answer eval should fail for a missing required term")
+        finally:
+            answer_eval.answer_question = original_answer_question
+            for key, value in original_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    captured = output.getvalue()
+    for expected in [
+        "MISS synthetic-miss",
+        "missing=802.15.4",
+        "failure detail:",
+        "query: Which protocol detail is required?",
+        "missing_terms: 802.15.4",
+        "required_citations: https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/",
+        "required_source_ids: esp32c6-guide",
+        "answer_excerpt: Use XIAO ESP32C6 for Thread and Zigbee [esp32c6-guide].",
+    ]:
+        _assert(expected in captured, f"main failure output should include {expected!r}")
+
+
+def _assert(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
+if __name__ == "__main__":
+    main()
