@@ -38,6 +38,8 @@ EXACT_TERM_CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("2.4G", ("2.4g", "2.4 ghz")),
     ("J501 Mini", ("j501 mini",)),
     ("Boot", ("boot",)),
+    ("temperature", ("temperature",)),
+    ("humidity", ("humidity", "humi")),
 )
 
 MARKED_EXACT_TERM_RE = re.compile(r"`([^`\n]{2,48})`|\*\*([^*\n]{2,48})\*\*")
@@ -575,8 +577,11 @@ def _exact_terms_hint(question: str, chunks: list[KnowledgeChunk]) -> list[str]:
 def _ensure_answer_exact_terms(answer: str, question: str, chunks: list[KnowledgeChunk]) -> str:
     if not answer.strip():
         return answer
+    candidate_terms = {canonical for canonical, _aliases in EXACT_TERM_CANDIDATES}
     missing: list[tuple[str, str]] = []
     for term in _exact_terms_hint(question, chunks):
+        if term not in candidate_terms:
+            continue
         if _answer_has_exact_term(answer, term):
             continue
         source_id = _source_id_for_exact_term(term, chunks)
