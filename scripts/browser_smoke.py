@@ -231,6 +231,7 @@ def _install_stream_observer(page) -> None:
             "Generating a cited answer with the agent..."
           ];
           const snapshots = [];
+          const draftSnapshots = [];
           const answerText = () => {
             const block = document.querySelector(".block.result-box");
             return block ? (block.innerText || "").trim() : "";
@@ -246,6 +247,9 @@ def _install_stream_observer(page) -> None:
           const record = () => {
             const answer = answerText();
             const activeStep = activeStepText();
+            const draftVisible = activeStep.includes("Generate answer")
+              && activeStep.includes("source draft")
+              && answer.includes("Source-backed draft");
             const streaming = activeStep.includes("Generate answer")
               && activeStep.includes("streaming")
               && activeStep.includes("first token");
@@ -254,6 +258,13 @@ def _install_stream_observer(page) -> None:
               answerText: answer.slice(0, 500),
               timestamp: Date.now(),
             };
+            if (draftVisible) {
+              draftSnapshots.push({
+                answerText: answer.slice(0, 500),
+                activeStep,
+                timestamp: Date.now(),
+              });
+            }
             if (streaming && hasVisiblePartialAnswer(answer)) {
               snapshots.push({
                 answerText: answer.slice(0, 500),
@@ -266,6 +277,7 @@ def _install_stream_observer(page) -> None:
             window.__xiaoBuddyStreamObserver.disconnect();
           }
           window.__xiaoBuddyStreamSnapshots = snapshots;
+          window.__xiaoBuddyDraftSnapshots = draftSnapshots;
           window.__xiaoBuddyStreamObserver = new MutationObserver(record);
           window.__xiaoBuddyStreamObserver.observe(document.body, {
             childList: true,
@@ -287,10 +299,16 @@ def _assert_partial_stream_observed(page) -> None:
           }
           return {
             snapshots: window.__xiaoBuddyStreamSnapshots || [],
+            draftSnapshots: window.__xiaoBuddyDraftSnapshots || [],
             lastState: window.__xiaoBuddyStreamLastState || null,
           };
         }
         """
+    )
+    _assert(
+        bool(snapshots["draftSnapshots"]),
+        "browser answer should visibly render the source-backed draft before hosted agent text; "
+        f"last observed state was {snapshots['lastState']!r}",
     )
     _assert(
         bool(snapshots["snapshots"]),

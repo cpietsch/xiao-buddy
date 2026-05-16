@@ -65,12 +65,28 @@ def _assert_success_stream_reports_first_token_latency() -> None:
         pipeline.perf_counter = fake_perf_counter  # type: ignore[assignment]
 
         events = list(pipeline.answer_question_stream(None, "Which pin should I check?"))
+        draft_events = [
+            event
+            for event in events
+            if event[2].get("draft", {}).get("visible")
+        ]
+        _assert(draft_events, "pipeline should yield a source-backed draft before the agent stream")
+        _assert("Source-backed draft" in draft_events[0][0], "draft event should show source-backed answer text")
+        _assert(
+            draft_events[0][2].get("agent", {}).get("first_token_ms") is None,
+            "draft event must not masquerade as the hosted agent first token",
+        )
+
         stream_events = [
             event
             for event in events
             if event[2].get("agent", {}).get("first_token_ms") is not None
         ]
         _assert(stream_events, "streaming diagnostics should include first-token latency")
+        _assert(
+            events.index(draft_events[0]) < events.index(stream_events[0]),
+            "source-backed draft should appear before the first hosted agent token",
+        )
         first_token_ms = stream_events[0][2]["agent"]["first_token_ms"]
         _assert(isinstance(first_token_ms, float), "first-token latency should be numeric")
         _assert(first_token_ms > 0, "first-token latency should be positive once streaming starts")

@@ -145,6 +145,34 @@ def answer_question_stream(
     agent_error = ""
     agent_chunks = 0
     agent_first_token_ms: float | None = None
+    draft_answer = _draft_answer(question, image_summary, chunks)
+    if draft_answer:
+        yield (
+            draft_answer,
+            citations,
+            _run_diagnostics(
+                status="running",
+                stage="generate",
+                intent=intent,
+                image_summary=image_summary,
+                agent_multimodal=bool(image_data_url),
+                retrieval_diagnostics=retrieval_diagnostics,
+                chunks=chunks,
+                timings_ms=timings_ms,
+                run_started_at=run_started_at,
+                agent_status="running",
+                agent_streaming=True,
+                draft_chars=len(draft_answer),
+            ),
+            format_progress(
+                stage="generate",
+                backend=backend,
+                source_count=len(chunks),
+                retrieval_detail=retrieval_detail,
+                draft_chars=len(draft_answer),
+            ),
+        )
+
     for result in _generate_with_agent_stream(
         question=question,
         image_summary=image_summary,
@@ -255,6 +283,7 @@ def format_progress(
     agent_used: bool | None = None,
     agent_chunks: int = 0,
     stream_chars: int = 0,
+    draft_chars: int = 0,
     first_token_ms: float | None = None,
     elapsed_ms: float | None = None,
     retrieval_detail: str = "",
@@ -282,6 +311,7 @@ def format_progress(
                 agent_used,
                 agent_chunks,
                 stream_chars,
+                draft_chars,
                 first_token_ms,
                 elapsed_ms,
                 retrieval_detail,
@@ -296,6 +326,7 @@ def format_progress(
                 agent_used,
                 agent_chunks,
                 stream_chars,
+                draft_chars,
                 first_token_ms,
                 elapsed_ms,
                 retrieval_detail,
@@ -324,6 +355,7 @@ def _progress_detail(
     agent_used: bool | None,
     agent_chunks: int,
     stream_chars: int,
+    draft_chars: int,
     first_token_ms: float | None,
     elapsed_ms: float | None,
     retrieval_detail: str,
@@ -340,6 +372,9 @@ def _progress_detail(
                 f"; first token {first_token_ms:.0f} ms" if first_token_ms is not None else ""
             )
             return f"{prefix}; {stream_label} {stream_chars} chars{first_token_detail}"
+        if draft_chars:
+            prefix = retrieval_detail or f"{source_count} sources via {backend}"
+            return f"{prefix}; source draft {draft_chars} chars; agent running"
         if source_count:
             prefix = retrieval_detail or f"{source_count} sources via {backend}"
             return f"{prefix}; agent running"
@@ -397,6 +432,7 @@ def _run_diagnostics(
     agent_chars: int = 0,
     agent_first_token_ms: float | None = None,
     agent_error: str = "",
+    draft_chars: int = 0,
 ) -> dict[str, object]:
     timing_snapshot = dict(timings_ms)
     timing_snapshot["total"] = _elapsed_ms(run_started_at)
@@ -416,6 +452,8 @@ def _run_diagnostics(
         diagnostics["retrieval"] = retrieval_diagnostics
     if chunks is not None:
         diagnostics["top_sources"] = _source_summaries(chunks)
+    if draft_chars:
+        diagnostics["draft"] = {"visible": True, "chars": draft_chars}
 
     agent: dict[str, object] = {
         "status": agent_status or ("streaming" if agent_streaming else "waiting"),
@@ -657,6 +695,31 @@ def _fallback_answer(
         for chunk in chunks[:3]
     )
     return f"**Answer**\n\n{lead}{image_line}\n\n{steps}\n\n**Question tracked:** {question}"
+
+
+def _draft_answer(
+    question: str,
+    image_summary: dict[str, object],
+    chunks: list[KnowledgeChunk],
+) -> str:
+    if not chunks:
+        return ""
+    source_lines = "\n".join(
+        f"- **{chunk.title}:** {_compact_source_text(chunk.text, 220)} [{chunk.id}]"
+        for chunk in chunks[:2]
+    )
+    return (
+        "**Source-backed draft**\n\n"
+        "Initial notes from the retrieved Seeed sources:\n\n"
+        f"{source_lines}"
+    )
+
+
+def _compact_source_text(text: str, limit: int) -> str:
+    compact = " ".join(text.split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 1].rstrip() + "…"
 
 
 def _repair_generated_text(text: str) -> str:
