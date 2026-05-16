@@ -311,7 +311,11 @@ def chat_completion(
             timeout=timeout,
         )
         response.raise_for_status()
-        content = _chat_message_content(response.json())
+        body = response.json()
+        error = _provider_error_message(body)
+        if error:
+            return EndpointResult(ok=False, error=error)
+        content = _chat_message_content(body)
         return EndpointResult(ok=True, data=content)
     except requests.HTTPError as exc:
         return EndpointResult(ok=False, error=f"{exc}{_response_detail(exc.response)}")
@@ -351,6 +355,10 @@ def chat_completion_stream(
                 if not line or line == "[DONE]":
                     continue
                 body = json.loads(line)
+                error = _provider_error_message(body)
+                if error:
+                    yield EndpointResult(ok=False, error=error)
+                    return
                 content = _chat_delta_content(body)
                 if content:
                     yield EndpointResult(ok=True, data=content)
@@ -387,6 +395,19 @@ def _chat_delta_content(body: dict[str, Any]) -> str:
     if "content" in delta:
         return _content_to_text(delta.get("content"))
     return _content_to_text(choice.get("text"))
+
+
+def _provider_error_message(body: Any) -> str:
+    if not isinstance(body, dict) or "error" not in body:
+        return ""
+    error = body.get("error")
+    if isinstance(error, str):
+        detail = error
+    elif isinstance(error, dict):
+        detail = _content_to_text(error.get("message") or error.get("detail") or error.get("type"))
+    else:
+        detail = _content_to_text(error)
+    return f"Provider error: {detail or 'unknown error'}"
 
 
 def _content_to_text(content: Any) -> str:
