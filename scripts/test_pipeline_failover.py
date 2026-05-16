@@ -13,6 +13,8 @@ from xiao_copilot.knowledge_base import KnowledgeChunk
 
 
 def main() -> None:
+    _assert_text_repair()
+
     original_load_settings = pipeline.load_settings
     original_retrieve = pipeline.retrieve
     original_generate_stream = pipeline._generate_with_agent_stream
@@ -39,6 +41,12 @@ def main() -> None:
         pipeline._generate_with_agent_stream = original_generate_stream  # type: ignore[assignment]
 
     print("PASS pipeline failover regression")
+
+
+def _assert_text_repair() -> None:
+    repaired = pipeline._repair_generated_text("Basics\u00e2\u0084\u00a2 Station and LoRaWAN\u00c2\u00ae coverage")
+    _assert("Basics™ Station" in repaired, "agent text repair should handle trademark mojibake")
+    _assert("LoRaWAN® coverage" in repaired, "agent text repair should handle registered-symbol mojibake")
 
 
 def _fake_settings() -> Settings:

@@ -472,7 +472,10 @@ def _build_agent_messages(
         "If an image is provided, inspect visible board markings, MCU labels, connectors, "
         "antenna parts, sensor modules, camera/microphone hardware, and pin labels. "
         "Do not claim a visual detail unless it is visible. "
-        "Return: likely product or board family when relevant, short next checks, and citations."
+        "Answer the user's specific question directly. If the question asks for options, ranges, "
+        "pins, ports, values, commands, steps, or settings, enumerate every requested item that is "
+        "supported by the context and keep the exact labels and numbers. "
+        "Return: likely product or board family when relevant, compact next checks, and citations."
     )
     user_content: str | list[dict[str, object]]
     if image_data_url:
@@ -520,11 +523,13 @@ def _repair_generated_text(text: str) -> str:
         "Î©": "Ω",
         "Âµ": "µ",
         "Â°": "°",
+        "\u00c2\u00ae": "®",
         "â€“": "-",
         "â€”": "-",
         "â€™": "'",
         "â€œ": '"',
         "â€\u009d": '"',
+        "\u00e2\u0084\u00a2": "™",
     }
     for source, target in replacements.items():
         text = text.replace(source, target)

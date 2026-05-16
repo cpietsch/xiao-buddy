@@ -578,6 +578,12 @@ def _configuration_detail_score(query: str, chunk: KnowledgeChunk) -> float:
         if any(term in text for term in ("platform_version", "variant:", "version:", "seeed_xiao_esp32c3")):
             score += 1.0
 
+    if "camera slot" in q and any(term in q for term in ("cam_scl", "cam_sda", "gpio", "gpios")):
+        if "occupies 14 gpios" in text:
+            score += 1.2
+        if all(term in text for term in ("cam_scl", "cam_sda", "gpio39", "gpio40")):
+            score += 1.0
+
     if "trigger" in q and "action" in q:
         if any(term in text for term in ("light up the led", "save image to the sd card", "microsd card")):
             score += 1.2
@@ -619,6 +625,7 @@ def _merge_vector_and_lexical_scores(
         score += _board_hint_score(query, chunk) * 0.15
         score += _kind_hint_score(query, chunk) * 0.05
         score += _capability_hint_score(query, chunk) * 0.45
+        score += _configuration_detail_score(query, chunk)
         score += _comparison_table_hint_score(query, chunk)
         scored.append((chunk, score))
 
@@ -637,6 +644,7 @@ def _lexical_prefilter(
             _lexical_score(query, chunk.search_text)
             + _board_hint_score(query, chunk)
             + _kind_hint_score(query, chunk)
+            + _configuration_detail_score(query, chunk)
             + _comparison_table_hint_score(query, chunk),
         )
         for chunk in chunks

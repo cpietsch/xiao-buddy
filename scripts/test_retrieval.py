@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from xiao_copilot.knowledge_base import KnowledgeChunk
 from xiao_copilot.retrieval import (
     RERANK_METADATA_TAG_LIMIT,
+    _configuration_detail_score,
     _include_rerank_board_metadata,
     _include_rerank_source_topic_metadata,
     _rerank_text,
@@ -21,6 +22,7 @@ def main() -> None:
     _assert_rerank_text_stays_compact_without_metadata()
     _assert_board_metadata_choice_heuristic()
     _assert_source_topic_metadata_heuristic()
+    _assert_detail_scores_promote_exact_configuration_chunks()
     print("PASS retrieval formatting regression")
 
 
@@ -118,6 +120,40 @@ def _assert_source_topic_metadata_heuristic() -> None:
     _assert(
         not _include_rerank_source_topic_metadata("What can the XIAO ESP32S3 Wio-SX1262 kit be used for?"),
         "generic kit queries should not include source-topic metadata",
+    )
+
+
+def _assert_detail_scores_promote_exact_configuration_chunks() -> None:
+    esphome_chunk = KnowledgeChunk(
+        id="esphome",
+        title="Add Seeed Studio XIAO ESP32C3 to ESPHome",
+        source="https://example.test/esphome",
+        text="esp32:\n  board: seeed_xiao_esp32c3\n  variant: esp32c3\n  framework:\n    type: arduino\n    version: 2.0.5\n    platform_version: 5.2.0",
+        board_id="xiao-esp32c3",
+    )
+    _assert(
+        _configuration_detail_score(
+            "What ESPHome YAML board settings should I use for Seeed Studio XIAO ESP32C3?",
+            esphome_chunk,
+        )
+        >= 1.0,
+        "ESPHome YAML questions should promote exact board setting chunks",
+    )
+
+    camera_chunk = KnowledgeChunk(
+        id="camera",
+        title="Camera slot circuit design for expansion boards",
+        source="https://example.test/camera",
+        text="The XIAO ESP32S3 Sense card slot occupies 14 GPIOs. GPIO39 | CAM_SCL | GPIO40 | CAM_SDA",
+        board_id="xiao-esp32s3",
+    )
+    _assert(
+        _configuration_detail_score(
+            "How many GPIOs does the camera slot occupy, and which GPIOs are CAM_SCL and CAM_SDA?",
+            camera_chunk,
+        )
+        >= 2.0,
+        "camera-slot pin questions should promote the exact occupancy table",
     )
 
 
