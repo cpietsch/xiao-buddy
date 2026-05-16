@@ -9,6 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.export_local_changes import _matching_vector_artifact, _prune_old_bundles
+from scripts.verify_local_export import _patch_series_shas
 
 
 def main() -> None:
@@ -35,6 +36,7 @@ def main() -> None:
         _assert(not older.exists(), "oldest previous bundle should be pruned when keep_bundles=2")
 
         _assert_matching_vector_artifact_manifest(work)
+        _assert_patch_series_sha_extraction(work)
 
     print("PASS export-local manifest regression")
 
@@ -92,6 +94,29 @@ def _assert_matching_vector_artifact_manifest(work: Path) -> None:
     _assert(artifact["data_sha256"] == "current-data-sha", "export manifest should include data sha")
     _assert(artifact["count"] == 42, "export manifest should include vector count")
     _assert(artifact["env"]["VECTOR_INDEX_ARCHIVE_SHA256"] == "current-sha", "env sha should match artifact sha")
+
+
+def _assert_patch_series_sha_extraction(work: Path) -> None:
+    first = work / "0001-one.patch"
+    second = work / "0002-two.patch"
+    first.write_text(
+        "From 1111111111111111111111111111111111111111 Mon Sep 17 00:00:00 2001\n"
+        "Subject: [PATCH 1/2] one\n",
+        encoding="utf-8",
+    )
+    second.write_text(
+        "From 2222222222222222222222222222222222222222 Mon Sep 17 00:00:00 2001\n"
+        "Subject: [PATCH 2/2] two\n",
+        encoding="utf-8",
+    )
+    _assert(
+        _patch_series_shas([first, second])
+        == [
+            "1111111111111111111111111111111111111111",
+            "2222222222222222222222222222222222222222",
+        ],
+        "patch sha extraction should preserve patch order",
+    )
 
 
 def _write_bundle(path: Path, *, mtime: int) -> Path:

@@ -50,6 +50,18 @@ def _verify_git_export(manifest: dict[str, Any]) -> None:
     _assert(base == current_base, f"manifest base={base} but {base_ref}={current_base}")
 
     _run_git("bundle", "verify", str(bundle))
+    bundle_heads = _git_lines("bundle", "list-heads", str(bundle))
+    _assert(
+        f"{head} HEAD" in bundle_heads,
+        f"bundle heads do not include manifest HEAD {head}: {bundle_heads}",
+    )
+
+    expected_commits = _git_commit_rows(base_ref)
+    manifest_commits = _manifest_commit_rows(manifest)
+    _assert(
+        manifest_commits == expected_commits,
+        "manifest commits do not match current git log for base_ref..HEAD",
+    )
 
 
 def _verify_patch_series(manifest: dict[str, Any]) -> None:
@@ -62,6 +74,9 @@ def _verify_patch_series(manifest: dict[str, Any]) -> None:
 
     patches = sorted(patches_dir.glob("*.patch"))
     _assert(len(patches) == commit_count, f"patch count={len(patches)} but commit_count={commit_count}")
+    patch_shas = _patch_series_shas(patches)
+    manifest_shas = [sha for sha, _subject in _manifest_commit_rows(manifest)]
+    _assert(patch_shas == manifest_shas, "patch series commit SHAs do not match manifest commit order")
 
 
 def _verify_vector_artifact(manifest: dict[str, Any]) -> None:
@@ -122,6 +137,46 @@ def _artifact_matches_vector_manifest(
     return True
 
 
+def _git_commit_rows(base_ref: str) -> list[tuple[str, str]]:
+    rows = _git_lines("log", "--reverse", "--format=%H%x09%s", f"{base_ref}..HEAD")
+    return [_split_commit_row(row) for row in rows]
+
+
+def _manifest_commit_rows(manifest: dict[str, Any]) -> list[tuple[str, str]]:
+    commits = manifest.get("commits")
+    _assert(isinstance(commits, list), "manifest commits must be a list")
+    rows: list[tuple[str, str]] = []
+    for index, row in enumerate(commits, start=1):
+        _assert(isinstance(row, dict), f"manifest commit {index} must be an object")
+        sha = str(row.get("sha") or "")
+        subject = str(row.get("subject") or "")
+        _assert(sha, f"manifest commit {index} missing sha")
+        _assert(subject, f"manifest commit {index} missing subject")
+        rows.append((sha, subject))
+    return rows
+
+
+def _patch_series_shas(patches: list[Path]) -> list[str]:
+    shas: list[str] = []
+    for patch in patches:
+        first_line = patch.read_text(encoding="utf-8").splitlines()[0].strip()
+        prefix = "From "
+        suffix = " Mon Sep 17 00:00:00 2001"
+        _assert(first_line.startswith(prefix), f"{patch.name} first line is not a format-patch From header")
+        sha = first_line[len(prefix) :]
+        if sha.endswith(suffix):
+            sha = sha[: -len(suffix)]
+        _assert(len(sha) == 40, f"{patch.name} has malformed commit sha {sha!r}")
+        shas.append(sha)
+    return shas
+
+
+def _split_commit_row(row: str) -> tuple[str, str]:
+    sha, separator, subject = row.partition("\t")
+    _assert(separator == "\t" and sha and subject, f"malformed git log row: {row!r}")
+    return sha, subject
+
+
 def _resolve_path(value: str) -> Path:
     _assert(value, "path value is empty")
     path = Path(value).expanduser()
@@ -133,6 +188,11 @@ def _resolve_path(value: str) -> Path:
 def _git_one(*args: str) -> str:
     result = _run_git(*args)
     return result.stdout.strip()
+
+
+def _git_lines(*args: str) -> list[str]:
+    output = _git_one(*args)
+    return [line for line in output.splitlines() if line.strip()]
 
 
 def _run_git(*args: str) -> subprocess.CompletedProcess[str]:
