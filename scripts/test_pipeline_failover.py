@@ -18,6 +18,8 @@ def main() -> None:
     _assert_system_prompt_preserves_acronyms()
     _assert_exact_term_hint_preserves_hardware_terms()
     _assert_exact_term_append_cites_missing_terms()
+    _assert_contextual_exact_term_repair_avoids_source_detail_noise()
+    _assert_inline_citation_repair_reuses_sources_line()
     _assert_agent_context_budget_keeps_relevant_excerpt()
     _assert_success_stream_reports_first_token_latency()
 
@@ -165,6 +167,77 @@ def _assert_exact_term_append_cites_missing_terms() -> None:
         [chunk],
     )
     _assert("`2.4G` [wifi-source]" in answer, "missing exact terms should be appended with citations")
+    _assert("Source detail:" not in answer, "generic exact-term repair should avoid mechanical source-detail label")
+
+
+def _assert_contextual_exact_term_repair_avoids_source_detail_noise() -> None:
+    uart = pipeline._ensure_answer_exact_terms(
+        "Use 921600 baud, 8 data bits, no parity, and 1 stop bit [uart-source].",
+        "Which UART serial settings are used?",
+        [
+            KnowledgeChunk(
+                id="uart-source",
+                title="UART settings",
+                source="https://wiki.seeedstudio.com/test/",
+                text="Use 921600 baud, SERIAL_8N1, None parity, and 1 stop bit.",
+                kind="wiki",
+            )
+        ],
+    )
+    _assert("parity `None`" in uart, "UART repair should express no parity as the exact None value")
+    _assert("Source detail:" not in uart, "UART repair should not append a mechanical source-detail line")
+
+    esphome = pipeline._ensure_answer_exact_terms(
+        "Use an ESP-IDF settings block [yaml-source].",
+        "What ESPHome YAML board settings should I use for Seeed Studio XIAO ESP32C3?",
+        [
+            KnowledgeChunk(
+                id="yaml-source",
+                title="ESPHome YAML",
+                source="https://wiki.seeedstudio.com/test/",
+                text=(
+                    "esp32:\n"
+                    "  board: seeed_xiao_esp32c3\n"
+                    "  variant: esp32c3\n"
+                    "  framework:\n"
+                    "    type: arduino\n"
+                    "    version: 2.0.5\n"
+                    "    platform_version: 5.2.0\n"
+                ),
+                kind="wiki",
+            )
+        ],
+    )
+    for expected in ("seeed_xiao_esp32c3", "arduino", "2.0.5", "5.2.0", "platform_version"):
+        _assert(expected in esphome, f"ESPHome contextual repair should include {expected}")
+    _assert("ESP-IDF" not in esphome, "ESPHome repair should replace a conflicting generated block")
+
+    sht40 = pipeline._ensure_answer_exact_terms(
+        "Use `SensirionI2CSht4x` and `measureHighPrecision()` [sht-source].",
+        "Which Arduino libraries and function read Grove Temp&Humi Sensor SHT40 data?",
+        [
+            KnowledgeChunk(
+                id="sht-source",
+                title="SHT40 libraries",
+                source="https://wiki.seeedstudio.com/test/",
+                text="Install arduino-i2c-sht4x and Sensirion Arduino Core to read temperature and humidity.",
+                kind="wiki",
+            )
+        ],
+    )
+    for expected in ("arduino-i2c-sht4x", "Sensirion Arduino Core", "temperature", "humidity"):
+        _assert(expected in sht40, f"SHT40 contextual repair should include {expected}")
+    _assert("Source detail:" not in sht40, "SHT40 repair should use a natural sentence")
+
+
+def _assert_inline_citation_repair_reuses_sources_line() -> None:
+    chunks = [
+        KnowledgeChunk(id="source-a", title="A", source="https://wiki.seeedstudio.com/a/", text="A", kind="wiki"),
+        KnowledgeChunk(id="source-b", title="B", source="https://wiki.seeedstudio.com/b/", text="B", kind="wiki"),
+    ]
+    answer = pipeline._ensure_inline_citations("Use source A [source-a].\n\nSources: [source-a]", chunks)
+    _assert(answer.count("Sources:") == 1, "citation repair should not create duplicate Sources lines")
+    _assert("[source-b]" in answer, "citation repair should append missing citations to the existing Sources line")
 
 
 def _assert_agent_context_budget_keeps_relevant_excerpt() -> None:
