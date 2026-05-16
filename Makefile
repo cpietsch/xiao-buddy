@@ -6,6 +6,7 @@ smoke:
 	$(PYTHON) -m py_compile app.py xiao_copilot/*.py scripts/*.py
 	$(PYTHON) scripts/test_config.py
 	$(PYTHON) scripts/test_clients.py
+	$(PYTHON) scripts/test_retrieval.py
 	$(PYTHON) scripts/test_app_scope.py
 	$(PYTHON) scripts/test_pipeline_failover.py
 	$(PYTHON) scripts/test_corpus_scope.py
@@ -72,7 +73,7 @@ rerank-quality:
 	$(PYTHON) scripts/eval_reranker_quality.py
 
 rerank-quality-all:
-	$(PYTHON) scripts/eval_reranker_quality.py --all --min-pass-rate $${RERANK_QUALITY_ALL_MIN_PASS_RATE:-0.90} --max-failures $${RERANK_QUALITY_ALL_MAX_FAILURES:-6} --json-output dist/reranker-quality/all.json
+	$(PYTHON) scripts/eval_reranker_quality.py --all --min-pass-rate $${RERANK_QUALITY_ALL_MIN_PASS_RATE:-0.95} --max-failures $${RERANK_QUALITY_ALL_MAX_FAILURES:-3} --json-output dist/reranker-quality/all.json
 
 vector-artifact:
 	$(PYTHON) scripts/package_vector_artifact.py

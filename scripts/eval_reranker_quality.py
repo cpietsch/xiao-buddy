@@ -13,7 +13,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from xiao_copilot.clients import rerank
 from xiao_copilot.config import load_settings
 from xiao_copilot.knowledge_base import KnowledgeChunk, load_knowledge_base
-from xiao_copilot.retrieval import _is_weekly_wiki_source, _lexical_score, _rerank_text
+from xiao_copilot.retrieval import (
+    _include_rerank_board_metadata,
+    _is_weekly_wiki_source,
+    _lexical_score,
+    _rerank_text,
+)
 
 
 DEFAULT_CASE_IDS = (
@@ -228,7 +233,15 @@ def _run_case(
     positive = _select_positive(case, corpus, citations, terms)
     negatives = _select_negatives(query, corpus, citations, positive, negative_count)
     candidates = [positive, *negatives]
-    documents = [_rerank_text(chunk, settings.rerank_text_chars) for chunk in candidates]
+    include_board_metadata = _include_rerank_board_metadata(query, candidates)
+    documents = [
+        _rerank_text(
+            chunk,
+            settings.rerank_text_chars,
+            include_board_metadata=include_board_metadata,
+        )
+        for chunk in candidates
+    ]
 
     started_at = perf_counter()
     result = rerank(
@@ -276,6 +289,7 @@ def _run_case(
         "best_negative_score": best_negative_score,
         "positive_id": positive.id,
         "best_negative_id": candidates[best_negative_index].id,
+        "board_metadata": include_board_metadata,
     }
 
 

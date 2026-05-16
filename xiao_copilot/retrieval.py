@@ -13,6 +13,7 @@ from xiao_copilot.vector_index import search_vector_index
 
 TOKEN_RE = re.compile(r"[a-zA-Z0-9_+.-]+")
 DEFAULT_RERANK_TEXT_CHARS = 3200
+RERANK_METADATA_TAG_LIMIT = 16
 RERANK_WEIGHT = 1.0
 INITIAL_RETRIEVAL_WEIGHT = 0.25
 SOURCE_CONTEXT_SIBLINGS = 4
@@ -167,9 +168,14 @@ def retrieve(
     ]
 
     rerank_text_chars = max(200, settings.rerank_text_chars or DEFAULT_RERANK_TEXT_CHARS)
-    rerank_documents = [_rerank_text(chunk, rerank_text_chars) for chunk in top]
+    include_board_metadata = _include_rerank_board_metadata(query, top)
+    rerank_documents = [
+        _rerank_text(chunk, rerank_text_chars, include_board_metadata=include_board_metadata)
+        for chunk in top
+    ]
     diagnostics["reranker_candidate_count"] = len(rerank_documents)
     diagnostics["reranker_text_chars"] = rerank_text_chars
+    diagnostics["reranker_board_metadata"] = include_board_metadata
     diagnostics["reranker_input_chars"] = {
         "max": max((len(document) for document in rerank_documents), default=0),
         "total": sum(len(document) for document in rerank_documents),
@@ -218,11 +224,51 @@ def retrieve(
     return top, diagnostics
 
 
-def _rerank_text(chunk: KnowledgeChunk, max_chars: int) -> str:
+def _rerank_text(
+    chunk: KnowledgeChunk,
+    max_chars: int,
+    include_board_metadata: bool = False,
+) -> str:
     text = chunk.text.strip()
     if len(text) > max_chars:
         text = text[:max_chars].rstrip()
-    return f"{chunk.title}\n{chunk.source}\n{text}".strip()
+    parts = [chunk.title, chunk.source]
+    metadata = _rerank_metadata(chunk, include_board_metadata=include_board_metadata)
+    if metadata:
+        parts.append(f"Metadata: {'; '.join(metadata)}")
+    parts.append(text)
+    return "\n".join(part for part in parts if part).strip()
+
+
+def _rerank_metadata(
+    chunk: KnowledgeChunk,
+    include_board_metadata: bool = False,
+) -> list[str]:
+    metadata: list[str] = []
+    if include_board_metadata and chunk.board_id:
+        metadata.append(f"board={chunk.board_id}")
+    tags = [
+        str(tag).strip()
+        for tag in chunk.metadata.get("tags", [])
+        if str(tag).strip()
+    ][:RERANK_METADATA_TAG_LIMIT]
+    if tags:
+        metadata.append(f"tags={', '.join(tags)}")
+    return metadata
+
+
+def _include_rerank_board_metadata(query: str, chunks: list[KnowledgeChunk]) -> bool:
+    q = query.lower()
+    asks_for_board_choice = (
+        "which supported xiao board" in q
+        or "which xiao board" in q
+        or "which board supports" in q
+        or ("which xiao" in q and any(term in q for term in ("choose", "pick", "supports", "should")))
+    )
+    if not asks_for_board_choice:
+        return False
+    board_ids = {chunk.board_id for chunk in chunks if chunk.board_id}
+    return len(board_ids) > 1
 
 
 def _elapsed_ms(started_at: float) -> float:
