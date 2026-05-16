@@ -281,6 +281,18 @@ make rerank-benchmark
 The production default is `RERANK_TEXT_CHARS=3200`, which keeps richer evidence
 available to the reranker while still bounding each candidate payload.
 
+To verify the live reranker is helping on representative Seeed wiki topics, run
+the focused reranker quality gate:
+
+```bash
+REQUEST_TIMEOUT_SECONDS=90 make rerank-quality
+```
+
+It builds one citation-matched positive and hard lexical negatives for each
+query, then fails if the live reranker does not score the intended source above
+the best negative. The default set covers XIAO boards, Grove Vision AI,
+Raspberry Pi, Jetson, robotics, and SenseCAP documentation.
+
 This writes:
 
 - `data/index/xiao_vectors.json` - vector index manifest, chunk IDs, source hash

@@ -1,4 +1,4 @@
-.PHONY: smoke ui-smoke corpus-scope browser-smoke browser-agent-smoke health health-live health-functional app-smoke eval-gate answer-eval eval-all verify-live verify-demo import-wiki-xiao import-wiki-all build-hnsw build-faiss-pq rerank-benchmark vector-artifact verify-vector-artifact install-vector-artifact export-local
+.PHONY: smoke ui-smoke corpus-scope browser-smoke browser-agent-smoke health health-live health-functional app-smoke eval-gate answer-eval eval-all verify-live verify-demo import-wiki-xiao import-wiki-all build-hnsw build-faiss-pq rerank-benchmark rerank-quality vector-artifact verify-vector-artifact install-vector-artifact export-local
 
 PYTHON ?= .venv/bin/python
 
@@ -50,6 +50,7 @@ verify-live: smoke health-live app-smoke eval-all
 
 verify-demo: verify-live
 	$(MAKE) health-functional PYTHON=$(PYTHON)
+	$(MAKE) rerank-quality PYTHON=$(PYTHON)
 	$(MAKE) browser-agent-smoke PYTHON=$(PYTHON)
 
 import-wiki-xiao:
@@ -66,6 +67,9 @@ build-faiss-pq:
 
 rerank-benchmark:
 	$(PYTHON) scripts/benchmark_rerank_window.py --windows $${RERANK_BENCHMARK_WINDOWS:-900,1600,2400,3200}
+
+rerank-quality:
+	$(PYTHON) scripts/eval_reranker_quality.py
 
 vector-artifact:
 	$(PYTHON) scripts/package_vector_artifact.py

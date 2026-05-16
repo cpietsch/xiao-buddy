@@ -77,3 +77,6 @@ make build-faiss-pq
 - Reranking sends a bounded text window per candidate. Tune `RERANK_TEXT_CHARS`
   with `python scripts/benchmark_rerank_window.py --windows 900,1600,2400,3200`
   before changing the production default.
+- The live reranker quality gate uses representative cases from
+  `eval_queries.jsonl`, one citation-matched positive chunk, and hard lexical
+  negatives. Run it with `make rerank-quality` after deployment changes.
