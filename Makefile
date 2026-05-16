@@ -1,4 +1,4 @@
-.PHONY: smoke ui-smoke browser-smoke browser-agent-smoke health health-live app-smoke eval-gate answer-eval eval-all verify-live rerank-benchmark vector-artifact verify-vector-artifact install-vector-artifact export-local
+.PHONY: smoke ui-smoke browser-smoke browser-agent-smoke health health-live app-smoke eval-gate answer-eval eval-all verify-live verify-demo rerank-benchmark vector-artifact verify-vector-artifact install-vector-artifact export-local
 
 PYTHON ?= .venv/bin/python
 
@@ -37,6 +37,9 @@ answer-eval:
 eval-all: eval-gate answer-eval
 
 verify-live: smoke health-live app-smoke eval-all
+
+verify-demo: verify-live
+	$(MAKE) browser-agent-smoke PYTHON=$(PYTHON)
 
 rerank-benchmark:
 	$(PYTHON) scripts/benchmark_rerank_window.py --windows $${RERANK_BENCHMARK_WINDOWS:-900,1600,2400,3200}

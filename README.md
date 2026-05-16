@@ -185,7 +185,8 @@ and streamed progress to appear in the page, and saves
 REQUEST_TIMEOUT_SECONDS=90 make browser-agent-smoke
 ```
 
-Run the complete local and live verification sequence before a demo or handoff:
+Run the complete local and live API/retrieval verification sequence before a
+demo or handoff:
 
 ```bash
 REQUEST_TIMEOUT_SECONDS=90 make verify-live
@@ -193,6 +194,14 @@ REQUEST_TIMEOUT_SECONDS=90 make verify-live
 
 This runs `make smoke`, `make health-live`, `make app-smoke`, the strict
 retrieval gate, and the generated-answer gate.
+
+When the dev browser dependency is installed, run the full demo gate as well:
+
+```bash
+REQUEST_TIMEOUT_SECONDS=90 make verify-demo
+```
+
+This runs the live API/retrieval gates and then the agent-backed browser smoke.
 
 If GitHub push access is unavailable, export the unpushed local commits before
 moving machines or sharing the workspace:
