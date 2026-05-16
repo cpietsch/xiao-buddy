@@ -2,6 +2,11 @@
 
 A working setup for serving multimodal embedding, reranking, and generative models on a single AMD MI300X GPU using vLLM. Built as an alternative to Fireworks AI, whose `/v1/embeddings` API turned out to be text-only even for multimodal models — verified via cosine-similarity testing where different images with the same text produced identical embeddings (cos = 1.0000). On self-hosted vLLM, the same test produced cos = 0.59, confirming the vision encoder is actually engaged.
 
+This is one deployment recipe, not the only app contract. XIAO Buddy requires
+OpenAI-compatible endpoints for embeddings and chat completions, plus an optional
+reranker endpoint. The generator can be this Qwen vLLM service or another
+OpenAI-compatible chat service, including a llama.cpp-hosted GGUF model.
+
 ## Hardware
 
 - **GPU**: AMD Instinct MI300X (192 GB HBM)

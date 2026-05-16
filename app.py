@@ -457,7 +457,7 @@ def build_demo() -> gr.Blocks:
 <section class="bench-strip">
   <div class="bench-card"><strong>Corpus</strong>Curated XIAO facts plus full Seeed wiki chunks for sensors, robotics, LoRa, and AI workflows.</div>
   <div class="bench-card"><strong>Routes</strong>Identify, troubleshoot, compare, or answer wiring, sensor, and robotics questions with cited source chunks.</div>
-  <div class="bench-card"><strong>Runtime</strong>Hosted Qwen embedding, reranking, and agent calls served from an AMD MI300X stack.</div>
+  <div class="bench-card"><strong>Runtime</strong>Hosted embedding, reranking, and OpenAI-compatible agent endpoints with live progress feedback.</div>
 </section>
 """,
         )

@@ -19,7 +19,7 @@ the optional hosted reranker/agent services by falling back to lexical retrieval
 
 Positioning:
 
-> A multimodal field support copilot that identifies XIAO edge hardware from images, retrieves the right Seeed wiki documentation for boards, sensors, LoRa, robotics, and SenseCraft workflows, and guides troubleshooting in a grounded, citation-backed workflow connected to hosted vLLM deployments.
+> A multimodal field support copilot that identifies XIAO edge hardware from images, retrieves the right Seeed wiki documentation for boards, sensors, LoRa, robotics, and SenseCraft workflows, and guides troubleshooting in a grounded, citation-backed workflow connected to hosted model endpoints.
 
 ## Architecture
 
@@ -323,25 +323,32 @@ Keep the full factual chunks in the corpus. HNSW/PQ compress and accelerate the
 search structure; they should not replace board, sensor, robotics, or pinout
 chunks with family-level summaries.
 
-## AMD MI300X vLLM Deployment
+## Hosted Model Deployment
 
-This Space is a thin UI and orchestration layer. The three Qwen services can be
-self-hosted on a single AMD Instinct MI300X GPU with vLLM:
+This Space is a thin UI and orchestration layer. It needs an embedding endpoint
+for vector search, can use an optional reranker endpoint for better ordering, and
+can call any OpenAI-compatible chat-completions endpoint for the final answer.
+
+One tested all-vLLM setup self-hosts the Qwen services on a single AMD Instinct
+MI300X GPU:
 
 | Service | Model | Port | App variable |
 |---|---|---:|---|
 | Multimodal embedder | `Qwen/Qwen3-VL-Embedding-2B` | 8000 | `EMBEDDING_BASE_URL` |
 | Reranker | `Qwen/Qwen3-VL-Reranker-2B` | 8001 | `RERANK_BASE_URL` |
-| Generator | `Qwen/Qwen3.6-35B-A3B` | 8002 | `AGENT_BASE_URL` |
+| Agent example | `Qwen/Qwen3.6-35B-A3B` | 8002 | `AGENT_BASE_URL` |
 
 The tested setup uses a DigitalOcean AMD GPU Droplet with an MI300X, ROCm, and
 vLLM. The 35B MoE model starts first with a larger memory reservation, then the
-2B embedding and reranking models share the remaining GPU memory. See the full
-walkthrough in [`amd-droplet.md`](amd-droplet.md) for:
+2B embedding and reranking models share the remaining GPU memory. The agent does
+not have to be this Qwen model; any OpenAI-compatible chat endpoint works,
+including llama.cpp or vLLM services exposing `/v1/chat/completions`.
+
+See the full walkthrough in [`amd-droplet.md`](amd-droplet.md) for:
 
 - opening the required droplet ports
 - using Jupyter terminals inside the ROCm container
-- serving all three models with `vllm serve`
+- serving the Qwen endpoint stack with `vllm serve`
 - testing `/v1/models`, `/v1/embeddings`, `/v1/completions`, and `/v1/chat/completions`
 - security notes for public HTTP endpoints
 
@@ -351,7 +358,7 @@ variables rather than committing them to the repo.
 ## Project Layout
 
 - `app.py` - Gradio Blocks UI.
-- `amd-droplet.md` - AMD MI300X / ROCm / vLLM deployment walkthrough for the hosted Qwen endpoints.
+- `amd-droplet.md` - AMD MI300X / ROCm / vLLM deployment walkthrough for one hosted Qwen endpoint stack.
 - `data/corpus/xiao_boards.json` - curated XIAO-only board facts, pin maps, gotchas, citations, and image URLs.
 - `data/corpus/wiki_chunks.jsonl` - imported chunks from the official Seeed wiki markdown.
 - `data/index/xiao_vectors.*` - optional local vector index built from the corpus for true query-time RAG.
@@ -378,6 +385,6 @@ variables rather than committing them to the repo.
 
 ## Submission Notes
 
-- Runtime target: AMD Developer Cloud / MI300X hosted vLLM endpoints for embedding, reranking, and agent generation.
+- Runtime target: hosted embedding, reranking, and OpenAI-compatible agent endpoints. The AMD MI300X/vLLM guide is one known-good deployment path, not a hard requirement.
 - Public demo target: Hugging Face Space running this Gradio app and connecting to the hosted endpoints.
 - Benchmark hooks: `make eval-gate` checks retrieval over `data/corpus/eval_queries.jsonl`; `make answer-eval` checks generated answers over `data/corpus/answer_eval_queries.jsonl`; `make verify-live` runs the full pre-demo live gate.
