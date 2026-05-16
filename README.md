@@ -171,7 +171,7 @@ REQUEST_TIMEOUT_SECONDS=90 make health-functional
 ```
 
 Check the running Gradio `/ask` API wiring, streamed answer events, source
-panel, inline source IDs, diagnostics, and progress HTML:
+panel, inline source IDs, first-token latency diagnostics, and progress HTML:
 
 ```bash
 make app-smoke

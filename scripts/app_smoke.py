@@ -25,6 +25,7 @@ def main() -> None:
     query, terms, citations, case_id = _load_case_from_env()
     timeout = float(os.environ.get("APP_SMOKE_TIMEOUT_SECONDS", settings.request_timeout_seconds or 90))
     require_stream = os.environ.get("APP_SMOKE_REQUIRE_STREAM", "1") == "1"
+    require_first_token = os.environ.get("APP_SMOKE_REQUIRE_FIRST_TOKEN", "1" if require_stream else "0") == "1"
     require_inline_citation = os.environ.get("APP_SMOKE_REQUIRE_INLINE_CITATION", "1") == "1"
 
     event_id = _start_call(base_url, query, timeout=timeout)
@@ -52,6 +53,9 @@ def main() -> None:
         ]
         if len(stream_events) < 2:
             raise SystemExit(f"Expected multiple streamed answer events, got {len(stream_events)}.")
+    first_token_ms = _first_token_ms(diagnostics)
+    if require_first_token:
+        _require_first_token_latency(first_token_ms, progress_html)
     if diagnostics.get("status") != "ok":
         raise SystemExit(f"Expected final diagnostics status=ok, got {diagnostics.get('status')!r}.")
     if not diagnostics.get("agent_used"):
@@ -66,6 +70,7 @@ def main() -> None:
         f"chars={len(answer)} "
         f"sources={source_text.count('- [')} "
         f"inline_citation={require_inline_citation} "
+        f"first_token_ms={_format_ms(first_token_ms)} "
         f"total_ms={diagnostics.get('timings_ms', {}).get('total', 0)}"
     )
 
@@ -164,6 +169,27 @@ def _require_inline_citation(answer: str, source_text: str, citations: tuple[str
     if not any(f"[{source_id}]" in answer for source_id in source_ids):
         expected = ", ".join(f"[{source_id}]" for source_id in source_ids) or "a retrieved source id"
         raise SystemExit(f"answer missing inline citation for {expected}")
+
+
+def _first_token_ms(diagnostics: dict[str, object]) -> float | None:
+    agent = diagnostics.get("agent", {})
+    value = agent.get("first_token_ms") if isinstance(agent, dict) else None
+    if value is None:
+        value = diagnostics.get("agent_first_token_ms")
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _require_first_token_latency(first_token_ms: float | None, progress_html: str) -> None:
+    if first_token_ms is None or first_token_ms <= 0:
+        raise SystemExit(f"Expected final diagnostics to include positive first_token_ms, got {first_token_ms!r}.")
+    if "first token" not in progress_html.lower():
+        raise SystemExit("Expected final progress HTML to include first-token latency.")
+
+
+def _format_ms(value: float | None) -> str:
+    return f"{value:.1f}" if value is not None else "n/a"
 
 
 def _source_ids_for_required_citations(source_text: str, citations: tuple[str, ...]) -> list[str]:

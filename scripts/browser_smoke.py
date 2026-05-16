@@ -189,6 +189,7 @@ def _check_query_interaction(
           const normalized = normalize(text);
           return terms.every((term) => normalized.includes(normalize(term)))
             && text.includes("streamed")
+            && text.includes("first token")
             && text.includes("agent answer")
             && text.includes("Sources used")
             && text.includes("Ready");
@@ -206,6 +207,7 @@ def _check_query_interaction(
     _assert("FIELD ANSWER" in body_text, "browser answer should keep answer panel visible")
     _assert("Sources used" in body_text, "browser answer should keep source trail visible")
     _assert("streamed" in body_text, "browser answer should expose streamed progress")
+    _assert("first token" in body_text, "browser answer should expose first-token progress")
     _assert("agent answer" in body_text, "browser answer should expose final agent status")
     _assert_sources_panel_rendered_once(page)
 
