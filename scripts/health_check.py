@@ -16,7 +16,7 @@ from xiao_copilot.config import load_settings
 from xiao_copilot.index_corpus import hash_chunks, indexable_chunks
 from xiao_copilot.knowledge_base import KnowledgeChunk, load_knowledge_base
 from xiao_copilot.vector_artifacts import install_vector_artifact
-from xiao_copilot.vector_index import configured_index_paths
+from xiao_copilot.vector_index import configured_index_paths, load_vector_index
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -174,6 +174,7 @@ def _check_vector_index(
 
     if data.exists():
         checks.append(Check("ok", "vector data", f"{data.name} exists ({_format_bytes(data.stat().st_size)})"))
+        checks.append(_check_vector_data_load(manifest, data, bool(data_path), count, backend))
     else:
         if artifact_url and artifact_sha256:
             checks.append(
@@ -201,7 +202,17 @@ def _check_vector_index(
         else:
             checks.append(Check("warn", "vector artifact checksum", "not configured"))
         if verify_artifact:
-            checks.append(_check_vector_artifact_restore(artifact_url, artifact_sha256, data.name, artifact_timeout))
+            checks.extend(
+                _check_vector_artifact_restore(
+                    manifest,
+                    artifact_url,
+                    artifact_sha256,
+                    data.name,
+                    count,
+                    backend,
+                    artifact_timeout,
+                )
+            )
 
     if backend == "hnsw":
         try:
@@ -213,12 +224,63 @@ def _check_vector_index(
     return checks
 
 
+def _check_vector_data_load(
+    manifest_path: Path,
+    data_path: Path,
+    data_path_explicit: bool,
+    expected_count: int,
+    expected_backend: str,
+) -> Check:
+    try:
+        load_vector_index.cache_clear()
+        index = load_vector_index(str(manifest_path), str(data_path), data_path_explicit)
+        if index.count != expected_count:
+            return Check(
+                "fail",
+                "vector data load",
+                f"loaded count={index.count}, expected={expected_count}",
+            )
+        if index.backend != expected_backend:
+            return Check(
+                "fail",
+                "vector data load",
+                f"loaded backend={index.backend}, expected={expected_backend}",
+            )
+        loaded_count = _backend_loaded_count(index)
+        if loaded_count is not None and loaded_count != expected_count:
+            return Check(
+                "fail",
+                "vector data load",
+                f"backend rows={loaded_count}, expected={expected_count}",
+            )
+        return Check(
+            "ok",
+            "vector data load",
+            f"loaded {index.backend} index ({index.count} vectors, dim={index.dim})",
+        )
+    except Exception as exc:  # noqa: BLE001 - reported as health evidence.
+        return Check("fail", "vector data load", str(exc))
+
+
+def _backend_loaded_count(index) -> int | None:
+    if index.hnsw is not None and hasattr(index.hnsw, "get_current_count"):
+        return int(index.hnsw.get_current_count())
+    if index.faiss is not None and hasattr(index.faiss, "ntotal"):
+        return int(index.faiss.ntotal)
+    if index.vectors is not None and index.dim > 0:
+        return len(index.vectors) // index.dim
+    return None
+
+
 def _check_vector_artifact_restore(
+    manifest_path: Path,
     artifact_url: str,
     artifact_sha256: str,
     member_name: str,
+    expected_count: int,
+    expected_backend: str,
     timeout: float,
-) -> Check:
+) -> list[Check]:
     with tempfile.TemporaryDirectory(prefix="xiao-health-vector-") as temp_dir:
         target = Path(temp_dir) / member_name
         result = install_vector_artifact(
@@ -229,9 +291,12 @@ def _check_vector_artifact_restore(
             timeout=timeout,
         )
         if not result.ok:
-            return Check("fail", "vector artifact restore", result.detail)
+            return [Check("fail", "vector artifact restore", result.detail)]
         size = target.stat().st_size if target.exists() else 0
-        return Check("ok", "vector artifact restore", f"verified {member_name} ({_format_bytes(size)})")
+        return [
+            Check("ok", "vector artifact restore", f"verified {member_name} ({_format_bytes(size)})"),
+            _check_vector_data_load(manifest_path, target, True, expected_count, expected_backend),
+        ]
 
 
 def _check_settings(settings) -> list[Check]:

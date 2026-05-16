@@ -151,9 +151,11 @@ make health
 make health-live
 ```
 
-`make health-live` also checks the configured hosted endpoints, verifies that
-`/v1/models` exposes the configured model IDs, checks the local Gradio app URL,
-and exits non-zero on warnings.
+`make health` loads the local vector data when it exists, so corrupt or
+mismatched HNSW/FAISS files fail before the first user query. `make health-live`
+also checks the configured hosted endpoints, verifies that `/v1/models` exposes
+the configured model IDs, checks the local Gradio app URL, and exits non-zero on
+warnings.
 
 To prove the hosted endpoints accept real inference payloads, run the functional
 endpoint smoke. It sends one small embedding request, one rerank request, and one

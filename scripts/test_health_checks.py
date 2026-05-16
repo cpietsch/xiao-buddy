@@ -54,6 +54,7 @@ def main() -> None:
     )
     _assert_strict_warnings_exit_nonzero()
     _assert_artifact_backed_strict_health_ok()
+    _assert_corrupt_local_vector_data_fails_health()
 
     print("PASS health-check parser regression")
 
@@ -85,7 +86,7 @@ def _assert_artifact_backed_strict_health_ok() -> None:
     with tempfile.TemporaryDirectory(prefix="xiao-health-artifact-") as temp_dir:
         work = Path(temp_dir)
         manifest_path = work / "index" / "test_vectors.json"
-        data_path = work / "index" / "test_vectors.hnsw"
+        data_path = work / "index" / "test_vectors.f16"
         output_dir = work / "out"
         _write_artifact_backed_manifest(manifest_path, data_path)
         archive_path = output_dir / "test-vectors.tar.gz"
@@ -145,17 +146,50 @@ def _assert_artifact_backed_strict_health_ok() -> None:
         "vector artifact restore:" in result.stdout and "verified" in result.stdout,
         "health should verify artifact restore when requested",
     )
+    _assert(
+        "vector data load:" in result.stdout and "loaded flat index" in result.stdout,
+        "health should load the restored vector artifact when requested",
+    )
+
+
+def _assert_corrupt_local_vector_data_fails_health() -> None:
+    with tempfile.TemporaryDirectory(prefix="xiao-health-corrupt-") as temp_dir:
+        work = Path(temp_dir)
+        manifest_path = work / "index" / "test_vectors.json"
+        data_path = work / "index" / "test_vectors.f16"
+        _write_artifact_backed_manifest(manifest_path, data_path)
+        data_path.write_bytes(b"\x00")
+
+        env = {
+            **os.environ,
+            "VECTOR_INDEX_MANIFEST": str(manifest_path),
+        }
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "health_check.py"),
+                "--strict-warnings",
+            ],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    _assert(result.returncode == 1, f"corrupt local vector data should fail health, got {result.returncode}")
+    _assert("FAIL vector data load:" in result.stdout, "health should report vector data load failure")
 
 
 def _write_artifact_backed_manifest(manifest_path: Path, data_path: Path) -> None:
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    data_path.write_bytes(b"fake-hnsw-data")
     chunks = indexable_chunks(load_knowledge_base(), include_field_notes=False)
+    data_path.write_bytes(b"\x00\x00" * len(chunks))
     manifest = {
         "schema_version": 1,
         "model": "test-model",
-        "dim": 3,
-        "backend": "hnsw",
+        "dim": 1,
+        "backend": "flat",
+        "dtype": "float16",
         "count": len(chunks),
         "ids": [chunk.id for chunk in chunks],
         "data_file": data_path.name,
