@@ -16,6 +16,7 @@ import scripts.eval_answer_quality as answer_eval  # noqa: E402
 def main() -> None:
     _assert_matching_helpers_are_normalized_and_source_specific()
     _assert_failure_diagnostic_includes_actionable_context()
+    _assert_summary_reports_latency_and_rates()
     _assert_main_prints_failure_detail_on_miss()
     print("PASS answer eval quality regression")
 
@@ -88,6 +89,44 @@ def _assert_failure_diagnostic_includes_actionable_context() -> None:
         _assert(expected in detail, f"failure diagnostic should include {expected!r}")
 
 
+def _assert_summary_reports_latency_and_rates() -> None:
+    summary = answer_eval._summarize_results(
+        [
+            {
+                "id": "pass-case",
+                "ok": True,
+                "fact_ok": True,
+                "citation_ok": True,
+                "inline_citation_ok": True,
+                "agent_ok": True,
+                "stream_ok": True,
+                "total_ms": 10.0,
+            },
+            {
+                "id": "miss-case",
+                "ok": False,
+                "fact_ok": False,
+                "citation_ok": True,
+                "inline_citation_ok": False,
+                "agent_ok": True,
+                "stream_ok": True,
+                "total_ms": 30.0,
+            },
+        ]
+    )
+    _assert(summary["cases"] == 2, "summary should count answer cases")
+    _assert(summary["passes"] == 1, "summary should count passing answer cases")
+    _assert(summary["failures"] == ["miss-case"], "summary should list failing answer cases")
+    _assert(summary["fact_rate"] == 0.5, "summary should compute fact hit rate")
+    _assert(summary["citation_rate"] == 1.0, "summary should compute citation hit rate")
+    _assert(summary["inline_citation_rate"] == 0.5, "summary should compute inline citation rate")
+    _assert(summary["agent_rate"] == 1.0, "summary should compute agent hit rate")
+    _assert(summary["stream_rate"] == 1.0, "summary should compute stream hit rate")
+    _assert(summary["p50_ms"] == 20.0, "summary should compute p50 latency")
+    _assert(summary["p95_ms"] == 29.0, "summary should compute p95 latency")
+    _assert(summary["max_ms"] == 30.0, "summary should compute max latency")
+
+
 def _assert_main_prints_failure_detail_on_miss() -> None:
     original_answer_question = answer_eval.answer_question
     env_keys = [
@@ -96,10 +135,13 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
         "ANSWER_EVAL_LIMIT",
         "ANSWER_EVAL_REQUIRE_AGENT",
         "ANSWER_EVAL_REQUIRE_STREAM",
+        "ANSWER_EVAL_JSON_OUTPUT",
     ]
     original_env = {key: os.environ.get(key) for key in env_keys}
+    report_payload: dict[str, object] = {}
     with tempfile.TemporaryDirectory() as tmp:
         eval_path = Path(tmp) / "answer_eval.jsonl"
+        report_path = Path(tmp) / "answer-quality.json"
         eval_path.write_text(
             json.dumps(
                 {
@@ -134,6 +176,7 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
             os.environ["ANSWER_EVAL_LIMIT"] = "0"
             os.environ["ANSWER_EVAL_REQUIRE_AGENT"] = "1"
             os.environ["ANSWER_EVAL_REQUIRE_STREAM"] = "1"
+            os.environ["ANSWER_EVAL_JSON_OUTPUT"] = str(report_path)
 
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
@@ -143,6 +186,8 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
                     _assert(exc.code == 1, "answer eval should exit non-zero on a miss")
                 else:
                     raise AssertionError("answer eval should fail for a missing required term")
+            _assert(report_path.exists(), "answer eval should write JSON report before exiting")
+            report_payload.update(json.loads(report_path.read_text(encoding="utf-8")))
         finally:
             answer_eval.answer_question = original_answer_question
             for key, value in original_env.items():
@@ -161,8 +206,18 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
         "required_citations: https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/",
         "required_source_ids: esp32c6-guide",
         "answer_excerpt: Use XIAO ESP32C6 for Thread and Zigbee [esp32c6-guide].",
+        "answer latency: p50_ms=7.0 p95_ms=7.0 max_ms=7.0",
+        "wrote ",
     ]:
         _assert(expected in captured, f"main failure output should include {expected!r}")
+    summary = report_payload["summary"]
+    results = report_payload["results"]
+    _assert(isinstance(summary, dict), "JSON report should include summary object")
+    _assert(isinstance(results, list) and len(results) == 1, "JSON report should include one result")
+    _assert(summary["failures"] == ["synthetic-miss"], "JSON report should include failing case id")
+    _assert(results[0]["missing_terms"] == ["802.15.4"], "JSON report should include missing terms")
+    _assert(results[0]["required_source_ids"] == ["esp32c6-guide"], "JSON report should include required source ids")
+    _assert(results[0]["stream_chunks"] == 1, "JSON report should include stream chunk count")
 
 
 def _assert(condition: bool, message: str) -> None:

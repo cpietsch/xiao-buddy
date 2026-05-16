@@ -49,7 +49,7 @@ eval-gate:
 	./scripts/eval_gate.sh
 
 answer-eval:
-	$(PYTHON) scripts/eval_answer_quality.py
+	ANSWER_EVAL_JSON_OUTPUT=$${ANSWER_EVAL_JSON_OUTPUT:-dist/answer-quality/all.json} $(PYTHON) scripts/eval_answer_quality.py
 
 eval-all: eval-gate answer-eval
 

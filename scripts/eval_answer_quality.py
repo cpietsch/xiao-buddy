@@ -12,6 +12,7 @@ from xiao_copilot.pipeline import answer_question
 
 def main() -> None:
     eval_path = Path(os.environ.get("ANSWER_EVAL_PATH", "data/corpus/answer_eval_queries.jsonl"))
+    json_output = Path(output) if (output := os.environ.get("ANSWER_EVAL_JSON_OUTPUT", "").strip()) else None
     require_agent = os.environ.get("ANSWER_EVAL_REQUIRE_AGENT", "1") == "1"
     require_stream = os.environ.get("ANSWER_EVAL_REQUIRE_STREAM", "1") == "1"
     limit = int(os.environ.get("ANSWER_EVAL_LIMIT", "0"))
@@ -36,6 +37,7 @@ def main() -> None:
     agent_hits = 0
     stream_hits = 0
     failures: list[str] = []
+    results: list[dict[str, object]] = []
 
     for case in cases:
         print(f"RUN  {case['id']}", flush=True)
@@ -64,6 +66,26 @@ def main() -> None:
 
         agent = diagnostics.get("agent", {})
         timings = diagnostics.get("timings_ms", {})
+        required_source_ids = _source_ids_for_required_citations(citations, required_citations)
+        all_source_ids = _source_ids_from_citations(citations)
+        result = {
+            "id": str(case["id"]),
+            "ok": ok,
+            "fact_ok": fact_ok,
+            "citation_ok": citation_ok,
+            "inline_citation_ok": inline_citation_ok,
+            "agent_ok": agent_ok,
+            "stream_ok": stream_ok,
+            "missing_terms": missing_terms,
+            "required_citations": required_citations,
+            "required_source_ids": required_source_ids,
+            "all_source_ids": all_source_ids,
+            "stream_chunks": int(agent.get("stream_chunks", 0) or 0),
+            "stream_chars": int(agent.get("stream_chars", len(answer)) or 0),
+            "answer_chars": len(answer),
+            "total_ms": float(timings.get("total", 0) or 0),
+        }
+        results.append(result)
         print(
             f"{'PASS' if ok else 'MISS'} {case['id']}: "
             f"facts={'ok' if fact_ok else 'miss'} "
@@ -83,17 +105,63 @@ def main() -> None:
                 flush=True,
             )
 
-    print(f"\nanswer fact-hit rate: {fact_hits}/{total} = {fact_hits / total:.0%}", flush=True)
-    print(f"answer citation-hit rate: {citation_hits}/{total} = {citation_hits / total:.0%}", flush=True)
+    summary = _summarize_results(results)
+    print(f"\nanswer fact-hit rate: {fact_hits}/{total} = {summary['fact_rate']:.0%}", flush=True)
+    print(f"answer citation-hit rate: {citation_hits}/{total} = {summary['citation_rate']:.0%}", flush=True)
     print(
-        f"answer inline-citation-hit rate: {inline_citation_hits}/{total} = {inline_citation_hits / total:.0%}",
+        f"answer inline-citation-hit rate: "
+        f"{inline_citation_hits}/{total} = {summary['inline_citation_rate']:.0%}",
         flush=True,
     )
-    print(f"answer agent-hit rate: {agent_hits}/{total} = {agent_hits / total:.0%}", flush=True)
-    print(f"answer stream-hit rate: {stream_hits}/{total} = {stream_hits / total:.0%}", flush=True)
+    print(f"answer agent-hit rate: {agent_hits}/{total} = {summary['agent_rate']:.0%}", flush=True)
+    print(f"answer stream-hit rate: {stream_hits}/{total} = {summary['stream_rate']:.0%}", flush=True)
+    print(
+        f"answer latency: p50_ms={summary['p50_ms']:.1f} "
+        f"p95_ms={summary['p95_ms']:.1f} max_ms={summary['max_ms']:.1f}",
+        flush=True,
+    )
+    if json_output:
+        json_output.parent.mkdir(parents=True, exist_ok=True)
+        json_output.write_text(json.dumps({"summary": summary, "results": results}, indent=2) + "\n")
+        print(f"wrote {json_output}", flush=True)
     if failures:
         print(f"\nanswer eval failures: {', '.join(failures)}", flush=True)
         raise SystemExit(1)
+
+
+def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
+    total = len(results)
+    totals_ms = [float(result["total_ms"]) for result in results]
+    return {
+        "cases": total,
+        "passes": sum(1 for result in results if bool(result["ok"])),
+        "failures": [str(result["id"]) for result in results if not bool(result["ok"])],
+        "fact_rate": _rate(results, "fact_ok"),
+        "citation_rate": _rate(results, "citation_ok"),
+        "inline_citation_rate": _rate(results, "inline_citation_ok"),
+        "agent_rate": _rate(results, "agent_ok"),
+        "stream_rate": _rate(results, "stream_ok"),
+        "p50_ms": _percentile(totals_ms, 50),
+        "p95_ms": _percentile(totals_ms, 95),
+        "max_ms": max(totals_ms) if totals_ms else 0.0,
+    }
+
+
+def _rate(results: list[dict[str, object]], key: str) -> float:
+    return sum(1 for result in results if bool(result[key])) / len(results) if results else 0.0
+
+
+def _percentile(values: list[float], percentile: int) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    index = (len(ordered) - 1) * percentile / 100
+    lower = int(index)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = index - lower
+    return ordered[lower] * (1 - weight) + ordered[upper] * weight
 
 
 def _contains_all_terms(text: str, terms: list[str]) -> bool:
