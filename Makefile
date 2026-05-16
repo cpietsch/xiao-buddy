@@ -1,4 +1,4 @@
-.PHONY: smoke ui-smoke corpus-scope browser-smoke browser-agent-smoke health health-live health-functional app-smoke eval-gate answer-eval eval-all verify-live verify-demo import-wiki-xiao import-wiki-all build-hnsw build-faiss-pq rerank-benchmark rerank-quality vector-artifact verify-vector-artifact install-vector-artifact export-local
+.PHONY: smoke ui-smoke corpus-scope browser-smoke browser-agent-smoke health health-live health-functional app-smoke eval-gate answer-eval eval-all verify-live verify-demo import-wiki-xiao import-wiki-all build-hnsw build-faiss-pq rerank-benchmark rerank-quality rerank-quality-all vector-artifact verify-vector-artifact install-vector-artifact export-local
 
 PYTHON ?= .venv/bin/python
 
@@ -70,6 +70,9 @@ rerank-benchmark:
 
 rerank-quality:
 	$(PYTHON) scripts/eval_reranker_quality.py
+
+rerank-quality-all:
+	$(PYTHON) scripts/eval_reranker_quality.py --all --min-pass-rate $${RERANK_QUALITY_ALL_MIN_PASS_RATE:-0.90} --max-failures $${RERANK_QUALITY_ALL_MAX_FAILURES:-6} --json-output dist/reranker-quality/all.json
 
 vector-artifact:
 	$(PYTHON) scripts/package_vector_artifact.py

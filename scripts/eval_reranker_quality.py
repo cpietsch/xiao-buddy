@@ -6,6 +6,7 @@ import statistics
 import sys
 from pathlib import Path
 from time import perf_counter
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -26,6 +27,18 @@ DEFAULT_CASE_IDS = (
     "eval-sensecap-device-management-node-fields",
 )
 
+CATEGORY_PREFIXES = (
+    ("robotics", "eval-robotics-"),
+    ("grove", "eval-grove-"),
+    ("raspberry-pi", "eval-rpi-"),
+    ("jetson", "eval-jetson-"),
+    ("sensecap", "eval-sensecap-"),
+    ("wio", "eval-wio-"),
+    ("edge-ai", "eval-edge-"),
+    ("xiao-advanced", "eval-adv-"),
+    ("xiao-wiki", "eval-wiki-"),
+)
+
 
 def main() -> None:
     args = _parse_args()
@@ -33,36 +46,100 @@ def main() -> None:
     if not settings.rerank_base_url:
         raise SystemExit("RERANK_BASE_URL is required for reranker quality evaluation.")
 
-    cases = _load_cases(args.eval_path, args.case_ids)
+    cases = _load_cases(args.eval_path, args.case_ids, use_all=args.all_cases)
+    if args.limit:
+        cases = cases[: args.limit]
     corpus = load_knowledge_base()
     print(
         f"cases={len(cases)} negatives={args.negatives} "
-        f"min_margin={args.min_margin:.4f}",
+        f"min_margin={args.min_margin:.4f} min_pass_rate={args.min_pass_rate:.0%} "
+        f"max_failures={args.max_failures}",
         flush=True,
     )
 
     results = [_run_case(case, corpus, settings, args.negatives, args.min_margin) for case in cases]
+    summary = _summarize_results(results)
+    _print_summary(summary)
+    if args.json_output:
+        args.json_output.parent.mkdir(parents=True, exist_ok=True)
+        args.json_output.write_text(json.dumps({"summary": summary, "results": results}, indent=2) + "\n")
+        print(f"wrote {args.json_output}", flush=True)
+
+    failures = [str(result["id"]) for result in results if not result["ok"]]
+    threshold_failed = (
+        summary["pass_rate"] < args.min_pass_rate or len(failures) > args.max_failures
+    )
+    if threshold_failed:
+        if failures:
+            print(f"\nfailures: {', '.join(failures)}", flush=True)
+        if args.warn_only:
+            print("warning: reranker quality thresholds were not met", flush=True)
+            return
+        raise SystemExit(1)
+
+
+def _summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     passes = [result for result in results if result["ok"]]
     margins = [float(result["margin"]) for result in results]
     latencies = [float(result["ms"]) for result in results]
-    failures = [str(result["id"]) for result in results if not result["ok"]]
+    by_category: dict[str, dict[str, Any]] = {}
+    for result in results:
+        category = str(result["category"])
+        category_summary = by_category.setdefault(
+            category,
+            {"cases": 0, "passes": 0, "failures": [], "min_margin": None},
+        )
+        category_summary["cases"] += 1
+        category_summary["passes"] += int(bool(result["ok"]))
+        if not result["ok"]:
+            category_summary["failures"].append(result["id"])
+        min_margin = category_summary["min_margin"]
+        margin = float(result["margin"])
+        category_summary["min_margin"] = margin if min_margin is None else min(float(min_margin), margin)
+
+    for category_summary in by_category.values():
+        cases = int(category_summary["cases"])
+        passes_count = int(category_summary["passes"])
+        category_summary["pass_rate"] = passes_count / cases if cases else 0.0
+        if category_summary["min_margin"] is None:
+            category_summary["min_margin"] = 0.0
+
+    return {
+        "cases": len(results),
+        "passes": len(passes),
+        "failures": [str(result["id"]) for result in results if not result["ok"]],
+        "pass_rate": len(passes) / len(results) if results else 0.0,
+        "min_margin": min(margins) if margins else 0.0,
+        "p50_margin": _percentile(margins, 50),
+        "p50_ms": _percentile(latencies, 50),
+        "p95_ms": _percentile(latencies, 95),
+        "max_ms": max(latencies) if latencies else 0.0,
+        "by_category": by_category,
+    }
+
+
+def _print_summary(summary: dict[str, Any]) -> None:
     print(
         "\nreranker top-positive rate: "
-        f"{len(passes)}/{len(results)} = {len(passes) / len(results):.0%}",
+        f"{summary['passes']}/{summary['cases']} = {summary['pass_rate']:.0%}",
         flush=True,
     )
     print(
-        f"reranker margin: min={min(margins):.4f} p50={_percentile(margins, 50):.4f}",
+        f"reranker margin: min={summary['min_margin']:.4f} p50={summary['p50_margin']:.4f}",
         flush=True,
     )
     print(
-        f"reranker latency: p50_ms={_percentile(latencies, 50):.1f} "
-        f"p95_ms={_percentile(latencies, 95):.1f} max_ms={max(latencies):.1f}",
+        f"reranker latency: p50_ms={summary['p50_ms']:.1f} "
+        f"p95_ms={summary['p95_ms']:.1f} max_ms={summary['max_ms']:.1f}",
         flush=True,
     )
-    if failures:
-        print(f"\nfailures: {', '.join(failures)}", flush=True)
-        raise SystemExit(1)
+    print("reranker categories:", flush=True)
+    for category, category_summary in sorted(summary["by_category"].items()):
+        print(
+            f"  {category}: {category_summary['passes']}/{category_summary['cases']} "
+            f"min_margin={float(category_summary['min_margin']):.4f}",
+            flush=True,
+        )
 
 
 def _parse_args() -> argparse.Namespace:
@@ -81,6 +158,7 @@ def _parse_args() -> argparse.Namespace:
         default=[],
         help="Only run a specific eval case id. Repeatable. Defaults to a mixed representative set.",
     )
+    parser.add_argument("--all", dest="all_cases", action="store_true", help="Run every eval case.")
     parser.add_argument("--limit", type=int, default=0, help="Limit cases after filtering.")
     parser.add_argument("--negatives", type=int, default=2, help="Hard lexical negatives per query.")
     parser.add_argument(
@@ -89,18 +167,44 @@ def _parse_args() -> argparse.Namespace:
         default=0.0,
         help="Required positive-score margin over the best negative.",
     )
+    parser.add_argument(
+        "--min-pass-rate",
+        type=float,
+        default=1.0,
+        help="Minimum acceptable top-positive pass rate.",
+    )
+    parser.add_argument(
+        "--max-failures",
+        type=int,
+        default=0,
+        help="Maximum acceptable failed cases.",
+    )
+    parser.add_argument(
+        "--warn-only",
+        action="store_true",
+        help="Print threshold failures without exiting non-zero.",
+    )
+    parser.add_argument("--json-output", type=Path, help="Optional JSON report path.")
     args = parser.parse_args()
+    if args.all_cases and args.case:
+        raise SystemExit("--all cannot be combined with --case.")
     if args.negatives < 1:
         raise SystemExit("--negatives must be at least 1.")
     if args.limit < 0:
         raise SystemExit("--limit must be non-negative.")
+    if not 0 <= args.min_pass_rate <= 1:
+        raise SystemExit("--min-pass-rate must be between 0 and 1.")
+    if args.max_failures < 0:
+        raise SystemExit("--max-failures must be non-negative.")
     selected = tuple(args.case or DEFAULT_CASE_IDS)
-    args.case_ids = selected[: args.limit] if args.limit else selected
+    args.case_ids = selected
     return args
 
 
-def _load_cases(path: Path, case_ids: tuple[str, ...]) -> list[dict[str, object]]:
+def _load_cases(path: Path, case_ids: tuple[str, ...], use_all: bool = False) -> list[dict[str, object]]:
     cases = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    if use_all:
+        return cases
     by_id = {str(case["id"]): case for case in cases}
     missing = [case_id for case_id in case_ids if case_id not in by_id]
     if missing:
@@ -116,6 +220,7 @@ def _run_case(
     min_margin: float,
 ) -> dict[str, object]:
     case_id = str(case["id"])
+    category = _case_category(case_id)
     query = str(case["query"])
     citations = [str(citation) for citation in case.get("must_cite", [])]
     terms = [str(term) for term in case.get("must_include", [])]
@@ -137,13 +242,13 @@ def _run_case(
     elapsed_ms = round((perf_counter() - started_at) * 1000, 1)
     if not result.ok:
         print(f"FAIL {case_id}: reranker request failed: {result.error}", flush=True)
-        return {"id": case_id, "ok": False, "margin": -1.0, "ms": elapsed_ms}
+        return {"id": case_id, "category": category, "ok": False, "margin": -1.0, "ms": elapsed_ms}
 
     scores = {index: float(score) for index, score in result.data or []}
     missing = [index for index in range(len(candidates)) if index not in scores]
     if missing:
         print(f"FAIL {case_id}: reranker did not score indexes {missing}", flush=True)
-        return {"id": case_id, "ok": False, "margin": -1.0, "ms": elapsed_ms}
+        return {"id": case_id, "category": category, "ok": False, "margin": -1.0, "ms": elapsed_ms}
 
     positive_score = scores[0]
     best_negative_index = max(range(1, len(candidates)), key=lambda index: scores[index])
@@ -160,7 +265,18 @@ def _run_case(
     )
     print(f"     positive: {_short_title(positive)}", flush=True)
     print(f"     negative: {_short_title(candidates[best_negative_index])}", flush=True)
-    return {"id": case_id, "ok": ok, "margin": margin, "ms": elapsed_ms}
+    return {
+        "id": case_id,
+        "category": category,
+        "ok": ok,
+        "margin": margin,
+        "ms": elapsed_ms,
+        "mode": mode,
+        "positive_score": positive_score,
+        "best_negative_score": best_negative_score,
+        "positive_id": positive.id,
+        "best_negative_id": candidates[best_negative_index].id,
+    }
 
 
 def _select_positive(
@@ -227,6 +343,13 @@ def _source_key(chunk: KnowledgeChunk) -> str:
     if source_file:
         return f"file:{source_file}"
     return f"source:{chunk.source}"
+
+
+def _case_category(case_id: str) -> str:
+    for category, prefix in CATEGORY_PREFIXES:
+        if case_id.startswith(prefix):
+            return category
+    return "xiao-core"
 
 
 def _term_hits(chunk: KnowledgeChunk, terms: list[str]) -> int:

@@ -293,6 +293,18 @@ query, then fails if the live reranker does not score the intended source above
 the best negative. The default set covers XIAO boards, Grove Vision AI,
 Raspberry Pi, Jetson, robotics, and SenseCAP documentation.
 
+For a broader deployment audit across all retrieval evals, run:
+
+```bash
+REQUEST_TIMEOUT_SECONDS=90 make rerank-quality-all
+```
+
+That writes `dist/reranker-quality/all.json`, reports pass rates by topic
+category, and fails if the all-case rate drops below the configured threshold.
+Override `RERANK_QUALITY_ALL_MIN_PASS_RATE` or
+`RERANK_QUALITY_ALL_MAX_FAILURES` when validating a known experimental
+reranker.
+
 This writes:
 
 - `data/index/xiao_vectors.json` - vector index manifest, chunk IDs, source hash

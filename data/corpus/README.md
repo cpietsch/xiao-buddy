@@ -80,3 +80,5 @@ make build-faiss-pq
 - The live reranker quality gate uses representative cases from
   `eval_queries.jsonl`, one citation-matched positive chunk, and hard lexical
   negatives. Run it with `make rerank-quality` after deployment changes.
+- Run `make rerank-quality-all` for an all-case audit with category summaries
+  and a JSON report under `dist/reranker-quality/`.
