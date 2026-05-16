@@ -17,21 +17,22 @@
 ## Live Endpoint / Report Status
 
 - Live app endpoint is available at http://100.103.106.102:7861/.
-- Reranker quality report status: must be regenerated after the source-draft commit.
-- Answer quality report status: must be regenerated after the source-draft commit.
+- Reranker quality report status: must be regenerated after the draft-latency metrics commit.
+- Answer quality report status: must be regenerated after the draft-latency metrics commit.
 - Local export verification status: must be rerun after regenerated quality reports are present.
 
 ## Current In-Progress Work
 
-- Reducing perceived answer latency while keeping final answers agent-generated and cited.
+- Measuring perceived answer latency while keeping final answers agent-generated and cited.
 - Added `AGENT_MAX_TOKENS=350` and tightened the agent prompt to put direct settings first.
 - Added a deterministic exact-term safety pass so compact agent answers keep cited hardware terms such as `2.4G`, `USB-UART`, `firmware.uf2`, and `frequency plan`.
 - Added an immediate source-backed draft after retrieval so users see relevant cited source notes before the hosted agent produces its first token.
 - Browser smoke now verifies both the source-backed draft and visible partial hosted-agent stream.
+- Answer reports now separate source-draft visible latency, hosted-agent first-token latency, and hosted-agent visible-from-request latency.
 
 ## Remaining Next Steps
 
-- Commit the source-backed draft change.
+- Commit the draft-latency metrics change.
 - Regenerate answer and reranker quality reports after the commit.
 - Run `make export-local verify-local-export` after regenerated reports are present.
 

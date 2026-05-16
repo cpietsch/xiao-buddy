@@ -68,6 +68,8 @@ def main() -> None:
         agent = diagnostics.get("agent", {})
         timings = diagnostics.get("timings_ms", {})
         first_token_ms = _first_token_ms(diagnostics)
+        agent_first_visible_ms = _agent_first_visible_ms(diagnostics)
+        draft_visible_ms = _draft_visible_ms(diagnostics)
         required_source_ids = _source_ids_for_required_citations(citations, required_citations)
         all_source_ids = _source_ids_from_citations(citations)
         result = {
@@ -84,7 +86,9 @@ def main() -> None:
             "all_source_ids": all_source_ids,
             "stream_chunks": int(agent.get("stream_chunks", 0) or 0),
             "stream_chars": int(agent.get("stream_chars", len(answer)) or 0),
+            "draft_visible_ms": draft_visible_ms,
             "first_token_ms": first_token_ms,
+            "agent_first_visible_ms": agent_first_visible_ms,
             "answer_chars": len(answer),
             "total_ms": float(timings.get("total", 0) or 0),
         }
@@ -120,8 +124,19 @@ def main() -> None:
     print(f"answer agent-hit rate: {agent_hits}/{total} = {summary['agent_rate']:.0%}", flush=True)
     print(f"answer stream-hit rate: {stream_hits}/{total} = {summary['stream_rate']:.0%}", flush=True)
     print(
+        f"answer source-draft latency: p50_ms={summary['p50_draft_visible_ms']:.1f} "
+        f"p95_ms={summary['p95_draft_visible_ms']:.1f} max_ms={summary['max_draft_visible_ms']:.1f}",
+        flush=True,
+    )
+    print(
         f"answer first-token latency: p50_ms={summary['p50_first_token_ms']:.1f} "
         f"p95_ms={summary['p95_first_token_ms']:.1f} max_ms={summary['max_first_token_ms']:.1f}",
+        flush=True,
+    )
+    print(
+        f"answer agent-visible latency: p50_ms={summary['p50_agent_first_visible_ms']:.1f} "
+        f"p95_ms={summary['p95_agent_first_visible_ms']:.1f} "
+        f"max_ms={summary['max_agent_first_visible_ms']:.1f}",
         flush=True,
     )
     print(
@@ -154,10 +169,20 @@ def main() -> None:
 def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
     total = len(results)
     totals_ms = [float(result["total_ms"]) for result in results]
+    draft_visible_ms = [
+        float(value)
+        for result in results
+        if isinstance(value := result.get("draft_visible_ms"), (int, float))
+    ]
     first_token_ms = [
         float(value)
         for result in results
         if isinstance(value := result.get("first_token_ms"), (int, float))
+    ]
+    agent_first_visible_ms = [
+        float(value)
+        for result in results
+        if isinstance(value := result.get("agent_first_visible_ms"), (int, float))
     ]
     return {
         "cases": total,
@@ -168,9 +193,15 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         "inline_citation_rate": _rate(results, "inline_citation_ok"),
         "agent_rate": _rate(results, "agent_ok"),
         "stream_rate": _rate(results, "stream_ok"),
+        "p50_draft_visible_ms": _percentile(draft_visible_ms, 50),
+        "p95_draft_visible_ms": _percentile(draft_visible_ms, 95),
+        "max_draft_visible_ms": max(draft_visible_ms) if draft_visible_ms else 0.0,
         "p50_first_token_ms": _percentile(first_token_ms, 50),
         "p95_first_token_ms": _percentile(first_token_ms, 95),
         "max_first_token_ms": max(first_token_ms) if first_token_ms else 0.0,
+        "p50_agent_first_visible_ms": _percentile(agent_first_visible_ms, 50),
+        "p95_agent_first_visible_ms": _percentile(agent_first_visible_ms, 95),
+        "max_agent_first_visible_ms": max(agent_first_visible_ms) if agent_first_visible_ms else 0.0,
         "p50_ms": _percentile(totals_ms, 50),
         "p95_ms": _percentile(totals_ms, 95),
         "max_ms": max(totals_ms) if totals_ms else 0.0,
@@ -186,6 +217,26 @@ def _first_token_ms(diagnostics: dict[str, object]) -> float | None:
     value = agent.get("first_token_ms") if isinstance(agent, dict) else None
     if value is None:
         value = diagnostics.get("agent_first_token_ms")
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _draft_visible_ms(diagnostics: dict[str, object]) -> float | None:
+    draft = diagnostics.get("draft", {})
+    value = draft.get("first_visible_ms") if isinstance(draft, dict) else None
+    if value is None:
+        value = diagnostics.get("draft_first_visible_ms")
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _agent_first_visible_ms(diagnostics: dict[str, object]) -> float | None:
+    agent = diagnostics.get("agent", {})
+    value = agent.get("first_visible_ms") if isinstance(agent, dict) else None
+    if value is None:
+        value = diagnostics.get("agent_first_visible_ms")
     if isinstance(value, (int, float)):
         return float(value)
     return None

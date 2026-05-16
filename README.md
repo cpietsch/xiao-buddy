@@ -295,10 +295,11 @@ make answer-eval
 
 This calls the full RAG pipeline and checks that final answers include required
 facts, required source URLs, matching inline `[source-id]` citations, live agent
-output, and streamed token updates for the cases in
+output, source-backed draft visibility, and streamed token updates for the cases in
 `data/corpus/answer_eval_queries.jsonl`. It also writes a compact structured
 report to `dist/answer-quality/all.json`, including per-case pass flags, source
-IDs, stream counts, first-token latency, and total latency percentiles.
+IDs, stream counts, source-draft latency, hosted-agent first-token latency,
+agent-visible-from-request latency, and total latency percentiles.
 
 Run one generated-answer case while debugging a prompt or endpoint:
 

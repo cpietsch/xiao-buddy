@@ -145,8 +145,12 @@ def answer_question_stream(
     agent_error = ""
     agent_chunks = 0
     agent_first_token_ms: float | None = None
+    agent_first_visible_ms: float | None = None
     draft_answer = _draft_answer(question, image_summary, chunks)
+    draft_chars = len(draft_answer) if draft_answer else 0
+    draft_first_visible_ms: float | None = None
     if draft_answer:
+        draft_first_visible_ms = _elapsed_ms(run_started_at)
         yield (
             draft_answer,
             citations,
@@ -162,14 +166,16 @@ def answer_question_stream(
                 run_started_at=run_started_at,
                 agent_status="running",
                 agent_streaming=True,
-                draft_chars=len(draft_answer),
+                draft_chars=draft_chars,
+                draft_first_visible_ms=draft_first_visible_ms,
             ),
             format_progress(
                 stage="generate",
                 backend=backend,
                 source_count=len(chunks),
                 retrieval_detail=retrieval_detail,
-                draft_chars=len(draft_answer),
+                draft_chars=draft_chars,
+                draft_first_visible_ms=draft_first_visible_ms,
             ),
         )
 
@@ -188,6 +194,7 @@ def answer_question_stream(
         agent_chunks += 1
         if agent_first_token_ms is None:
             agent_first_token_ms = _elapsed_ms(generate_started_at)
+            agent_first_visible_ms = _elapsed_ms(run_started_at)
         streamed_answer = _repair_generated_text("".join(answer_parts))
         if streamed_answer.strip():
             timings_ms["generate"] = _elapsed_ms(generate_started_at)
@@ -210,6 +217,9 @@ def answer_question_stream(
                     agent_chunks=agent_chunks,
                     agent_chars=len(streamed_answer),
                     agent_first_token_ms=agent_first_token_ms,
+                    agent_first_visible_ms=agent_first_visible_ms,
+                    draft_chars=draft_chars,
+                    draft_first_visible_ms=draft_first_visible_ms,
                 ),
                 format_progress(
                     stage="generate",
@@ -218,6 +228,8 @@ def answer_question_stream(
                     retrieval_detail=retrieval_detail,
                     agent_chunks=agent_chunks,
                     stream_chars=len(streamed_answer),
+                    draft_chars=draft_chars,
+                    draft_first_visible_ms=draft_first_visible_ms,
                     first_token_ms=agent_first_token_ms,
                 ),
             )
@@ -253,7 +265,10 @@ def answer_question_stream(
         agent_chunks=agent_chunks,
         agent_chars=len(answer),
         agent_first_token_ms=agent_first_token_ms if agent_used else None,
+        agent_first_visible_ms=agent_first_visible_ms if agent_used else None,
         agent_error=agent_error,
+        draft_chars=draft_chars,
+        draft_first_visible_ms=draft_first_visible_ms,
     )
 
     yield (
@@ -268,6 +283,8 @@ def answer_question_stream(
             agent_used=bool(diagnostics["agent_used"]),
             agent_chunks=agent_chunks,
             stream_chars=len(answer),
+            draft_chars=draft_chars,
+            draft_first_visible_ms=draft_first_visible_ms,
             first_token_ms=agent_first_token_ms if agent_used else None,
             elapsed_ms=diagnostics["timings_ms"]["total"],
         ),
@@ -284,6 +301,7 @@ def format_progress(
     agent_chunks: int = 0,
     stream_chars: int = 0,
     draft_chars: int = 0,
+    draft_first_visible_ms: float | None = None,
     first_token_ms: float | None = None,
     elapsed_ms: float | None = None,
     retrieval_detail: str = "",
@@ -312,6 +330,7 @@ def format_progress(
                 agent_chunks,
                 stream_chars,
                 draft_chars,
+                draft_first_visible_ms,
                 first_token_ms,
                 elapsed_ms,
                 retrieval_detail,
@@ -327,6 +346,7 @@ def format_progress(
                 agent_chunks,
                 stream_chars,
                 draft_chars,
+                draft_first_visible_ms,
                 first_token_ms,
                 elapsed_ms,
                 retrieval_detail,
@@ -356,6 +376,7 @@ def _progress_detail(
     agent_chunks: int,
     stream_chars: int,
     draft_chars: int,
+    draft_first_visible_ms: float | None,
     first_token_ms: float | None,
     elapsed_ms: float | None,
     retrieval_detail: str,
@@ -374,7 +395,8 @@ def _progress_detail(
             return f"{prefix}; {stream_label} {stream_chars} chars{first_token_detail}"
         if draft_chars:
             prefix = retrieval_detail or f"{source_count} sources via {backend}"
-            return f"{prefix}; source draft {draft_chars} chars; agent running"
+            draft_ms = f" in {draft_first_visible_ms:.0f} ms" if draft_first_visible_ms is not None else ""
+            return f"{prefix}; source draft {draft_chars} chars{draft_ms}; agent running"
         if source_count:
             prefix = retrieval_detail or f"{source_count} sources via {backend}"
             return f"{prefix}; agent running"
@@ -431,8 +453,10 @@ def _run_diagnostics(
     agent_chunks: int = 0,
     agent_chars: int = 0,
     agent_first_token_ms: float | None = None,
+    agent_first_visible_ms: float | None = None,
     agent_error: str = "",
     draft_chars: int = 0,
+    draft_first_visible_ms: float | None = None,
 ) -> dict[str, object]:
     timing_snapshot = dict(timings_ms)
     timing_snapshot["total"] = _elapsed_ms(run_started_at)
@@ -452,8 +476,14 @@ def _run_diagnostics(
         diagnostics["retrieval"] = retrieval_diagnostics
     if chunks is not None:
         diagnostics["top_sources"] = _source_summaries(chunks)
-    if draft_chars:
-        diagnostics["draft"] = {"visible": True, "chars": draft_chars}
+    if draft_chars or draft_first_visible_ms is not None:
+        draft: dict[str, object] = {"visible": bool(draft_chars)}
+        if draft_chars:
+            draft["chars"] = draft_chars
+        if draft_first_visible_ms is not None:
+            draft["first_visible_ms"] = draft_first_visible_ms
+            diagnostics["draft_first_visible_ms"] = draft_first_visible_ms
+        diagnostics["draft"] = draft
 
     agent: dict[str, object] = {
         "status": agent_status or ("streaming" if agent_streaming else "waiting"),
@@ -465,6 +495,9 @@ def _run_diagnostics(
     if agent_first_token_ms is not None:
         agent["first_token_ms"] = agent_first_token_ms
         diagnostics["agent_first_token_ms"] = agent_first_token_ms
+    if agent_first_visible_ms is not None:
+        agent["first_visible_ms"] = agent_first_visible_ms
+        diagnostics["agent_first_visible_ms"] = agent_first_visible_ms
     if agent_used is not None:
         agent["used"] = agent_used
         diagnostics["agent_used"] = agent_used
