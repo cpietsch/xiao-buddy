@@ -373,12 +373,33 @@ def _chat_payload(model: str, messages: list[dict[str, Any]]) -> dict[str, Any]:
 def _chat_message_content(body: dict[str, Any]) -> str:
     choice = body["choices"][0]
     message = choice.get("message") or {}
-    return str(message.get("content", ""))
+    if "content" in message:
+        return _content_to_text(message.get("content"))
+    return _content_to_text(choice.get("text"))
 
 
 def _chat_delta_content(body: dict[str, Any]) -> str:
     choices = body.get("choices") or []
     if not choices:
         return ""
-    delta = choices[0].get("delta") or {}
-    return str(delta.get("content") or "")
+    choice = choices[0]
+    delta = choice.get("delta") or {}
+    if "content" in delta:
+        return _content_to_text(delta.get("content"))
+    return _content_to_text(choice.get("text"))
+
+
+def _content_to_text(content: Any) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(_content_to_text(part) for part in content)
+    if isinstance(content, dict):
+        if "text" in content:
+            return _content_to_text(content.get("text"))
+        if "content" in content:
+            return _content_to_text(content.get("content"))
+        return ""
+    return str(content)
