@@ -361,6 +361,13 @@ repo, run health with artifact verification enabled:
 python scripts/health_check.py --verify-artifacts --strict-warnings
 ```
 
+Before publishing a handoff, verify that the current archive matches the
+checked-in manifest and can restore into a clean index directory:
+
+```bash
+make verify-vector-artifact-restore
+```
+
 At query time the app embeds only the user/photo query, searches this local
 vector index, merges vector candidates with lexical/high-trust curated matches,
 reranks the evidence, and sends only the selected chunks to the final agent.

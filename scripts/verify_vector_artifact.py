@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     args = _parse_args()
-    metadata_path = _resolve_metadata_path(args.metadata)
+    metadata_path = _resolve_metadata_path(args.metadata, args.manifest)
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     archive_path = _resolve_archive_path(metadata, metadata_path)
 
@@ -48,12 +48,17 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--metadata",
         default="",
-        help="Metadata JSON path. Defaults to the newest dist/vector-index/*.tar.gz.json file.",
+        help="Metadata JSON path. Defaults to the dist/vector-index artifact matching the current manifest.",
+    )
+    parser.add_argument(
+        "--manifest",
+        default="data/index/xiao_vectors.json",
+        help="Vector manifest used to choose a matching artifact when --metadata is omitted.",
     )
     return parser.parse_args()
 
 
-def _resolve_metadata_path(value: str) -> Path:
+def _resolve_metadata_path(value: str, manifest: str = "data/index/xiao_vectors.json") -> Path:
     if value:
         path = Path(value).expanduser()
         return path if path.is_absolute() else ROOT / path
@@ -63,7 +68,37 @@ def _resolve_metadata_path(value: str) -> Path:
         reverse=True,
     )
     _assert(bool(candidates), "no vector artifact metadata found in dist/vector-index")
+    manifest_path = Path(manifest).expanduser()
+    if not manifest_path.is_absolute():
+        manifest_path = ROOT / manifest_path
+    if manifest_path.exists():
+        manifest_meta = json.loads(manifest_path.read_text(encoding="utf-8"))
+        matching = [
+            candidate
+            for candidate in candidates
+            if _metadata_matches_manifest(candidate, manifest_meta)
+        ]
+        _assert(
+            bool(matching),
+            f"no vector artifact metadata matches current manifest {manifest_path}",
+        )
+        return matching[0]
     return candidates[0]
+
+
+def _metadata_matches_manifest(metadata_path: Path, manifest_meta: dict[str, object]) -> bool:
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 - unreadable metadata is not a match.
+        return False
+    fields = ("backend", "count", "dim", "model", "source_hash")
+    for field in fields:
+        manifest_value = manifest_meta.get(field)
+        if field == "backend":
+            manifest_value = manifest_meta.get("backend") or manifest_meta.get("index_backend")
+        if manifest_value is not None and metadata.get(field) != manifest_value:
+            return False
+    return True
 
 
 def _resolve_archive_path(metadata: dict[str, object], metadata_path: Path) -> Path:

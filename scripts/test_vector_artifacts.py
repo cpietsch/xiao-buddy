@@ -9,6 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from xiao_copilot.vector_artifacts import ensure_vector_data, install_vector_artifact, sha256_file
+from scripts.verify_vector_artifact import _metadata_matches_manifest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,7 +81,30 @@ def main() -> None:
         )
         _assert(not raw_result.ok, "missing raw artifact should fail")
 
+        _assert_metadata_manifest_matching(work)
+
     print("PASS vector artifact package/install regression")
+
+
+def _assert_metadata_manifest_matching(work: Path) -> None:
+    manifest_meta = {
+        "backend": "hnsw",
+        "count": 42,
+        "dim": 2048,
+        "model": "qwen3-vl-embedding-2b",
+        "source_hash": "current-source",
+    }
+    good_metadata = work / "matching-artifact.json"
+    stale_metadata = work / "stale-artifact.json"
+    good_metadata.write_text(json.dumps(manifest_meta), encoding="utf-8")
+    stale_payload = {**manifest_meta, "source_hash": "stale-source"}
+    stale_metadata.write_text(json.dumps(stale_payload), encoding="utf-8")
+
+    _assert(_metadata_matches_manifest(good_metadata, manifest_meta), "matching artifact metadata should match")
+    _assert(
+        not _metadata_matches_manifest(stale_metadata, manifest_meta),
+        "stale artifact metadata should not match the current manifest",
+    )
 
 
 def _write_test_index(manifest_path: Path, data_path: Path) -> None:
