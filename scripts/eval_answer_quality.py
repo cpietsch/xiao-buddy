@@ -40,7 +40,8 @@ def main() -> None:
     for case in cases:
         print(f"RUN  {case['id']}", flush=True)
         answer, citations, diagnostics = answer_question(None, case["query"])
-        fact_ok = _contains_all_terms(answer, case.get("must_include", []))
+        missing_terms = _missing_terms(answer, case.get("must_include", []))
+        fact_ok = not missing_terms
         required_citations = case.get("must_cite", [])
         citation_ok = _contains_any_citation(citations, required_citations)
         inline_citation_ok = _inline_cites_required_source(answer, citations, required_citations)
@@ -70,7 +71,8 @@ def main() -> None:
             f"stream={'ok' if stream_ok else 'miss'} "
             f"chunks={agent.get('stream_chunks', 0)} "
             f"chars={agent.get('stream_chars', len(answer))} "
-            f"total_ms={timings.get('total', 0)}",
+            f"total_ms={timings.get('total', 0)}"
+            f"{' missing=' + ', '.join(missing_terms) if missing_terms else ''}",
             flush=True,
         )
 
@@ -88,8 +90,12 @@ def main() -> None:
 
 
 def _contains_all_terms(text: str, terms: list[str]) -> bool:
+    return not _missing_terms(text, terms)
+
+
+def _missing_terms(text: str, terms: list[str]) -> list[str]:
     normalized = _normalize_match_text(text)
-    return all(_normalize_match_text(term) in normalized for term in terms)
+    return [term for term in terms if _normalize_match_text(term) not in normalized]
 
 
 def _contains_any_citation(text: str, citations: list[str]) -> bool:

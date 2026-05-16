@@ -14,6 +14,7 @@ from xiao_copilot.knowledge_base import KnowledgeChunk
 
 def main() -> None:
     _assert_text_repair()
+    _assert_system_prompt_preserves_acronyms()
 
     original_load_settings = pipeline.load_settings
     original_retrieve = pipeline.retrieve
@@ -41,6 +42,13 @@ def main() -> None:
         pipeline._generate_with_agent_stream = original_generate_stream  # type: ignore[assignment]
 
     print("PASS pipeline failover regression")
+
+
+def _assert_system_prompt_preserves_acronyms() -> None:
+    _assert(
+        "full service name and acronym" in pipeline.SYSTEM_PROMPT,
+        "agent prompt should expand service acronyms for clear cited answers",
+    )
 
 
 def _assert_text_repair() -> None:

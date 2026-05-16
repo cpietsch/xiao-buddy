@@ -372,7 +372,7 @@ def _chat_payload(model: str, messages: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "model": model,
         "messages": messages,
-        "temperature": 0.2,
+        "temperature": 0.0,
         "max_tokens": 700,
         "chat_template_kwargs": {"enable_thinking": False},
     }

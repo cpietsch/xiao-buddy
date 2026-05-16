@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import xiao_copilot.clients as clients
 from xiao_copilot.clients import (
+    _chat_payload,
     _chat_delta_content,
     _chat_message_content,
     _content_to_text,
@@ -18,12 +19,19 @@ from xiao_copilot.clients import (
 
 
 def main() -> None:
+    _assert_chat_payload_is_deterministic()
     _assert_chat_content_variants()
     _assert_stream_content_variants()
     _assert_provider_error_variants()
     _assert_stream_provider_errors_are_yielded()
     _assert_rerank_parsers()
     print("PASS client parser regression")
+
+
+def _assert_chat_payload_is_deterministic() -> None:
+    payload = _chat_payload("test-model", [{"role": "user", "content": "hello"}])
+    _assert(payload["temperature"] == 0.0, "agent chat payload should be deterministic for eval stability")
+    _assert(payload["chat_template_kwargs"] == {"enable_thinking": False}, "chat payload should disable thinking")
 
 
 def _assert_chat_content_variants() -> None:
