@@ -18,7 +18,6 @@ This is a hackathon-simple Seeed hardware corpus for a multimodal support copilo
 - `support_examples.jsonl`: few-shot style question/answer examples with expected citations.
 - `eval_queries.jsonl`: strict retrieval evaluation set for board, citation, and full-wiki content checks.
 - `answer_eval_queries.jsonl`: generated-answer evaluation set for final answer facts, source URLs, inline citation IDs, agent usage, and streaming.
-- `rejected_eval_candidates.jsonl`: hardening backlog of proposed eval cases that did not yet pass top-k retrieval validation.
 
 To import the whole Seeed wiki instead of the XIAO-only docs:
 

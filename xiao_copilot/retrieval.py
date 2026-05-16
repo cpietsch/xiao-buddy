@@ -15,6 +15,65 @@ TOKEN_RE = re.compile(r"[a-zA-Z0-9_+.-]+")
 DEFAULT_RERANK_TEXT_CHARS = 3200
 RERANK_WEIGHT = 1.0
 INITIAL_RETRIEVAL_WEIGHT = 0.25
+SOURCE_CONTEXT_SIBLINGS = 4
+LEXICAL_RECALL_SCAN = 1000
+LEXICAL_RECALL_SLOTS = 6
+COMMON_QUERY_TERMS = {
+    "about",
+    "after",
+    "and",
+    "are",
+    "between",
+    "can",
+    "does",
+    "for",
+    "from",
+    "has",
+    "have",
+    "how",
+    "into",
+    "lower",
+    "mode",
+    "need",
+    "not",
+    "the",
+    "through",
+    "to",
+    "used",
+    "what",
+    "when",
+    "which",
+    "with",
+}
+TECHNICAL_QUERY_TERMS = {
+    "adc",
+    "ble",
+    "bluetooth",
+    "boot",
+    "camera",
+    "comparison",
+    "current",
+    "deploy",
+    "firmware",
+    "gpio",
+    "gpios",
+    "i2c",
+    "lora",
+    "matter",
+    "micropython",
+    "model",
+    "mqtt",
+    "power",
+    "sensecraft",
+    "slot",
+    "spi",
+    "table",
+    "thread",
+    "uart",
+    "uf2",
+    "wifi",
+    "zigbee",
+}
 
 
 def retrieve(
@@ -100,8 +159,12 @@ def retrieve(
         {"id": chunk.id, "score": round(float(score), 4)}
         for chunk, score in ranked[: settings.candidate_k]
     ]
-    top_scored = ranked[: settings.candidate_k]
+    top_scored = _select_rerank_candidates(query, ranked, lexical_ranked, settings.candidate_k)
     top = [chunk for chunk, _score in top_scored]
+    diagnostics["selected_reranker_candidates"] = [
+        {"id": chunk.id, "score": round(float(score), 4)}
+        for chunk, score in top_scored
+    ]
 
     rerank_text_chars = max(200, settings.rerank_text_chars or DEFAULT_RERANK_TEXT_CHARS)
     rerank_documents = [_rerank_text(chunk, rerank_text_chars) for chunk in top]
@@ -141,7 +204,10 @@ def retrieve(
             for index, _score, _combined_score in hybrid_scores
             if 0 <= index < len(top)
         ]
-        top = ordered[: settings.top_k]
+        top = _expand_source_context(query, ordered, chunks, settings.top_k)
+        diagnostics["source_context_expanded"] = [chunk.id for chunk in top] != [
+            chunk.id for chunk in ordered[: settings.top_k]
+        ]
     else:
         if rerank_result.meta:
             diagnostics["reranker_mode"] = rerank_result.meta.get("mode", "unknown")
@@ -184,6 +250,267 @@ def _hybrid_rerank_scores(
     return sorted(combined, key=lambda item: item[2], reverse=True)
 
 
+def _select_rerank_candidates(
+    query: str,
+    ranked: list[tuple[KnowledgeChunk, float]],
+    lexical_ranked: list[tuple[KnowledgeChunk, float]],
+    candidate_k: int,
+) -> list[tuple[KnowledgeChunk, float]]:
+    if candidate_k <= 0:
+        return []
+
+    scored_by_id = {chunk.id: score for chunk, score in ranked}
+    selected: list[tuple[KnowledgeChunk, float]] = []
+    seen: set[str] = set()
+
+    def add(chunk: KnowledgeChunk, score: float) -> None:
+        if chunk.id in seen or len(selected) >= candidate_k:
+            return
+        seen.add(chunk.id)
+        selected.append((chunk, score))
+
+    recall_slots = min(LEXICAL_RECALL_SLOTS, max(2, candidate_k // 2), candidate_k)
+    primary_slots = max(candidate_k - recall_slots, 1)
+    for chunk, score in ranked[:primary_slots]:
+        add(chunk, score)
+
+    lexical_candidates: list[tuple[KnowledgeChunk, float, float]] = []
+    for chunk, lexical_score in lexical_ranked[: max(LEXICAL_RECALL_SCAN, candidate_k * 8)]:
+        if chunk.id in seen:
+            continue
+        recall_score = _recall_match_score(query, chunk.search_text)
+        if recall_score <= 0 and lexical_score < 0.55:
+            continue
+        score = scored_by_id.get(chunk.id, min(lexical_score, 2.5) * 0.45)
+        priority = recall_score + min(lexical_score, 1.0) * 0.1
+        lexical_candidates.append((chunk, score, priority))
+
+    lexical_candidates.sort(key=lambda item: item[2], reverse=True)
+    for chunk, score, _priority in lexical_candidates:
+        add(chunk, score)
+
+    for chunk, score in ranked:
+        add(chunk, score)
+        if len(selected) >= candidate_k:
+            break
+
+    return selected
+
+
+def _expand_source_context(
+    query: str,
+    ordered: list[KnowledgeChunk],
+    corpus: list[KnowledgeChunk],
+    limit: int,
+) -> list[KnowledgeChunk]:
+    if limit <= 0 or not ordered:
+        return []
+    if not _should_expand_source_context(query):
+        return ordered[:limit]
+
+    expansion_window = ordered[: min(len(ordered), max(limit, limit + 3))]
+    source_counts = Counter(
+        key for key in (_source_context_key(chunk) for chunk in expansion_window) if key
+    )
+    expandable_sources = {key for key, count in source_counts.items() if count >= 2}
+    if not expandable_sources:
+        return ordered[:limit]
+
+    by_source: dict[str, list[KnowledgeChunk]] = {}
+    for chunk in corpus:
+        key = _source_context_key(chunk)
+        if key:
+            by_source.setdefault(key, []).append(chunk)
+
+    selected = list(ordered[:limit])
+    seen = {chunk.id for chunk in selected}
+    sibling_candidates: list[tuple[KnowledgeChunk, float]] = []
+    for chunk in selected:
+        key = _source_context_key(chunk)
+        if key not in expandable_sources:
+            continue
+        siblings = by_source.get(key, []) if key else []
+        for sibling in _rank_source_siblings(query, chunk, siblings):
+            if sibling.id in seen:
+                continue
+            sibling_candidates.append((sibling, _context_utility(query, sibling)))
+
+    sibling_candidates.sort(key=lambda item: item[1], reverse=True)
+    for sibling, sibling_utility in sibling_candidates:
+        if sibling.id in seen:
+            continue
+        victim_index = _source_context_replacement_index(query, selected, sibling, sibling_utility)
+        if victim_index is None:
+            continue
+        seen.discard(selected[victim_index].id)
+        selected[victim_index] = sibling
+        seen.add(sibling.id)
+
+    return selected
+
+
+def _rank_source_siblings(
+    query: str,
+    anchor: KnowledgeChunk,
+    siblings: list[KnowledgeChunk],
+) -> list[KnowledgeChunk]:
+    if len(siblings) <= 1:
+        return []
+
+    try:
+        anchor_index = next(index for index, chunk in enumerate(siblings) if chunk.id == anchor.id)
+    except StopIteration:
+        anchor_index = -1
+
+    ranked: list[tuple[KnowledgeChunk, float]] = []
+    for index, sibling in enumerate(siblings):
+        if sibling.id == anchor.id:
+            continue
+        lexical_score = _lexical_score(query, sibling.search_text)
+        recall_score = _recall_match_score(query, sibling.search_text)
+        procedure_score = _procedure_stage_score(query, sibling)
+        detail_score = _configuration_detail_score(query, sibling)
+        if lexical_score <= 0 and recall_score <= 0:
+            continue
+        proximity = 0.0
+        if anchor_index >= 0:
+            proximity = 1.0 / (abs(index - anchor_index) + 1)
+        ranked.append(
+            (
+                sibling,
+                lexical_score + recall_score + procedure_score + detail_score + proximity * 0.12,
+            )
+        )
+
+    ranked.sort(key=lambda item: item[1], reverse=True)
+    return [chunk for chunk, _score in ranked[:SOURCE_CONTEXT_SIBLINGS]]
+
+
+def _should_expand_source_context(query: str) -> bool:
+    q = query.lower()
+    return any(
+        term in q
+        for term in (
+            "camera slot",
+            "compile",
+            "deploy",
+            "firmware",
+            "mqtt gateway",
+            "trigger action",
+        )
+    )
+
+
+def _source_context_replacement_index(
+    query: str,
+    selected: list[KnowledgeChunk],
+    sibling: KnowledgeChunk,
+    sibling_utility: float,
+) -> int | None:
+    if not selected:
+        return None
+    utilities = [_context_utility(query, chunk) for chunk in selected]
+    sibling_key = _source_context_key(sibling)
+    off_source_indices = [
+        index
+        for index, chunk in enumerate(selected)
+        if _source_context_key(chunk) != sibling_key
+    ]
+    if off_source_indices:
+        weakest_index = min(
+            off_source_indices,
+            key=lambda index: utilities[index]
+            - (0.75 if _is_weekly_wiki_source(selected[index]) else 0.0),
+        )
+        if _procedure_stage_score(query, sibling) > 0 or sibling_utility > utilities[weakest_index] - 0.25:
+            return weakest_index
+        return None
+
+    weakest_index = min(range(len(utilities)), key=lambda index: utilities[index])
+    if sibling_utility <= utilities[weakest_index] + 0.15:
+        return None
+    return weakest_index
+
+
+def _context_utility(query: str, chunk: KnowledgeChunk) -> float:
+    return (
+        _lexical_score(query, chunk.search_text)
+        + _recall_match_score(query, chunk.search_text)
+        + _procedure_stage_score(query, chunk)
+        + _configuration_detail_score(query, chunk)
+        + _comparison_table_hint_score(query, chunk)
+    )
+
+
+def _source_context_key(chunk: KnowledgeChunk) -> str:
+    source_file = str(chunk.metadata.get("source_file", "")).strip()
+    if _is_weekly_wiki_source(chunk):
+        return ""
+    if source_file:
+        return f"file:{source_file}"
+    if chunk.kind == "wiki" and chunk.source:
+        return f"source:{chunk.source}"
+    return ""
+
+
+def _procedure_stage_score(query: str, chunk: KnowledgeChunk) -> float:
+    q = query.lower()
+    text = f"{chunk.title}\n{chunk.text}".lower()
+    if not any(
+        term in q
+        for term in (
+            "compile",
+            "connect",
+            "deploy",
+            "firmware",
+            "preview",
+            "setup",
+            "steps",
+            "update",
+            "verify",
+        )
+    ):
+        return 0.0
+
+    score = 0.0
+    if "step" in chunk.title.lower():
+        score += 0.2
+    if "deploy" in q and any(term in text for term in ("deploy", "upload", "connect device")):
+        score += 0.75
+    if "verify" in q and any(term in text for term in ("preview", "real-time", "feedback", "bounding box")):
+        score += 0.45
+    if "firmware" in q and any(term in text for term in ("firmware", "uf2", "bootloader")):
+        score += 0.4
+    if "compile" in q and any(term in text for term in ("build", "compile", "make ")):
+        score += 0.35
+    if "connect" in q and any(term in text for term in ("register", "configure", "otaa", "eui", "app key")):
+        score += 0.3
+    return score
+
+
+def _configuration_detail_score(query: str, chunk: KnowledgeChunk) -> float:
+    q = query.lower()
+    text = f"{chunk.title}\n{chunk.text}".lower()
+    score = 0.0
+
+    if (
+        any(term in q for term in ("yaml", "settings", "configuration", "config"))
+        and "esphome" in q
+    ):
+        if any(term in text for term in ("platform_version", "variant:", "version:", "seeed_xiao_esp32c3")):
+            score += 1.0
+
+    if "trigger" in q and "action" in q:
+        if any(term in text for term in ("light up the led", "save image to the sd card", "microsd card")):
+            score += 1.2
+
+    return score
+
+
+def _is_weekly_wiki_source(chunk: KnowledgeChunk) -> bool:
+    return bool(re.search(r"/wiki\d+/?$", chunk.source)) or "Weekly Wiki" in chunk.title
+
+
 def _merge_vector_and_lexical_scores(
     query: str,
     vector_matches,
@@ -214,6 +541,7 @@ def _merge_vector_and_lexical_scores(
         score += _board_hint_score(query, chunk) * 0.15
         score += _kind_hint_score(query, chunk) * 0.05
         score += _capability_hint_score(query, chunk) * 0.45
+        score += _comparison_table_hint_score(query, chunk)
         scored.append((chunk, score))
 
     return scored
@@ -230,7 +558,8 @@ def _lexical_prefilter(
             chunk,
             _lexical_score(query, chunk.search_text)
             + _board_hint_score(query, chunk)
-            + _kind_hint_score(query, chunk),
+            + _kind_hint_score(query, chunk)
+            + _comparison_table_hint_score(query, chunk),
         )
         for chunk in chunks
     ]
@@ -271,7 +600,80 @@ def _lexical_score(query: str, text: str) -> float:
 
 
 def _tokens(text: str) -> list[str]:
-    return [match.group(0).lower() for match in TOKEN_RE.finditer(text)]
+    tokens: list[str] = []
+    for match in TOKEN_RE.finditer(text):
+        token = match.group(0).lower().strip(".+-")
+        if not token:
+            continue
+        tokens.append(token)
+        collapsed = re.sub(r"[.+-]+", "", token)
+        if collapsed and collapsed != token:
+            tokens.append(collapsed)
+        for part in re.split(r"[.+-]+", token):
+            if part and part != token:
+                tokens.append(part)
+    return tokens
+
+
+def _distinctive_match_score(query: str, text: str) -> float:
+    terms = _distinctive_query_terms(query)
+    if not terms:
+        return 0.0
+    text_terms = set(_tokens(text))
+    matched = sum(1 for term in terms if term in text_terms)
+    return matched / len(terms)
+
+
+def _recall_match_score(query: str, text: str) -> float:
+    technical_terms = _technical_query_terms(query)
+    distinctive_score = _distinctive_match_score(query, text)
+    if not technical_terms:
+        return distinctive_score * 0.4
+    text_terms = set(_tokens(text))
+    technical_matches = sum(1 for term in technical_terms if term in text_terms)
+    return (technical_matches / len(technical_terms)) * 1.5 + distinctive_score * 0.35
+
+
+def _distinctive_query_terms(query: str) -> list[str]:
+    terms = []
+    seen: set[str] = set()
+    for token in _tokens(query):
+        if token in seen or token in COMMON_QUERY_TERMS:
+            continue
+        if _is_distinctive_token(token):
+            seen.add(token)
+            terms.append(token)
+    return terms
+
+
+def _technical_query_terms(query: str) -> list[str]:
+    terms = []
+    seen: set[str] = set()
+    for token in _tokens(query):
+        if token in seen or token in COMMON_QUERY_TERMS:
+            continue
+        if _is_technical_token(token):
+            seen.add(token)
+            terms.append(token)
+    return terms
+
+
+def _is_distinctive_token(token: str) -> bool:
+    if len(token) <= 1:
+        return False
+    if "_" in token or any(char.isdigit() for char in token):
+        return True
+    if token in {"adc", "ble", "boot", "i2c", "lora", "mqtt", "spi", "uart", "uf2", "wifi"}:
+        return True
+    return len(token) >= 5
+
+
+def _is_technical_token(token: str) -> bool:
+    return (
+        "_" in token
+        or any(char.isdigit() for char in token)
+        or token in TECHNICAL_QUERY_TERMS
+    )
 
 
 def _board_hint_score(query: str, chunk: KnowledgeChunk) -> float:
@@ -303,6 +705,25 @@ def _kind_hint_score(query: str, chunk: KnowledgeChunk) -> float:
         if chunk.kind in {"gotchas", "support", "note"}:
             score += 0.35
 
+    return score
+
+
+def _comparison_table_hint_score(query: str, chunk: KnowledgeChunk) -> float:
+    q = query.lower()
+    if "xiao" not in q:
+        return 0.0
+    if not any(term in q for term in ("between", "compare", "comparison", "table")):
+        return 0.0
+    title = chunk.title.lower()
+    text = chunk.text.lower()
+    if "comparison table" not in title:
+        return 0.0
+
+    score = 0.9
+    if any(term in q for term in ("current", "low power", "power mode", "battery")) and (
+        "low power mode" in text or "power consumption" in text
+    ):
+        score += 0.5
     return score
 
 

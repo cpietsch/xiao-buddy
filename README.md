@@ -52,7 +52,7 @@ AGENT_MODEL=qwen3p6-35b-a3b
 AGENT_API_KEY=
 
 TOP_K=5
-CANDIDATE_K=8
+CANDIDATE_K=16
 VECTOR_CANDIDATE_K=96
 VECTOR_INDEX_MANIFEST=data/index/xiao_vectors.json
 VECTOR_INDEX_DATA=
@@ -233,10 +233,6 @@ make rerank-benchmark
 The production default is `RERANK_TEXT_CHARS=3200`, which keeps richer evidence
 available to the reranker while still bounding each candidate payload.
 
-Proposed cases that are useful but not yet reliable live in
-`data/corpus/rejected_eval_candidates.jsonl`. Treat them as a retrieval tuning
-backlog, not as a passing gate.
-
 This writes:
 
 - `data/index/xiao_vectors.json` - vector index manifest, chunk IDs, source hash
@@ -323,7 +319,6 @@ variables rather than committing them to the repo.
 - `data/corpus/support_examples.jsonl` - seed support examples for demo planning.
 - `data/corpus/eval_queries.jsonl` - strict retrieval benchmark covering XIAO boards plus selected full-wiki sensor, robotics, LoRa, and AI workflows.
 - `data/corpus/answer_eval_queries.jsonl` - generated-answer benchmark for final facts, citations, agent use, and streaming.
-- `data/corpus/rejected_eval_candidates.jsonl` - retrieval hardening backlog for candidates that do not pass the live gate yet.
 - `xiao_copilot/config.py` - environment-driven endpoint settings.
 - `xiao_copilot/clients.py` - thin HTTP clients for embeddings, reranking, and chat completions.
 - `xiao_copilot/knowledge_base.py` - corpus loader that turns the curated JSON into retrieval chunks.
