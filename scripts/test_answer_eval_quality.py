@@ -100,6 +100,7 @@ def _assert_summary_reports_latency_and_rates() -> None:
                 "inline_citation_ok": True,
                 "agent_ok": True,
                 "stream_ok": True,
+                "first_token_ms": 4.0,
                 "total_ms": 10.0,
             },
             {
@@ -110,6 +111,7 @@ def _assert_summary_reports_latency_and_rates() -> None:
                 "inline_citation_ok": False,
                 "agent_ok": True,
                 "stream_ok": True,
+                "first_token_ms": 20.0,
                 "total_ms": 30.0,
             },
         ]
@@ -122,6 +124,9 @@ def _assert_summary_reports_latency_and_rates() -> None:
     _assert(summary["inline_citation_rate"] == 0.5, "summary should compute inline citation rate")
     _assert(summary["agent_rate"] == 1.0, "summary should compute agent hit rate")
     _assert(summary["stream_rate"] == 1.0, "summary should compute stream hit rate")
+    _assert(summary["p50_first_token_ms"] == 12.0, "summary should compute p50 first-token latency")
+    _assert(summary["p95_first_token_ms"] == 19.2, "summary should compute p95 first-token latency")
+    _assert(summary["max_first_token_ms"] == 20.0, "summary should compute max first-token latency")
     _assert(summary["p50_ms"] == 20.0, "summary should compute p50 latency")
     _assert(summary["p95_ms"] == 29.0, "summary should compute p95 latency")
     _assert(summary["max_ms"] == 30.0, "summary should compute max latency")
@@ -164,7 +169,7 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
             diagnostics = {
                 "agent_used": True,
                 "agent_streamed": True,
-                "agent": {"stream_chunks": 1, "stream_chars": len(answer)},
+                "agent": {"stream_chunks": 1, "stream_chars": len(answer), "first_token_ms": 3.5},
                 "timings_ms": {"total": 7},
             }
             return answer, citations, diagnostics
@@ -206,6 +211,8 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
         "required_citations: https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/",
         "required_source_ids: esp32c6-guide",
         "answer_excerpt: Use XIAO ESP32C6 for Thread and Zigbee [esp32c6-guide].",
+        "first_token_ms=3.5",
+        "answer first-token latency: p50_ms=3.5 p95_ms=3.5 max_ms=3.5",
         "answer latency: p50_ms=7.0 p95_ms=7.0 max_ms=7.0",
         "wrote ",
     ]:
@@ -218,6 +225,7 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
     _assert(results[0]["missing_terms"] == ["802.15.4"], "JSON report should include missing terms")
     _assert(results[0]["required_source_ids"] == ["esp32c6-guide"], "JSON report should include required source ids")
     _assert(results[0]["stream_chunks"] == 1, "JSON report should include stream chunk count")
+    _assert(results[0]["first_token_ms"] == 3.5, "JSON report should include first-token latency")
 
 
 def _assert(condition: bool, message: str) -> None:

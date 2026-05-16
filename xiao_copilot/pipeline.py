@@ -119,6 +119,7 @@ def answer_question_stream(
     answer_parts: list[str] = []
     agent_error = ""
     agent_chunks = 0
+    agent_first_token_ms: float | None = None
     for result in _generate_with_agent_stream(
         question=question,
         image_summary=image_summary,
@@ -132,6 +133,8 @@ def answer_question_stream(
             break
         answer_parts.append(str(result.data or ""))
         agent_chunks += 1
+        if agent_first_token_ms is None:
+            agent_first_token_ms = _elapsed_ms(generate_started_at)
         streamed_answer = _repair_generated_text("".join(answer_parts))
         if streamed_answer.strip():
             timings_ms["generate"] = _elapsed_ms(generate_started_at)
@@ -153,6 +156,7 @@ def answer_question_stream(
                     agent_streamed=True,
                     agent_chunks=agent_chunks,
                     agent_chars=len(streamed_answer),
+                    agent_first_token_ms=agent_first_token_ms,
                 ),
                 format_progress(
                     stage="generate",
@@ -161,6 +165,7 @@ def answer_question_stream(
                     retrieval_detail=retrieval_detail,
                     agent_chunks=agent_chunks,
                     stream_chars=len(streamed_answer),
+                    first_token_ms=agent_first_token_ms,
                 ),
             )
 
@@ -191,6 +196,7 @@ def answer_question_stream(
         agent_used=agent_used,
         agent_chunks=agent_chunks,
         agent_chars=len(answer),
+        agent_first_token_ms=agent_first_token_ms if agent_used else None,
         agent_error=agent_error,
     )
 
@@ -206,6 +212,7 @@ def answer_question_stream(
             agent_used=bool(diagnostics["agent_used"]),
             agent_chunks=agent_chunks,
             stream_chars=len(answer),
+            first_token_ms=agent_first_token_ms if agent_used else None,
             elapsed_ms=diagnostics["timings_ms"]["total"],
         ),
     )
@@ -220,6 +227,7 @@ def format_progress(
     agent_used: bool | None = None,
     agent_chunks: int = 0,
     stream_chars: int = 0,
+    first_token_ms: float | None = None,
     elapsed_ms: float | None = None,
     retrieval_detail: str = "",
 ) -> str:
@@ -246,6 +254,7 @@ def format_progress(
                 agent_used,
                 agent_chunks,
                 stream_chars,
+                first_token_ms,
                 elapsed_ms,
                 retrieval_detail,
             )
@@ -259,6 +268,7 @@ def format_progress(
                 agent_used,
                 agent_chunks,
                 stream_chars,
+                first_token_ms,
                 elapsed_ms,
                 retrieval_detail,
             )
@@ -286,6 +296,7 @@ def _progress_detail(
     agent_used: bool | None,
     agent_chunks: int,
     stream_chars: int,
+    first_token_ms: float | None,
     elapsed_ms: float | None,
     retrieval_detail: str,
 ) -> str:
@@ -297,7 +308,10 @@ def _progress_detail(
         if stream_chars:
             prefix = retrieval_detail or f"{source_count} sources via {backend}"
             stream_label = "streamed" if agent_used is not None else "streaming"
-            return f"{prefix}; {stream_label} {stream_chars} chars"
+            first_token_detail = (
+                f"; first token {first_token_ms:.0f} ms" if first_token_ms is not None else ""
+            )
+            return f"{prefix}; {stream_label} {stream_chars} chars{first_token_detail}"
         if source_count:
             prefix = retrieval_detail or f"{source_count} sources via {backend}"
             return f"{prefix}; agent running"
@@ -305,11 +319,14 @@ def _progress_detail(
     if stage == "done":
         mode = "agent" if agent_used else "fallback"
         suffix = f" in {elapsed_ms:.0f} ms" if elapsed_ms is not None else ""
+        first_token_detail = (
+            f"; first token {first_token_ms:.0f} ms" if first_token_ms is not None else ""
+        )
         if retrieval_detail:
-            return f"{retrieval_detail}; {mode} answer{suffix}"
+            return f"{retrieval_detail}; {mode} answer{suffix}{first_token_detail}"
         if source_count and backend:
-            return f"{source_count} sources via {backend}; {mode} answer{suffix}"
-        return f"{mode} answer{suffix}"
+            return f"{source_count} sources via {backend}; {mode} answer{suffix}{first_token_detail}"
+        return f"{mode} answer{suffix}{first_token_detail}"
     return ""
 
 
@@ -350,6 +367,7 @@ def _run_diagnostics(
     agent_used: bool | None = None,
     agent_chunks: int = 0,
     agent_chars: int = 0,
+    agent_first_token_ms: float | None = None,
     agent_error: str = "",
 ) -> dict[str, object]:
     timing_snapshot = dict(timings_ms)
@@ -378,6 +396,9 @@ def _run_diagnostics(
         "stream_chunks": agent_chunks,
         "stream_chars": agent_chars,
     }
+    if agent_first_token_ms is not None:
+        agent["first_token_ms"] = agent_first_token_ms
+        diagnostics["agent_first_token_ms"] = agent_first_token_ms
     if agent_used is not None:
         agent["used"] = agent_used
         diagnostics["agent_used"] = agent_used

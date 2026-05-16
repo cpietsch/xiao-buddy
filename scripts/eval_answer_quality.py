@@ -66,6 +66,7 @@ def main() -> None:
 
         agent = diagnostics.get("agent", {})
         timings = diagnostics.get("timings_ms", {})
+        first_token_ms = _first_token_ms(diagnostics)
         required_source_ids = _source_ids_for_required_citations(citations, required_citations)
         all_source_ids = _source_ids_from_citations(citations)
         result = {
@@ -82,6 +83,7 @@ def main() -> None:
             "all_source_ids": all_source_ids,
             "stream_chunks": int(agent.get("stream_chunks", 0) or 0),
             "stream_chars": int(agent.get("stream_chars", len(answer)) or 0),
+            "first_token_ms": first_token_ms,
             "answer_chars": len(answer),
             "total_ms": float(timings.get("total", 0) or 0),
         }
@@ -95,6 +97,7 @@ def main() -> None:
             f"stream={'ok' if stream_ok else 'miss'} "
             f"chunks={agent.get('stream_chunks', 0)} "
             f"chars={agent.get('stream_chars', len(answer))} "
+            f"first_token_ms={_format_ms(first_token_ms)} "
             f"total_ms={timings.get('total', 0)}"
             f"{' missing=' + ', '.join(missing_terms) if missing_terms else ''}",
             flush=True,
@@ -116,6 +119,11 @@ def main() -> None:
     print(f"answer agent-hit rate: {agent_hits}/{total} = {summary['agent_rate']:.0%}", flush=True)
     print(f"answer stream-hit rate: {stream_hits}/{total} = {summary['stream_rate']:.0%}", flush=True)
     print(
+        f"answer first-token latency: p50_ms={summary['p50_first_token_ms']:.1f} "
+        f"p95_ms={summary['p95_first_token_ms']:.1f} max_ms={summary['max_first_token_ms']:.1f}",
+        flush=True,
+    )
+    print(
         f"answer latency: p50_ms={summary['p50_ms']:.1f} "
         f"p95_ms={summary['p95_ms']:.1f} max_ms={summary['max_ms']:.1f}",
         flush=True,
@@ -132,6 +140,11 @@ def main() -> None:
 def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
     total = len(results)
     totals_ms = [float(result["total_ms"]) for result in results]
+    first_token_ms = [
+        float(value)
+        for result in results
+        if isinstance(value := result.get("first_token_ms"), (int, float))
+    ]
     return {
         "cases": total,
         "passes": sum(1 for result in results if bool(result["ok"])),
@@ -141,6 +154,9 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         "inline_citation_rate": _rate(results, "inline_citation_ok"),
         "agent_rate": _rate(results, "agent_ok"),
         "stream_rate": _rate(results, "stream_ok"),
+        "p50_first_token_ms": _percentile(first_token_ms, 50),
+        "p95_first_token_ms": _percentile(first_token_ms, 95),
+        "max_first_token_ms": max(first_token_ms) if first_token_ms else 0.0,
         "p50_ms": _percentile(totals_ms, 50),
         "p95_ms": _percentile(totals_ms, 95),
         "max_ms": max(totals_ms) if totals_ms else 0.0,
@@ -149,6 +165,20 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
 
 def _rate(results: list[dict[str, object]], key: str) -> float:
     return sum(1 for result in results if bool(result[key])) / len(results) if results else 0.0
+
+
+def _first_token_ms(diagnostics: dict[str, object]) -> float | None:
+    agent = diagnostics.get("agent", {})
+    value = agent.get("first_token_ms") if isinstance(agent, dict) else None
+    if value is None:
+        value = diagnostics.get("agent_first_token_ms")
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _format_ms(value: float | None) -> str:
+    return f"{value:.1f}" if value is not None else "n/a"
 
 
 def _percentile(values: list[float], percentile: int) -> float:

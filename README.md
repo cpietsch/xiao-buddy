@@ -291,7 +291,7 @@ facts, required source URLs, matching inline `[source-id]` citations, live agent
 output, and streamed token updates for the cases in
 `data/corpus/answer_eval_queries.jsonl`. It also writes a compact structured
 report to `dist/answer-quality/all.json`, including per-case pass flags, source
-IDs, stream counts, and latency percentiles.
+IDs, stream counts, first-token latency, and total latency percentiles.
 
 Run one generated-answer case while debugging a prompt or endpoint:
 

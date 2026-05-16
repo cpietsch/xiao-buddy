@@ -15,6 +15,7 @@ from xiao_copilot.knowledge_base import KnowledgeChunk
 def main() -> None:
     _assert_text_repair()
     _assert_system_prompt_preserves_acronyms()
+    _assert_success_stream_reports_first_token_latency()
 
     original_load_settings = pipeline.load_settings
     original_retrieve = pipeline.retrieve
@@ -42,6 +43,49 @@ def main() -> None:
         pipeline._generate_with_agent_stream = original_generate_stream  # type: ignore[assignment]
 
     print("PASS pipeline failover regression")
+
+
+def _assert_success_stream_reports_first_token_latency() -> None:
+    original_load_settings = pipeline.load_settings
+    original_retrieve = pipeline.retrieve
+    original_generate_stream = pipeline._generate_with_agent_stream
+    original_perf_counter = pipeline.perf_counter
+    clock = {"now": 0.0}
+
+    def fake_perf_counter() -> float:
+        clock["now"] += 0.05
+        return clock["now"]
+
+    try:
+        pipeline.load_settings = _fake_settings  # type: ignore[assignment]
+        pipeline.retrieve = _fake_retrieve  # type: ignore[assignment]
+        pipeline._generate_with_agent_stream = _good_agent_stream  # type: ignore[assignment]
+        pipeline.perf_counter = fake_perf_counter  # type: ignore[assignment]
+
+        events = list(pipeline.answer_question_stream(None, "Which pin should I check?"))
+        stream_events = [
+            event
+            for event in events
+            if event[2].get("agent", {}).get("first_token_ms") is not None
+        ]
+        _assert(stream_events, "streaming diagnostics should include first-token latency")
+        first_token_ms = stream_events[0][2]["agent"]["first_token_ms"]
+        _assert(isinstance(first_token_ms, float), "first-token latency should be numeric")
+        _assert(first_token_ms > 0, "first-token latency should be positive once streaming starts")
+
+        _answer, _citations, diagnostics, progress_html = events[-1]
+        agent = diagnostics.get("agent", {})
+        _assert(agent.get("first_token_ms") == first_token_ms, "final diagnostics should keep first-token latency")
+        _assert(
+            diagnostics.get("agent_first_token_ms") == first_token_ms,
+            "final diagnostics should expose top-level first-token latency",
+        )
+        _assert("first token" in progress_html, "final progress should show first-token latency")
+    finally:
+        pipeline.load_settings = original_load_settings  # type: ignore[assignment]
+        pipeline.retrieve = original_retrieve  # type: ignore[assignment]
+        pipeline._generate_with_agent_stream = original_generate_stream  # type: ignore[assignment]
+        pipeline.perf_counter = original_perf_counter  # type: ignore[assignment]
 
 
 def _assert_system_prompt_preserves_acronyms() -> None:
@@ -79,6 +123,11 @@ def _fake_retrieve(_question: str, _settings: Settings, image_data_url: str | No
 def _broken_agent_stream(*_args, **_kwargs) -> Iterator[EndpointResult]:
     yield EndpointResult(ok=True, data="Partial agent text that should be discarded.")
     yield EndpointResult(ok=False, error="simulated stream failure")
+
+
+def _good_agent_stream(*_args, **_kwargs) -> Iterator[EndpointResult]:
+    yield EndpointResult(ok=True, data="Use the cited source ")
+    yield EndpointResult(ok=True, data="for the pin check [test-source].")
 
 
 def _assert(condition: bool, message: str) -> None:
