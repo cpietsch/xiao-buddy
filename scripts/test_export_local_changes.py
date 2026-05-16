@@ -9,8 +9,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.export_local_changes import _matching_vector_artifact, _prune_old_bundles, _quality_reports
-from scripts.verify_local_export import _patch_series_shas, _verify_patch_series_applies, _verify_quality_reports
+from scripts.export_local_changes import _browser_screenshots, _matching_vector_artifact, _prune_old_bundles, _quality_reports
+from scripts.verify_local_export import (
+    _patch_series_shas,
+    _verify_browser_screenshots,
+    _verify_patch_series_applies,
+    _verify_quality_reports,
+)
 from xiao_copilot.vector_artifacts import sha256_file
 
 
@@ -40,6 +45,7 @@ def main() -> None:
         _assert(not older.exists(), "oldest previous bundle should be pruned when keep_bundles=2")
 
         _assert_matching_vector_artifact_manifest(work)
+        _assert_browser_screenshots_manifest(work)
         _assert_quality_reports_manifest(work)
         _assert_patch_series_sha_extraction(work)
         _assert_patch_series_tree_verification(work)
@@ -123,6 +129,25 @@ def _assert_matching_vector_artifact_manifest(work: Path) -> None:
     _assert(artifact["env"]["VECTOR_INDEX_ARCHIVE_SHA256"] == "current-sha", "env sha should match artifact sha")
 
 
+def _assert_browser_screenshots_manifest(work: Path) -> None:
+    screenshot_dir = work / "dist" / "browser-smoke"
+    screenshot_dir.mkdir(parents=True)
+    _write_png(screenshot_dir / "desktop.png", size=(144, 96), color=(20, 80, 160))
+    _write_png(screenshot_dir / "mobile.png", size=(39, 84), color=(80, 160, 20))
+    _write_png(screenshot_dir / "desktop-after-query.png", size=(144, 120), color=(160, 20, 80))
+
+    screenshots = _browser_screenshots(work)
+    expected = {"desktop", "mobile", "desktop_after_query"}
+    _assert(set(screenshots) == expected, f"unexpected browser screenshots: {screenshots}")
+    desktop = screenshots["desktop"]
+    _assert(desktop["path"] == "dist/browser-smoke/desktop.png", "desktop screenshot path should be relative")
+    _assert(desktop["sha256"] == sha256_file(screenshot_dir / "desktop.png"), "desktop screenshot sha should match")
+    _assert(desktop["width"] == 144 and desktop["height"] == 96, "desktop screenshot dimensions should match")
+    _assert(desktop["bytes"] == (screenshot_dir / "desktop.png").stat().st_size, "desktop screenshot size should match")
+
+    _verify_browser_screenshots({"browser_screenshots": screenshots}, work)
+
+
 def _assert_quality_reports_manifest(work: Path) -> None:
     answer_report = work / "dist" / "answer-quality" / "all.json"
     reranker_report = work / "dist" / "reranker-quality" / "all.json"
@@ -201,6 +226,13 @@ def _write_bundle(path: Path, *, mtime: int) -> Path:
     path.write_text(path.name, encoding="utf-8")
     os.utime(path, (mtime, mtime))
     return path
+
+
+def _write_png(path: Path, *, size: tuple[int, int], color: tuple[int, int, int]) -> None:
+    from PIL import Image
+
+    image = Image.new("RGB", size, color)
+    image.save(path)
 
 
 def _git(repo: Path, *args: str) -> str:

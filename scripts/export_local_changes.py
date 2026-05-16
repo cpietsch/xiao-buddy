@@ -19,6 +19,11 @@ QUALITY_REPORTS = {
     "answer_quality": Path("dist/answer-quality/all.json"),
     "reranker_quality": Path("dist/reranker-quality/all.json"),
 }
+BROWSER_SCREENSHOTS = {
+    "desktop": Path("dist/browser-smoke/desktop.png"),
+    "mobile": Path("dist/browser-smoke/mobile.png"),
+    "desktop_after_query": Path("dist/browser-smoke/desktop-after-query.png"),
+}
 
 
 def main() -> None:
@@ -66,6 +71,7 @@ def main() -> None:
             "keep_bundles": max(1, args.keep_bundles),
             "pruned": pruned_bundles,
         },
+        "browser_screenshots": _browser_screenshots(ROOT),
         "quality_reports": _quality_reports(ROOT),
         "vector_artifact": _matching_vector_artifact(ROOT),
         "remote": _git_one("remote", "get-url", "origin", allow_failure=True),
@@ -106,6 +112,35 @@ def _quality_reports(root: Path = ROOT) -> dict[str, object]:
             continue
         reports[name] = _quality_report_entry(path, root)
     return reports
+
+
+def _browser_screenshots(root: Path = ROOT) -> dict[str, object]:
+    screenshots: dict[str, object] = {}
+    for name, default_path in BROWSER_SCREENSHOTS.items():
+        path = root / default_path
+        if not path.exists():
+            continue
+        screenshots[name] = _browser_screenshot_entry(path, root)
+    return screenshots
+
+
+def _browser_screenshot_entry(path: Path, root: Path) -> dict[str, object]:
+    try:
+        from PIL import Image
+
+        with Image.open(path) as image:
+            width, height = image.size
+    except Exception as exc:  # noqa: BLE001 - malformed local evidence should block handoff export.
+        raise SystemExit(f"Browser screenshot is not a valid image: {_relative_to_root(path, root)}: {exc}") from exc
+    if width <= 0 or height <= 0:
+        raise SystemExit(f"Browser screenshot has invalid dimensions: {_relative_to_root(path, root)}")
+    return {
+        "path": _relative_to_root(path, root),
+        "sha256": sha256_file(path),
+        "bytes": path.stat().st_size,
+        "width": int(width),
+        "height": int(height),
+    }
 
 
 def _quality_report_entry(path: Path, root: Path) -> dict[str, object]:

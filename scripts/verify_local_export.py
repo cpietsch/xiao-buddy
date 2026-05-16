@@ -23,6 +23,7 @@ def main() -> None:
 
     _verify_git_export(manifest)
     _verify_patch_series(manifest)
+    _verify_browser_screenshots(manifest)
     _verify_quality_reports(manifest)
     _verify_vector_artifact(manifest)
 
@@ -111,6 +112,34 @@ def _verify_quality_reports(manifest: dict[str, Any], root: Path = ROOT) -> None
             report.get("failures") == _quality_report_failures(summary, name),
             f"quality report {name} failures mismatch",
         )
+
+
+def _verify_browser_screenshots(manifest: dict[str, Any], root: Path = ROOT) -> None:
+    screenshots = manifest.get("browser_screenshots", {})
+    _assert(isinstance(screenshots, dict), "browser_screenshots must be an object")
+    for name, screenshot in screenshots.items():
+        _assert(isinstance(screenshot, dict), f"browser screenshot {name} must be an object")
+        path = _resolve_path_at(str(screenshot.get("path") or ""), root)
+        _assert(path.exists(), f"browser screenshot missing: {path}")
+        expected_sha = str(screenshot.get("sha256") or "")
+        _assert(expected_sha, f"browser screenshot {name} missing sha256")
+        _assert(sha256_file(path) == expected_sha, f"browser screenshot {name} sha256 mismatch")
+        _assert(int(screenshot.get("bytes") or 0) == path.stat().st_size, f"browser screenshot {name} byte size mismatch")
+        width, height = _image_size(path, name)
+        _assert(int(screenshot.get("width") or 0) == width, f"browser screenshot {name} width mismatch")
+        _assert(int(screenshot.get("height") or 0) == height, f"browser screenshot {name} height mismatch")
+
+
+def _image_size(path: Path, name: str) -> tuple[int, int]:
+    try:
+        from PIL import Image
+
+        with Image.open(path) as image:
+            width, height = image.size
+    except Exception as exc:  # noqa: BLE001
+        raise AssertionError(f"browser screenshot {name} is not a valid image: {exc}") from exc
+    _assert(width > 0 and height > 0, f"browser screenshot {name} has invalid dimensions")
+    return int(width), int(height)
 
 
 def _quality_report_case_count(summary: dict[str, Any], results: list[Any], name: str) -> int:
