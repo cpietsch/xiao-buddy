@@ -56,13 +56,16 @@ def main() -> None:
         cases = cases[: args.limit]
     corpus = load_knowledge_base()
     print(
-        f"cases={len(cases)} negatives={args.negatives} "
+        f"cases={len(cases)} positives={args.positives} negatives={args.negatives} "
         f"min_margin={args.min_margin:.4f} min_pass_rate={args.min_pass_rate:.0%} "
         f"max_failures={args.max_failures}",
         flush=True,
     )
 
-    results = [_run_case(case, corpus, settings, args.negatives, args.min_margin) for case in cases]
+    results = [
+        _run_case(case, corpus, settings, args.positives, args.negatives, args.min_margin)
+        for case in cases
+    ]
     summary = _summarize_results(results)
     _print_summary(summary)
     if args.json_output:
@@ -165,6 +168,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--all", dest="all_cases", action="store_true", help="Run every eval case.")
     parser.add_argument("--limit", type=int, default=0, help="Limit cases after filtering.")
+    parser.add_argument("--positives", type=int, default=3, help="Citation-matched positives per query.")
     parser.add_argument("--negatives", type=int, default=2, help="Hard lexical negatives per query.")
     parser.add_argument(
         "--min-margin",
@@ -193,6 +197,8 @@ def _parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.all_cases and args.case:
         raise SystemExit("--all cannot be combined with --case.")
+    if args.positives < 1:
+        raise SystemExit("--positives must be at least 1.")
     if args.negatives < 1:
         raise SystemExit("--negatives must be at least 1.")
     if args.limit < 0:
@@ -221,6 +227,7 @@ def _run_case(
     case: dict[str, object],
     corpus: list[KnowledgeChunk],
     settings,
+    positive_count: int,
     negative_count: int,
     min_margin: float,
 ) -> dict[str, object]:
@@ -230,9 +237,9 @@ def _run_case(
     citations = [str(citation) for citation in case.get("must_cite", [])]
     terms = [str(term) for term in case.get("must_include", [])]
     print(f"RUN  {case_id}", flush=True)
-    positive = _select_positive(case, corpus, citations, terms)
-    negatives = _select_negatives(query, corpus, citations, positive, negative_count)
-    candidates = [positive, *negatives]
+    positives = _select_positives(case, corpus, citations, terms, positive_count)
+    negatives = _select_negatives(query, corpus, citations, positives[0], negative_count)
+    candidates = [*positives, *negatives]
     include_board_metadata = _include_rerank_board_metadata(query, candidates)
     documents = [
         _rerank_text(
@@ -263,8 +270,11 @@ def _run_case(
         print(f"FAIL {case_id}: reranker did not score indexes {missing}", flush=True)
         return {"id": case_id, "category": category, "ok": False, "margin": -1.0, "ms": elapsed_ms}
 
-    positive_score = scores[0]
-    best_negative_index = max(range(1, len(candidates)), key=lambda index: scores[index])
+    positive_indexes = range(len(positives))
+    negative_indexes = range(len(positives), len(candidates))
+    best_positive_index = max(positive_indexes, key=lambda index: scores[index])
+    best_negative_index = max(negative_indexes, key=lambda index: scores[index])
+    positive_score = scores[best_positive_index]
     best_negative_score = scores[best_negative_index]
     margin = positive_score - best_negative_score
     ok = margin >= min_margin
@@ -276,7 +286,7 @@ def _run_case(
         f"mode={mode} ms={elapsed_ms:.1f}",
         flush=True,
     )
-    print(f"     positive: {_short_title(positive)}", flush=True)
+    print(f"     positive: {_short_title(candidates[best_positive_index])}", flush=True)
     print(f"     negative: {_short_title(candidates[best_negative_index])}", flush=True)
     return {
         "id": case_id,
@@ -287,7 +297,8 @@ def _run_case(
         "mode": mode,
         "positive_score": positive_score,
         "best_negative_score": best_negative_score,
-        "positive_id": positive.id,
+        "positive_id": candidates[best_positive_index].id,
+        "positive_ids": [chunk.id for chunk in positives],
         "best_negative_id": candidates[best_negative_index].id,
         "board_metadata": include_board_metadata,
     }
@@ -299,6 +310,16 @@ def _select_positive(
     citations: list[str],
     terms: list[str],
 ) -> KnowledgeChunk:
+    return _select_positives(case, corpus, citations, terms, count=1)[0]
+
+
+def _select_positives(
+    case: dict[str, object],
+    corpus: list[KnowledgeChunk],
+    citations: list[str],
+    terms: list[str],
+    count: int,
+) -> list[KnowledgeChunk]:
     if not citations:
         raise SystemExit(f"{case['id']} has no must_cite entries for positive selection.")
     query = str(case["query"])
@@ -315,7 +336,7 @@ def _select_positive(
         ),
         reverse=True,
     )
-    return positives[0]
+    return positives[:count]
 
 
 def _select_negatives(

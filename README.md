@@ -299,8 +299,10 @@ For a broader deployment audit across all retrieval evals, run:
 REQUEST_TIMEOUT_SECONDS=90 make rerank-quality-all
 ```
 
-That writes `dist/reranker-quality/all.json`, reports pass rates by topic
-category, and fails if the all-case rate drops below the configured threshold.
+That writes `dist/reranker-quality/all.json`, scores up to three
+citation-matched positive chunks against hard lexical negatives, reports pass
+rates by topic category, and fails if the all-case rate drops below the
+configured threshold.
 Override `RERANK_QUALITY_ALL_MIN_PASS_RATE` or
 `RERANK_QUALITY_ALL_MAX_FAILURES` when validating a known experimental
 reranker.
