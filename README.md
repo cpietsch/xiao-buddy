@@ -29,7 +29,7 @@ photo + question
   -> full Seeed wiki corpus retrieval over local HNSW
   -> optional hosted Qwen VL reranker
   -> lightweight route: identify | troubleshoot | compare | wiring_or_pinout | support
-  -> hosted small Qwen3.5-style agent model
+  -> hosted OpenAI-compatible agent model
   -> cited answer + sources + run details
 ```
 
@@ -48,7 +48,7 @@ RERANK_API_KEY=
 RERANK_TEXT_CHARS=3200
 
 AGENT_BASE_URL=https://your-llm-host/v1
-AGENT_MODEL=qwen3p6-35b-a3b
+AGENT_MODEL=your-agent-model-id
 AGENT_API_KEY=
 
 TOP_K=5

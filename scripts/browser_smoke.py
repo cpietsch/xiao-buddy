@@ -179,7 +179,7 @@ def _check_query_interaction(
             || text.includes("Generating a cited answer");
         }
         """,
-        timeout=min(timeout_ms, 15000),
+        timeout=timeout_ms,
     )
     page.wait_for_function(
         """
