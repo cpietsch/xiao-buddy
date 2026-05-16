@@ -251,6 +251,11 @@ path, backend, vector count, model, source hash, and
 By default each export keeps only the current `xiao-buddy-*.bundle`; set
 `EXPORT_LOCAL_KEEP_BUNDLES` or pass `--keep-bundles` to retain more local bundle
 history.
+Verify the finished export manifest before sharing it:
+
+```bash
+make verify-local-export
+```
 
 Run the strict live retrieval gate before demos, imports, or ranking changes:
 
