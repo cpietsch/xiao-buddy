@@ -51,6 +51,7 @@ AGENT_BASE_URL=https://your-llm-host/v1
 AGENT_MODEL=your-agent-model-id
 AGENT_API_KEY=
 AGENT_MAX_TOKENS=350
+AGENT_CONTEXT_CHARS=3500
 
 TOP_K=5
 CANDIDATE_K=12
@@ -305,7 +306,8 @@ output, source-backed draft visibility, and streamed token updates for the cases
 report to `dist/answer-quality/all.json`, including per-case pass flags, source
 IDs, stream counts, source-draft latency, hosted-agent first-token latency,
 agent-visible-from-request latency, pre-rerank preview latency, source-draft
-build time, nested retrieval stage timings, and total latency percentiles.
+build time, agent prompt size, nested retrieval stage timings, and total latency
+percentiles.
 
 Run one generated-answer case while debugging a prompt or endpoint:
 
@@ -431,6 +433,9 @@ for vector search, can use an optional reranker endpoint for better ordering, an
 can call any OpenAI-compatible chat-completions endpoint for the final answer.
 Use `AGENT_MAX_TOKENS` to cap generated answer length when a larger hosted model
 streams quickly but takes too long to finish full responses.
+Use `AGENT_CONTEXT_CHARS` to bound the source text sent to the final agent; the
+app keeps query-relevant excerpts for synthesis while retrieval and reranking use
+the richer source text.
 
 One tested all-vLLM setup self-hosts the Qwen services on a single AMD Instinct
 MI300X GPU:

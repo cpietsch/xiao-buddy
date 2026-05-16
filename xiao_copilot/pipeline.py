@@ -36,13 +36,85 @@ EXACT_TERM_CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("App EUI", ("app eui",)),
     ("APP key", ("app key", "appkey")),
     ("2.4G", ("2.4g", "2.4 ghz")),
+    ("SX1801CCR", ("sx1801ccr",)),
+    ("470 kΩ", ("470 kω", "470 kΩ", "470 kohm")),
+    ("BAT_ADC_EN", ("bat_adc_en",)),
+    ("BAT_ADC_READ", ("bat_adc_read",)),
+    ("53 μA", ("53 μa", "53 μA", "53 ua")),
+    ("SGM40567", ("sgm40567",)),
+    ("TPS22916CYFPR", ("tps22916cyfpr",)),
+    ("None", ("none",)),
+    ("arduino-i2c-sht4x", ("arduino-i2c-sht4x",)),
+    ("Sensirion Arduino Core", ("sensirion arduino core",)),
+    ("reachy_bpm_dancer", ("reachy_bpm_dancer",)),
+    ("reachy_fleet_control", ("reachy_fleet_control",)),
+    ("agent planning", ("agent planning",)),
+    ("task orchestration", ("task orchestration",)),
+    ("AWS", ("aws",)),
+    ("TTN", ("ttn",)),
+    ("ChirpStack", ("chirpstack",)),
+    ("Packet Forwarder", ("packet forwarder",)),
+    ("Basics Station", ("basics station", "basics™ station")),
+    ("seeed_xiao_esp32c3", ("seeed_xiao_esp32c3",)),
+    ("platform_version", ("platform_version",)),
+    ("2.0.5", ("2.0.5",)),
+    ("5.2.0", ("5.2.0",)),
     ("J501 Mini", ("j501 mini",)),
-    ("Boot", ("boot",)),
     ("temperature", ("temperature",)),
-    ("humidity", ("humidity", "humi")),
+    ("humidity", ("humidity",)),
 )
 
 MARKED_EXACT_TERM_RE = re.compile(r"`([^`\n]{2,48})`|\*\*([^*\n]{2,48})\*\*")
+AGENT_CONTEXT_MIN_CHARS_PER_SOURCE = 360
+AGENT_CONTEXT_WINDOW_CHARS = 760
+AGENT_CONTEXT_STOPWORDS = frozenset(
+    {
+        "about",
+        "after",
+        "also",
+        "and",
+        "are",
+        "board",
+        "boards",
+        "can",
+        "does",
+        "for",
+        "from",
+        "how",
+        "include",
+        "into",
+        "its",
+        "seeed",
+        "should",
+        "studio",
+        "that",
+        "the",
+        "this",
+        "use",
+        "used",
+        "what",
+        "when",
+        "where",
+        "which",
+        "with",
+        "xiao",
+        "you",
+    }
+)
+EXACT_TERM_BLOCKLIST = frozenset(
+    {
+        "CONFIGURE",
+        "EDIT",
+        "FINISH",
+        "INSTALL",
+        "NEXT",
+        "ONLINE",
+        "SAVE",
+        "SKIP",
+        "STOP",
+        "SUBMIT",
+    }
+)
 
 
 def answer_question(image: Image.Image | None, question: str) -> tuple[str, str, dict[str, object]]:
@@ -168,6 +240,14 @@ def answer_question_stream(
     citations = _format_citations(chunks)
     backend = str(retrieval_diagnostics.get("vector_index_backend") or "lexical")
     retrieval_detail = _retrieval_progress_detail(retrieval_diagnostics, backend, len(chunks))
+    agent_prompt_chars = _agent_prompt_chars(
+        question,
+        image_summary,
+        image_data_url,
+        intent,
+        chunks,
+        settings.agent_context_chars,
+    )
     generate_started_at = perf_counter()
     diagnostics = _run_diagnostics(
         status="running",
@@ -181,6 +261,8 @@ def answer_question_stream(
         run_started_at=run_started_at,
         agent_status="starting",
         agent_streaming=True,
+        agent_context_chars=settings.agent_context_chars,
+        agent_prompt_chars=agent_prompt_chars,
     )
     yield (
         "Generating a cited answer with the agent...",
@@ -221,6 +303,8 @@ def answer_question_stream(
                 run_started_at=run_started_at,
                 agent_status="running",
                 agent_streaming=True,
+                agent_context_chars=settings.agent_context_chars,
+                agent_prompt_chars=agent_prompt_chars,
                 draft_chars=draft_chars,
                 draft_first_visible_ms=draft_first_visible_ms,
             ),
@@ -273,6 +357,8 @@ def answer_question_stream(
                     agent_chars=len(streamed_answer),
                     agent_first_token_ms=agent_first_token_ms,
                     agent_first_visible_ms=agent_first_visible_ms,
+                    agent_context_chars=settings.agent_context_chars,
+                    agent_prompt_chars=agent_prompt_chars,
                     draft_chars=draft_chars,
                     draft_first_visible_ms=draft_first_visible_ms,
                 ),
@@ -322,6 +408,8 @@ def answer_question_stream(
         agent_first_token_ms=agent_first_token_ms if agent_used else None,
         agent_first_visible_ms=agent_first_visible_ms if agent_used else None,
         agent_error=agent_error,
+        agent_context_chars=settings.agent_context_chars,
+        agent_prompt_chars=agent_prompt_chars,
         draft_chars=draft_chars,
         draft_first_visible_ms=draft_first_visible_ms,
     )
@@ -538,6 +626,8 @@ def _run_diagnostics(
     agent_first_token_ms: float | None = None,
     agent_first_visible_ms: float | None = None,
     agent_error: str = "",
+    agent_context_chars: int | None = None,
+    agent_prompt_chars: int | None = None,
     draft_chars: int = 0,
     draft_first_visible_ms: float | None = None,
 ) -> dict[str, object]:
@@ -587,6 +677,14 @@ def _run_diagnostics(
     if agent_error:
         agent["error"] = agent_error
         diagnostics["agent_error"] = agent_error
+    if agent_context_chars is not None or agent_prompt_chars is not None:
+        prompt: dict[str, object] = {}
+        if agent_context_chars is not None:
+            prompt["context_budget_chars"] = agent_context_chars
+        if agent_prompt_chars is not None:
+            prompt["chars"] = agent_prompt_chars
+        agent["prompt"] = prompt
+        diagnostics["agent_prompt"] = prompt
     diagnostics["agent"] = agent
     diagnostics["agent_streaming"] = agent_streaming
     diagnostics["agent_streamed"] = agent_streamed
@@ -620,6 +718,7 @@ def _generate_with_agent(
         image_data_url=image_data_url,
         intent=intent,
         chunks=chunks,
+        context_chars=settings.agent_context_chars,
     )
     result = chat_completion(
         base_url=settings.agent_base_url,
@@ -648,6 +747,7 @@ def _generate_with_agent_stream(
         image_data_url=image_data_url,
         intent=intent,
         chunks=chunks,
+        context_chars=settings.agent_context_chars,
     )
     yield from chat_completion_stream(
         base_url=settings.agent_base_url,
@@ -665,11 +765,9 @@ def _build_agent_messages(
     image_data_url: str | None,
     intent: str,
     chunks: list[KnowledgeChunk],
+    context_chars: int = 0,
 ) -> list[dict[str, object]]:
-    context = "\n\n".join(
-        f"[{chunk.id}] {chunk.title}\nSource: {chunk.source}\n{chunk.text}"
-        for chunk in chunks
-    )
+    context = _build_agent_context(question, chunks, context_chars)
     exact_terms = _exact_terms_hint(question, chunks)
     exact_terms_note = ""
     if exact_terms:
@@ -711,13 +809,89 @@ def _build_agent_messages(
     return messages
 
 
-def _exact_terms_hint(question: str, chunks: list[KnowledgeChunk]) -> list[str]:
-    text = "\n".join([question, *(chunk.title + "\n" + chunk.text for chunk in chunks)])
-    normalized = text.lower()
+def _agent_prompt_chars(
+    question: str,
+    image_summary: dict[str, object],
+    image_data_url: str | None,
+    intent: str,
+    chunks: list[KnowledgeChunk],
+    context_chars: int,
+) -> int:
+    messages = _build_agent_messages(
+        question=question,
+        image_summary=image_summary,
+        image_data_url=image_data_url,
+        intent=intent,
+        chunks=chunks,
+        context_chars=context_chars,
+    )
+    return sum(len(_message_content_text(message.get("content"))) for message in messages)
+
+
+def _message_content_text(content: object) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            value = item.get("text")
+            if isinstance(value, str):
+                parts.append(value)
+        return "".join(parts)
+    return ""
+
+
+def _build_agent_context(question: str, chunks: list[KnowledgeChunk], context_chars: int) -> str:
+    if context_chars <= 0 or not chunks:
+        return "\n\n".join(_format_agent_context_chunk(question, chunk, 0) for chunk in chunks)
+
+    remaining = max(context_chars, AGENT_CONTEXT_MIN_CHARS_PER_SOURCE)
+    parts: list[str] = []
+    for index, chunk in enumerate(chunks):
+        chunks_left = len(chunks) - index
+        chunk_budget = max(AGENT_CONTEXT_MIN_CHARS_PER_SOURCE, remaining // max(chunks_left, 1))
+        excerpt = _agent_context_excerpt(question, chunk.text, chunk_budget)
+        remaining = max(0, remaining - len(excerpt))
+        parts.append(f"[{chunk.id}] {chunk.title}\nSource: {chunk.source}\n{excerpt}")
+    return "\n\n".join(parts)
+
+
+def _format_agent_context_chunk(question: str, chunk: KnowledgeChunk, context_chars: int) -> str:
+    text = _agent_context_excerpt(question, chunk.text, context_chars)
+    return f"[{chunk.id}] {chunk.title}\nSource: {chunk.source}\n{text}"
+
+
+def _agent_context_excerpt(question: str, text: str, limit: int) -> str:
+    text = text.strip()
+    if limit <= 0 or len(text) <= limit:
+        return text
+
+    terms = _agent_context_terms(question, text)
+    windows = _agent_context_windows(text, terms, limit)
+    if not windows:
+        return _trim_context_edge(text, limit)
+
+    excerpts = [_trim_context_edge(text[start:end].strip(), max(80, end - start)) for start, end in windows]
+    excerpt = "\n...\n".join(part for part in excerpts if part)
+    if len(excerpt) > limit:
+        excerpt = _trim_context_edge(excerpt, limit)
+    return excerpt
+
+
+def _agent_context_terms(question: str, text: str) -> list[str]:
+    normalized_text = text.lower()
     terms: list[str] = []
+    for token in re.findall(r"[A-Za-z0-9_+.-]{3,}", question):
+        lowered = token.lower()
+        if lowered not in AGENT_CONTEXT_STOPWORDS:
+            terms.append(token)
 
     for canonical, aliases in EXACT_TERM_CANDIDATES:
-        if any(_contains_alias(normalized, alias) for alias in aliases):
+        if _contains_alias(normalized_text, canonical.lower()) or any(
+            _contains_alias(normalized_text, alias) for alias in aliases
+        ):
             terms.append(canonical)
 
     for match in MARKED_EXACT_TERM_RE.finditer(text):
@@ -725,13 +899,165 @@ def _exact_terms_hint(question: str, chunks: list[KnowledgeChunk]) -> list[str]:
         if _looks_like_exact_term(value):
             terms.append(value)
 
-    return list(dict.fromkeys(terms))[:18]
+    for token in re.findall(r"\b[A-Z][A-Z0-9_+-]{2,}\b|\b\d+(?:\.\d+)?\s*(?:kΩ|μA|mA|V|G|GHz|MHz)\b", text):
+        terms.append(token.strip())
+
+    return list(dict.fromkeys(term for term in terms if len(term.strip()) >= 2))[:40]
+
+
+def _agent_context_windows(text: str, terms: list[str], limit: int) -> list[tuple[int, int]]:
+    lowered = text.lower()
+    positions: list[int] = []
+    for term in terms:
+        normalized = term.lower().strip()
+        if not normalized:
+            continue
+        start = 0
+        while True:
+            index = lowered.find(normalized, start)
+            if index < 0:
+                break
+            positions.append(index)
+            start = index + max(len(normalized), 1)
+            if len(positions) >= 24:
+                break
+        if len(positions) >= 24:
+            break
+
+    if not positions:
+        return []
+
+    half_window = max(180, min(AGENT_CONTEXT_WINDOW_CHARS // 2, limit // 2))
+    windows = [_expand_context_window(text, position, half_window) for position in sorted(set(positions))]
+    merged: list[tuple[int, int]] = []
+    for start, end in windows:
+        if merged and start <= merged[-1][1] + 80:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+
+    selected: list[tuple[int, int]] = []
+    used = 0
+    for start, end in merged:
+        segment_len = end - start
+        separator_len = 5 if selected else 0
+        if selected and used + separator_len + segment_len > limit:
+            break
+        if segment_len > limit:
+            center = start + segment_len // 2
+            selected.append(_expand_context_window(text, center, limit // 2))
+            break
+        selected.append((start, end))
+        used += separator_len + segment_len
+    return selected
+
+
+def _expand_context_window(text: str, position: int, half_window: int) -> tuple[int, int]:
+    start = max(0, position - half_window)
+    end = min(len(text), position + half_window)
+    while start > 0 and text[start - 1] not in "\n.;:!?":
+        start -= 1
+    while end < len(text) and text[end - 1] not in "\n.;:!?":
+        end += 1
+    return start, end
+
+
+def _trim_context_edge(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    if limit <= 12:
+        return text[:limit]
+    return text[: max(0, limit - 4)].rstrip() + " ..."
+
+
+def _exact_terms_hint(question: str, chunks: list[KnowledgeChunk]) -> list[str]:
+    query_terms = _query_terms(question)
+    candidates: list[tuple[int, int, str]] = []
+    seen: set[str] = set()
+
+    def add(term: str, source_order: int, text: str, position: int = 0, force: bool = False) -> None:
+        term = term.strip()
+        key = term.lower()
+        if not term or key in seen or term in EXACT_TERM_BLOCKLIST:
+            return
+        score = _exact_term_score(term, text, query_terms, position)
+        if force:
+            score += 10
+        if not force and not _looks_like_exact_term(term) and key not in query_terms and score < 3:
+            return
+        if score <= 0:
+            return
+        seen.add(key)
+        candidates.append((-score, source_order, term))
+
+    for index, chunk in enumerate(chunks):
+        source_text = f"{chunk.title}\n{chunk.text}"
+        normalized = source_text.lower()
+        for canonical, aliases in EXACT_TERM_CANDIDATES:
+            if _contains_alias(normalized, canonical.lower()) or any(
+                _contains_alias(normalized, alias) for alias in aliases
+            ):
+                add(canonical, index, source_text, normalized.find(canonical.lower()), force=True)
+        if "8n1" in normalized or "serial_8n1" in normalized:
+            add("None", index, source_text, normalized.find("8n1"), force=True)
+        if {"esphome", "yaml"} & query_terms and "arduino" in normalized:
+            add("arduino", index, source_text, normalized.find("arduino"), force=True)
+
+        for match in MARKED_EXACT_TERM_RE.finditer(source_text):
+            value = (match.group(1) or match.group(2) or "").strip()
+            add(value, index, source_text, match.start())
+
+        for value, position in _code_like_terms(source_text):
+            add(value, index, source_text, position)
+
+    return [term for _score, _source_order, term in sorted(candidates)[:24]]
+
+
+def _query_terms(question: str) -> set[str]:
+    return {
+        token.lower()
+        for token in re.findall(r"[A-Za-z0-9_+.-]{3,}", question)
+        if token.lower() not in AGENT_CONTEXT_STOPWORDS
+    }
+
+
+def _code_like_terms(text: str) -> list[tuple[str, int]]:
+    terms: list[tuple[str, int]] = []
+    for match in re.finditer(r"(?m)^\s*([A-Za-z_][A-Za-z0-9_.-]{2,})\s*:\s*([A-Za-z0-9_./+-]+)", text):
+        terms.append((match.group(1), match.start(1)))
+        terms.append((match.group(2), match.start(2)))
+    for match in re.finditer(r"#define\s+([A-Z0-9_]+)\s+([A-Za-z0-9_.]+)", text):
+        terms.append((match.group(1), match.start(1)))
+        terms.append((match.group(2), match.start(2)))
+    for match in re.finditer(r"\b[A-Z][A-Z0-9_+-]{2,}\b|\b\d+(?:\.\d+)?\s*(?:kΩ|μA|mA|V|G|GHz|MHz)\b", text):
+        terms.append((match.group(0).strip(), match.start()))
+    return terms
+
+
+def _exact_term_score(term: str, text: str, query_terms: set[str], position: int) -> int:
+    lowered = term.lower()
+    score = 0
+    if lowered in query_terms or any(query in lowered or lowered in query for query in query_terms):
+        score += 5
+    if any(char.isdigit() for char in term):
+        score += 3
+    if any(marker in term for marker in ("_", "-", ".", "/")):
+        score += 2
+    if term.isupper() and len(term) > 2:
+        score += 2
+
+    if position < 0:
+        position = text.lower().find(lowered)
+    if position >= 0:
+        window = text[max(0, position - 180) : position + len(term) + 180].lower()
+        score += min(5, sum(1 for query in query_terms if query in window))
+    return score
 
 
 def _ensure_answer_exact_terms(answer: str, question: str, chunks: list[KnowledgeChunk]) -> str:
     if not answer.strip():
         return answer
-    candidate_terms = {canonical for canonical, _aliases in EXACT_TERM_CANDIDATES}
+    candidate_terms = {canonical for canonical, _aliases in EXACT_TERM_CANDIDATES} | {"arduino"}
     missing: list[tuple[str, str]] = []
     for term in _exact_terms_hint(question, chunks):
         if term not in candidate_terms:

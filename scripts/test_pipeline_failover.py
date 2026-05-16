@@ -18,6 +18,7 @@ def main() -> None:
     _assert_system_prompt_preserves_acronyms()
     _assert_exact_term_hint_preserves_hardware_terms()
     _assert_exact_term_append_cites_missing_terms()
+    _assert_agent_context_budget_keeps_relevant_excerpt()
     _assert_success_stream_reports_first_token_latency()
 
     original_load_settings = pipeline.load_settings
@@ -110,6 +111,10 @@ def _assert_success_stream_reports_first_token_latency() -> None:
         _assert("first token" in progress_html, "final progress should show first-token latency")
         _assert("embed 12 ms" in progress_html, "final progress should expose embedding latency")
         _assert("rerank 34 ms" in progress_html, "final progress should expose reranker latency")
+        _assert(
+            diagnostics.get("agent_prompt", {}).get("chars"),
+            "final diagnostics should expose agent prompt size",
+        )
     finally:
         pipeline.load_settings = original_load_settings  # type: ignore[assignment]
         pipeline.retrieve_progressive = original_retrieve_progressive  # type: ignore[assignment]
@@ -160,6 +165,38 @@ def _assert_exact_term_append_cites_missing_terms() -> None:
         [chunk],
     )
     _assert("`2.4G` [wifi-source]" in answer, "missing exact terms should be appended with citations")
+
+
+def _assert_agent_context_budget_keeps_relevant_excerpt() -> None:
+    chunk = KnowledgeChunk(
+        id="yaml-source",
+        title="ESPHome YAML",
+        source="https://wiki.seeedstudio.com/test/",
+        text=(
+            "Introductory material that is not useful for the specific question. " * 20
+            + "esp32:\n"
+            + "  board: seeed_xiao_esp32c3\n"
+            + "  variant: esp32c3\n"
+            + "  framework:\n"
+            + "    type: arduino\n"
+            + "    version: 2.0.5\n"
+            + "    platform_version: 5.2.0\n"
+            + "Trailing material that can be trimmed. " * 20
+        ),
+        kind="wiki",
+    )
+    messages = pipeline._build_agent_messages(
+        question="What ESPHome YAML board settings should I use for Seeed Studio XIAO ESP32C3?",
+        image_summary={},
+        image_data_url=None,
+        intent="text",
+        chunks=[chunk],
+        context_chars=700,
+    )
+    prompt = str(messages[1]["content"])
+    _assert(len(prompt) < len(chunk.text) + 900, "context budget should shorten long source text")
+    for expected in ("seeed_xiao_esp32c3", "variant", "platform_version", "5.2.0"):
+        _assert(expected in prompt, f"context excerpt should keep {expected}")
 
 
 def _fake_settings() -> Settings:

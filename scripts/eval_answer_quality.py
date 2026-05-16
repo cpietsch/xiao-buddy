@@ -69,6 +69,7 @@ def main() -> None:
         timings = diagnostics.get("timings_ms", {})
         first_token_ms = _first_token_ms(diagnostics)
         agent_first_visible_ms = _agent_first_visible_ms(diagnostics)
+        agent_prompt_chars = _agent_prompt_chars(diagnostics)
         draft_visible_ms = _draft_visible_ms(diagnostics)
         source_draft_build_ms = _source_draft_build_ms(diagnostics)
         retrieve_preview_ms = _timing_ms(diagnostics, "retrieve_preview")
@@ -96,6 +97,7 @@ def main() -> None:
             "source_draft_preview_build_ms": source_draft_preview_build_ms,
             "first_token_ms": first_token_ms,
             "agent_first_visible_ms": agent_first_visible_ms,
+            "agent_prompt_chars": agent_prompt_chars,
             "retrieval_timings_ms": retrieval_timings_ms,
             "answer_chars": len(answer),
             "total_ms": float(timings.get("total", 0) or 0),
@@ -160,6 +162,12 @@ def main() -> None:
         flush=True,
     )
     print(
+        f"answer agent prompt chars: p50={summary['p50_agent_prompt_chars']:.0f} "
+        f"p95={summary['p95_agent_prompt_chars']:.0f} "
+        f"max={summary['max_agent_prompt_chars']:.0f}",
+        flush=True,
+    )
+    print(
         f"answer latency: p50_ms={summary['p50_ms']:.1f} "
         f"p95_ms={summary['p95_ms']:.1f} max_ms={summary['max_ms']:.1f}",
         flush=True,
@@ -217,6 +225,11 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         for result in results
         if isinstance(value := result.get("agent_first_visible_ms"), (int, float))
     ]
+    agent_prompt_chars = [
+        float(value)
+        for result in results
+        if isinstance(value := result.get("agent_prompt_chars"), (int, float))
+    ]
     source_draft_build_ms = [
         float(value)
         for result in results
@@ -251,6 +264,9 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         "p50_agent_first_visible_ms": _percentile(agent_first_visible_ms, 50),
         "p95_agent_first_visible_ms": _percentile(agent_first_visible_ms, 95),
         "max_agent_first_visible_ms": max(agent_first_visible_ms) if agent_first_visible_ms else 0.0,
+        "p50_agent_prompt_chars": _percentile(agent_prompt_chars, 50),
+        "p95_agent_prompt_chars": _percentile(agent_prompt_chars, 95),
+        "max_agent_prompt_chars": max(agent_prompt_chars) if agent_prompt_chars else 0.0,
         "p50_ms": _percentile(totals_ms, 50),
         "p95_ms": _percentile(totals_ms, 95),
         "max_ms": max(totals_ms) if totals_ms else 0.0,
@@ -287,6 +303,18 @@ def _agent_first_visible_ms(diagnostics: dict[str, object]) -> float | None:
     value = agent.get("first_visible_ms") if isinstance(agent, dict) else None
     if value is None:
         value = diagnostics.get("agent_first_visible_ms")
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _agent_prompt_chars(diagnostics: dict[str, object]) -> float | None:
+    prompt = diagnostics.get("agent_prompt")
+    value = prompt.get("chars") if isinstance(prompt, dict) else None
+    if value is None:
+        agent = diagnostics.get("agent", {})
+        nested_prompt = agent.get("prompt") if isinstance(agent, dict) else None
+        value = nested_prompt.get("chars") if isinstance(nested_prompt, dict) else None
     if isinstance(value, (int, float)):
         return float(value)
     return None

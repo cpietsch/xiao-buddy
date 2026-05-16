@@ -105,6 +105,7 @@ def _assert_summary_reports_latency_and_rates() -> None:
                 "retrieve_preview_ms": 1.5,
                 "first_token_ms": 4.0,
                 "agent_first_visible_ms": 6.0,
+                "agent_prompt_chars": 1000,
                 "retrieval_timings_ms": {
                     "knowledge_load": 0.1,
                     "query_embedding": 1.0,
@@ -127,6 +128,7 @@ def _assert_summary_reports_latency_and_rates() -> None:
                 "retrieve_preview_ms": 5.5,
                 "first_token_ms": 20.0,
                 "agent_first_visible_ms": 26.0,
+                "agent_prompt_chars": 3000,
                 "retrieval_timings_ms": {
                     "knowledge_load": 0.3,
                     "query_embedding": 5.0,
@@ -170,6 +172,9 @@ def _assert_summary_reports_latency_and_rates() -> None:
         "summary should compute p95 agent-visible latency",
     )
     _assert(summary["max_agent_first_visible_ms"] == 26.0, "summary should compute max agent-visible latency")
+    _assert(summary["p50_agent_prompt_chars"] == 2000.0, "summary should compute p50 prompt chars")
+    _assert(summary["p95_agent_prompt_chars"] == 2900.0, "summary should compute p95 prompt chars")
+    _assert(summary["max_agent_prompt_chars"] == 3000.0, "summary should compute max prompt chars")
     _assert(summary["p50_ms"] == 20.0, "summary should compute p50 latency")
     _assert(summary["p95_ms"] == 29.0, "summary should compute p95 latency")
     _assert(summary["max_ms"] == 30.0, "summary should compute max latency")
@@ -217,7 +222,13 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
             diagnostics = {
                 "agent_used": True,
                 "agent_streamed": True,
-                "agent": {"stream_chunks": 1, "stream_chars": len(answer), "first_token_ms": 3.5},
+                "agent": {
+                    "stream_chunks": 1,
+                    "stream_chars": len(answer),
+                    "first_token_ms": 3.5,
+                    "prompt": {"chars": 1234, "context_budget_chars": 6000},
+                },
+                "agent_prompt": {"chars": 1234, "context_budget_chars": 6000},
                 "agent_first_visible_ms": 6.0,
                 "draft": {"visible": True, "chars": 120, "first_visible_ms": 2.5},
                 "retrieval": {
@@ -276,6 +287,7 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
         "answer pre-rerank preview latency: p50_ms=2.0 p95_ms=2.0 max_ms=2.0",
         "answer first-token latency: p50_ms=3.5 p95_ms=3.5 max_ms=3.5",
         "answer agent-visible latency: p50_ms=6.0 p95_ms=6.0 max_ms=6.0",
+        "answer agent prompt chars: p50=1234 p95=1234 max=1234",
         "answer latency: p50_ms=7.0 p95_ms=7.0 max_ms=7.0",
         "answer retrieval stage latency:",
         "query_embedding: p50_ms=1.2 p95_ms=1.2 max_ms=1.2",
@@ -304,6 +316,7 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
     )
     _assert(results[0]["first_token_ms"] == 3.5, "JSON report should include first-token latency")
     _assert(results[0]["agent_first_visible_ms"] == 6.0, "JSON report should include agent-visible latency")
+    _assert(results[0]["agent_prompt_chars"] == 1234.0, "JSON report should include prompt character count")
     _assert(
         results[0]["retrieval_timings_ms"]["query_embedding"] == 1.2,
         "JSON report should include retrieval stage timing",
