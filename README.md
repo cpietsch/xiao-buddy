@@ -209,7 +209,8 @@ When the dev browser dependency is installed, run the full demo gate as well:
 REQUEST_TIMEOUT_SECONDS=90 make verify-demo
 ```
 
-This runs the live API/retrieval gates and then the agent-backed browser smoke.
+This runs the live API/retrieval gates, the functional endpoint smoke, and then
+the agent-backed browser smoke.
 
 If GitHub push access is unavailable, export the unpushed local commits before
 moving machines or sharing the workspace:

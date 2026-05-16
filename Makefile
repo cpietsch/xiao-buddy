@@ -43,6 +43,7 @@ eval-all: eval-gate answer-eval
 verify-live: smoke health-live app-smoke eval-all
 
 verify-demo: verify-live
+	$(MAKE) health-functional PYTHON=$(PYTHON)
 	$(MAKE) browser-agent-smoke PYTHON=$(PYTHON)
 
 rerank-benchmark:

@@ -62,6 +62,11 @@ def _check_reranker(settings) -> str:
     _assert(indexes == {0, 1}, f"reranker returned unexpected indexes: {sorted(indexes)}")
     for _index, score in scores:
         _assert(isinstance(score, (int, float)), "reranker scores should be numeric")
+    score_by_index = dict(scores)
+    _assert(
+        score_by_index[0] > score_by_index[1],
+        f"reranker should score the relevant Wi-Fi 6 document higher: {_format_scores(scores)}",
+    )
     mode = (result.meta or {}).get("mode", "unknown")
     return f"OK   reranker functional: mode={mode} scores={_format_scores(scores)} ms={_elapsed_ms(started_at)}"
 
