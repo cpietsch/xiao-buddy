@@ -137,6 +137,11 @@ the ANN-backed HNSW index so query time does not scale with every chunk.
 python scripts/build_wiki_vector_index.py --backend hnsw --batch-size 32
 ```
 
+At app startup, `app.py` warms the knowledge-base lexical caches and loads the
+configured vector index. That moves the expensive first-query tokenization/index
+load out of the first user request; answer reports still expose cold and warm
+retrieval stage timings for verification.
+
 ## Retrieval Gate
 
 Run endpoint-free syntax and offline retrieval smoke checks before committing:
@@ -299,7 +304,8 @@ output, source-backed draft visibility, and streamed token updates for the cases
 `data/corpus/answer_eval_queries.jsonl`. It also writes a compact structured
 report to `dist/answer-quality/all.json`, including per-case pass flags, source
 IDs, stream counts, source-draft latency, hosted-agent first-token latency,
-agent-visible-from-request latency, and total latency percentiles.
+agent-visible-from-request latency, source-draft build time, nested retrieval
+stage timings, and total latency percentiles.
 
 Run one generated-answer case while debugging a prompt or endpoint:
 

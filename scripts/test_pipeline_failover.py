@@ -99,6 +99,8 @@ def _assert_success_stream_reports_first_token_latency() -> None:
             "final diagnostics should expose top-level first-token latency",
         )
         _assert("first token" in progress_html, "final progress should show first-token latency")
+        _assert("embed 12 ms" in progress_html, "final progress should expose embedding latency")
+        _assert("rerank 34 ms" in progress_html, "final progress should expose reranker latency")
     finally:
         pipeline.load_settings = original_load_settings  # type: ignore[assignment]
         pipeline.retrieve = original_retrieve  # type: ignore[assignment]
@@ -167,7 +169,18 @@ def _fake_retrieve(_question: str, _settings: Settings, image_data_url: str | No
         text="Use the cited source instead of incomplete streamed agent text.",
         kind="wiki",
     )
-    return [chunk], {"vector_index_backend": "lexical", "image_used": bool(image_data_url)}
+    return [chunk], {
+        "vector_index_backend": "lexical",
+        "image_used": bool(image_data_url),
+        "reranker_used": True,
+        "reranker_mode": "native",
+        "reranker_ms": 34.0,
+        "timings_ms": {
+            "query_embedding": 12.0,
+            "reranker": 34.0,
+            "total": 50.0,
+        },
+    }
 
 
 def _broken_agent_stream(*_args, **_kwargs) -> Iterator[EndpointResult]:

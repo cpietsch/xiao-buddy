@@ -70,6 +70,8 @@ def main() -> None:
         first_token_ms = _first_token_ms(diagnostics)
         agent_first_visible_ms = _agent_first_visible_ms(diagnostics)
         draft_visible_ms = _draft_visible_ms(diagnostics)
+        source_draft_build_ms = _source_draft_build_ms(diagnostics)
+        retrieval_timings_ms = _retrieval_timings_ms(diagnostics)
         required_source_ids = _source_ids_for_required_citations(citations, required_citations)
         all_source_ids = _source_ids_from_citations(citations)
         result = {
@@ -87,8 +89,10 @@ def main() -> None:
             "stream_chunks": int(agent.get("stream_chunks", 0) or 0),
             "stream_chars": int(agent.get("stream_chars", len(answer)) or 0),
             "draft_visible_ms": draft_visible_ms,
+            "source_draft_build_ms": source_draft_build_ms,
             "first_token_ms": first_token_ms,
             "agent_first_visible_ms": agent_first_visible_ms,
+            "retrieval_timings_ms": retrieval_timings_ms,
             "answer_chars": len(answer),
             "total_ms": float(timings.get("total", 0) or 0),
         }
@@ -129,6 +133,12 @@ def main() -> None:
         flush=True,
     )
     print(
+        f"answer source-draft build latency: p50_ms={summary['p50_source_draft_build_ms']:.1f} "
+        f"p95_ms={summary['p95_source_draft_build_ms']:.1f} "
+        f"max_ms={summary['max_source_draft_build_ms']:.1f}",
+        flush=True,
+    )
+    print(
         f"answer first-token latency: p50_ms={summary['p50_first_token_ms']:.1f} "
         f"p95_ms={summary['p95_first_token_ms']:.1f} max_ms={summary['max_first_token_ms']:.1f}",
         flush=True,
@@ -144,6 +154,19 @@ def main() -> None:
         f"p95_ms={summary['p95_ms']:.1f} max_ms={summary['max_ms']:.1f}",
         flush=True,
     )
+    retrieval_stage_ms = summary.get("retrieval_stage_ms", {})
+    if isinstance(retrieval_stage_ms, dict) and retrieval_stage_ms:
+        print("answer retrieval stage latency:", flush=True)
+        for stage in _ordered_retrieval_stage_names(retrieval_stage_ms):
+            values = retrieval_stage_ms.get(stage, {})
+            if not isinstance(values, dict):
+                continue
+            print(
+                f"  {stage}: p50_ms={float(values.get('p50_ms', 0.0)):.1f} "
+                f"p95_ms={float(values.get('p95_ms', 0.0)):.1f} "
+                f"max_ms={float(values.get('max_ms', 0.0)):.1f}",
+                flush=True,
+            )
     if json_output:
         json_output.parent.mkdir(parents=True, exist_ok=True)
         metadata = quality_report_metadata(
@@ -184,6 +207,11 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         for result in results
         if isinstance(value := result.get("agent_first_visible_ms"), (int, float))
     ]
+    source_draft_build_ms = [
+        float(value)
+        for result in results
+        if isinstance(value := result.get("source_draft_build_ms"), (int, float))
+    ]
     return {
         "cases": total,
         "passes": sum(1 for result in results if bool(result["ok"])),
@@ -196,6 +224,9 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         "p50_draft_visible_ms": _percentile(draft_visible_ms, 50),
         "p95_draft_visible_ms": _percentile(draft_visible_ms, 95),
         "max_draft_visible_ms": max(draft_visible_ms) if draft_visible_ms else 0.0,
+        "p50_source_draft_build_ms": _percentile(source_draft_build_ms, 50),
+        "p95_source_draft_build_ms": _percentile(source_draft_build_ms, 95),
+        "max_source_draft_build_ms": max(source_draft_build_ms) if source_draft_build_ms else 0.0,
         "p50_first_token_ms": _percentile(first_token_ms, 50),
         "p95_first_token_ms": _percentile(first_token_ms, 95),
         "max_first_token_ms": max(first_token_ms) if first_token_ms else 0.0,
@@ -205,6 +236,7 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         "p50_ms": _percentile(totals_ms, 50),
         "p95_ms": _percentile(totals_ms, 95),
         "max_ms": max(totals_ms) if totals_ms else 0.0,
+        "retrieval_stage_ms": _summarize_retrieval_timings(results),
     }
 
 
@@ -240,6 +272,64 @@ def _agent_first_visible_ms(diagnostics: dict[str, object]) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     return None
+
+
+def _source_draft_build_ms(diagnostics: dict[str, object]) -> float | None:
+    timings = diagnostics.get("timings_ms")
+    value = timings.get("source_draft") if isinstance(timings, dict) else None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _retrieval_timings_ms(diagnostics: dict[str, object]) -> dict[str, float]:
+    retrieval = diagnostics.get("retrieval")
+    timings = retrieval.get("timings_ms") if isinstance(retrieval, dict) else None
+    if not isinstance(timings, dict):
+        return {}
+    return {
+        str(key): float(value)
+        for key, value in timings.items()
+        if isinstance(value, (int, float))
+    }
+
+
+def _summarize_retrieval_timings(results: list[dict[str, object]]) -> dict[str, dict[str, float]]:
+    stage_values: dict[str, list[float]] = {}
+    for result in results:
+        timings = result.get("retrieval_timings_ms")
+        if not isinstance(timings, dict):
+            continue
+        for stage, value in timings.items():
+            if isinstance(value, (int, float)):
+                stage_values.setdefault(str(stage), []).append(float(value))
+    return {
+        stage: {
+            "p50_ms": _percentile(values, 50),
+            "p95_ms": _percentile(values, 95),
+            "max_ms": max(values) if values else 0.0,
+        }
+        for stage, values in stage_values.items()
+    }
+
+
+def _ordered_retrieval_stage_names(stage_summary: dict[str, object]) -> list[str]:
+    preferred = [
+        "knowledge_load",
+        "lexical_prefilter",
+        "query_embedding",
+        "vector_search",
+        "candidate_embeddings",
+        "score_merge",
+        "candidate_selection",
+        "reranker_prepare",
+        "reranker",
+        "source_context",
+        "total",
+    ]
+    known = [stage for stage in preferred if stage in stage_summary]
+    extra = sorted(stage for stage in stage_summary if stage not in set(preferred))
+    return known + extra
 
 
 def _format_ms(value: float | None) -> str:

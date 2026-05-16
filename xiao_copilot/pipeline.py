@@ -146,7 +146,9 @@ def answer_question_stream(
     agent_chunks = 0
     agent_first_token_ms: float | None = None
     agent_first_visible_ms: float | None = None
+    draft_started_at = perf_counter()
     draft_answer = _draft_answer(question, image_summary, chunks)
+    timings_ms["source_draft"] = _elapsed_ms(draft_started_at)
     draft_chars = len(draft_answer) if draft_answer else 0
     draft_first_visible_ms: float | None = None
     if draft_answer:
@@ -421,14 +423,40 @@ def _retrieval_progress_detail(
     source_count: int,
 ) -> str:
     base = f"{source_count} sources via {backend}"
-    reranker_ms = retrieval_diagnostics.get("reranker_ms")
-    reranker_suffix = f" ({reranker_ms:.0f} ms)" if isinstance(reranker_ms, (int, float)) else ""
+    timing_parts = _retrieval_timing_parts(retrieval_diagnostics)
+    timing_suffix = f"; {'; '.join(timing_parts)}" if timing_parts else ""
     if retrieval_diagnostics.get("reranker_used"):
         mode = str(retrieval_diagnostics.get("reranker_mode") or "rerank")
-        return f"{base} + {mode} rerank{reranker_suffix}"
+        return f"{base}; {mode} rerank{timing_suffix}"
     if retrieval_diagnostics.get("reranker_error"):
-        return f"{base}; rerank skipped{reranker_suffix}"
-    return base
+        return f"{base}; rerank skipped{timing_suffix}"
+    return f"{base}{timing_suffix}"
+
+
+def _retrieval_timing_parts(retrieval_diagnostics: dict[str, object]) -> list[str]:
+    timings = retrieval_diagnostics.get("timings_ms")
+    if not isinstance(timings, dict):
+        return []
+    parts: list[str] = []
+    query_embedding_ms = _numeric_timing(timings.get("query_embedding"))
+    vector_search_ms = _numeric_timing(timings.get("vector_search"))
+    candidate_embedding_ms = _numeric_timing(timings.get("candidate_embeddings"))
+    reranker_ms = _numeric_timing(timings.get("reranker"))
+    if query_embedding_ms is not None:
+        parts.append(f"embed {query_embedding_ms:.0f} ms")
+    if vector_search_ms is not None:
+        parts.append(f"hnsw {vector_search_ms:.0f} ms")
+    elif candidate_embedding_ms is not None:
+        parts.append(f"candidate embeds {candidate_embedding_ms:.0f} ms")
+    if reranker_ms is not None:
+        parts.append(f"rerank {reranker_ms:.0f} ms")
+    return parts
+
+
+def _numeric_timing(value: object) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
 
 
 def _elapsed_ms(started_at: float) -> float:

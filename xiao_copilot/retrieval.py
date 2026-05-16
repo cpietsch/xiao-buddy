@@ -3,12 +3,13 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from dataclasses import dataclass
 from time import perf_counter
 
 from xiao_copilot.clients import embed_query, embed_texts, rerank
 from xiao_copilot.config import Settings
 from xiao_copilot.knowledge_base import KnowledgeChunk, load_knowledge_base
-from xiao_copilot.vector_index import search_vector_index
+from xiao_copilot.vector_index import configured_index_paths, load_vector_index, search_vector_index
 
 
 TOKEN_RE = re.compile(r"[a-zA-Z0-9_+.-]+")
@@ -77,14 +78,70 @@ TECHNICAL_QUERY_TERMS = {
 }
 
 
+@dataclass(frozen=True)
+class _QueryProfile:
+    text: str
+    lower: str
+    normalized: str
+    token_counts: Counter[str]
+    token_set: frozenset[str]
+    distinctive_terms: tuple[str, ...]
+    technical_terms: tuple[str, ...]
+
+
+_CHUNK_SEARCH_TEXT_CACHE: dict[tuple[object, ...], str] = {}
+_CHUNK_SEARCH_LOWER_CACHE: dict[tuple[object, ...], str] = {}
+_CHUNK_TEXT_LOWER_CACHE: dict[tuple[object, ...], str] = {}
+_CHUNK_TOKEN_COUNTS_CACHE: dict[tuple[object, ...], Counter[str]] = {}
+_CHUNK_TOKEN_SET_CACHE: dict[tuple[object, ...], frozenset[str]] = {}
+
+
+def warm_retrieval_caches(settings: Settings | None = None) -> dict[str, object]:
+    started_at = perf_counter()
+    chunks = load_knowledge_base()
+    lexical_started_at = perf_counter()
+    for chunk in chunks:
+        _chunk_search_text(chunk)
+        _chunk_search_lower(chunk)
+        _chunk_title_text_lower(chunk)
+        _chunk_token_counts(chunk)
+        _chunk_token_set(chunk)
+    diagnostics: dict[str, object] = {
+        "chunks": len(chunks),
+        "lexical_cache_ms": _elapsed_ms(lexical_started_at),
+    }
+    if settings is not None:
+        vector_started_at = perf_counter()
+        try:
+            manifest, data = configured_index_paths(
+                settings.vector_index_manifest,
+                settings.vector_index_data,
+            )
+            index = load_vector_index(str(manifest), str(data), bool(settings.vector_index_data))
+            diagnostics["vector_index_backend"] = index.backend
+            diagnostics["vector_index_chunks"] = index.count
+            diagnostics["vector_index_dim"] = index.dim
+        except Exception as exc:  # noqa: BLE001 - surfaced as startup diagnostics only.
+            diagnostics["vector_index_error"] = str(exc)
+        diagnostics["vector_index_ms"] = _elapsed_ms(vector_started_at)
+    diagnostics["total_ms"] = _elapsed_ms(started_at)
+    return diagnostics
+
+
 def retrieve(
     query: str,
     settings: Settings,
     image_data_url: str | None = None,
 ) -> tuple[list[KnowledgeChunk], dict[str, object]]:
+    retrieval_started_at = perf_counter()
+    timing_ms: dict[str, float] = {}
+    load_started_at = perf_counter()
     chunks = load_knowledge_base()
+    timing_ms["knowledge_load"] = _elapsed_ms(load_started_at)
     chunks_by_id = {chunk.id: chunk for chunk in chunks}
+    lexical_started_at = perf_counter()
     lexical_ranked = _lexical_prefilter(query, chunks, settings)
+    timing_ms["lexical_prefilter"] = _elapsed_ms(lexical_started_at)
     embedding_pool_size = max(settings.vector_candidate_k, settings.candidate_k * 12, 72)
     embedding_pool = [chunk for chunk, _score in lexical_ranked[:embedding_pool_size]]
     diagnostics: dict[str, object] = {
@@ -96,6 +153,7 @@ def retrieve(
         "reranker_used": False,
     }
 
+    query_embedding_started_at = perf_counter()
     query_embedding = embed_query(
         base_url=settings.embedding_base_url,
         model=settings.embedding_model,
@@ -104,8 +162,10 @@ def retrieve(
         api_key=settings.embedding_api_key,
         timeout=settings.request_timeout_seconds,
     )
+    timing_ms["query_embedding"] = _elapsed_ms(query_embedding_started_at)
 
     if query_embedding.ok:
+        vector_started_at = perf_counter()
         vector_result = search_vector_index(
             query_embedding.data,
             chunks_by_id,
@@ -116,9 +176,11 @@ def retrieve(
             archive_timeout=settings.request_timeout_seconds,
             limit=embedding_pool_size,
         )
+        timing_ms["vector_search"] = _elapsed_ms(vector_started_at)
     else:
         vector_result = None
 
+    scoring_started_at = perf_counter()
     if query_embedding.ok and vector_result and vector_result.ok:
         diagnostics["embedding_used"] = True
         diagnostics["vector_index_used"] = True
@@ -131,6 +193,7 @@ def retrieve(
             diagnostics["embedding_error"] = query_embedding.error
         elif vector_result and vector_result.error:
             diagnostics["vector_index_error"] = vector_result.error
+        candidate_embedding_started_at = perf_counter()
         document_embeddings = embed_texts(
             base_url=settings.embedding_base_url,
             model=settings.embedding_model,
@@ -138,6 +201,7 @@ def retrieve(
             api_key=settings.embedding_api_key,
             timeout=settings.request_timeout_seconds,
         )
+        timing_ms["candidate_embeddings"] = _elapsed_ms(candidate_embedding_started_at)
 
         if query_embedding.ok and document_embeddings.ok:
             diagnostics["embedding_used"] = True
@@ -154,7 +218,9 @@ def retrieve(
         else:
             diagnostics["embedding_error"] = query_embedding.error or document_embeddings.error
             scored = lexical_ranked
+    timing_ms["score_merge"] = _elapsed_ms(scoring_started_at)
 
+    candidate_started_at = perf_counter()
     ranked = sorted(scored, key=lambda item: item[1], reverse=True)
     diagnostics["initial_top"] = [
         {"id": chunk.id, "score": round(float(score), 4)}
@@ -166,7 +232,9 @@ def retrieve(
         {"id": chunk.id, "score": round(float(score), 4)}
         for chunk, score in top_scored
     ]
+    timing_ms["candidate_selection"] = _elapsed_ms(candidate_started_at)
 
+    rerank_prepare_started_at = perf_counter()
     rerank_text_chars = max(200, settings.rerank_text_chars or DEFAULT_RERANK_TEXT_CHARS)
     include_board_metadata = _include_rerank_board_metadata(query, top)
     include_source_topic_metadata = _include_rerank_source_topic_metadata(query)
@@ -187,6 +255,7 @@ def retrieve(
         "max": max((len(document) for document in rerank_documents), default=0),
         "total": sum(len(document) for document in rerank_documents),
     }
+    timing_ms["reranker_prepare"] = _elapsed_ms(rerank_prepare_started_at)
     rerank_started_at = perf_counter()
     rerank_result = rerank(
         base_url=settings.rerank_base_url,
@@ -196,7 +265,10 @@ def retrieve(
         api_key=settings.rerank_api_key,
         timeout=settings.request_timeout_seconds,
     )
-    diagnostics["reranker_ms"] = _elapsed_ms(rerank_started_at)
+    reranker_ms = _elapsed_ms(rerank_started_at)
+    diagnostics["reranker_ms"] = reranker_ms
+    timing_ms["reranker"] = reranker_ms
+    context_started_at = perf_counter()
     if rerank_result.ok and rerank_result.data:
         diagnostics["reranker_used"] = True
         diagnostics["reranker_mode"] = (rerank_result.meta or {}).get("mode", "unknown")
@@ -226,8 +298,11 @@ def retrieve(
             diagnostics["reranker_mode"] = rerank_result.meta.get("mode", "unknown")
         diagnostics["reranker_error"] = rerank_result.error
         top = top[: settings.top_k]
+    timing_ms["source_context"] = _elapsed_ms(context_started_at)
 
     diagnostics["citations"] = [chunk.id for chunk in top]
+    timing_ms["total"] = _elapsed_ms(retrieval_started_at)
+    diagnostics["timings_ms"] = timing_ms
     return top, diagnostics
 
 
@@ -349,6 +424,7 @@ def _select_rerank_candidates(
     if candidate_k <= 0:
         return []
 
+    profile = _query_profile(query)
     scored_by_id = {chunk.id: score for chunk, score in ranked}
     selected: list[tuple[KnowledgeChunk, float]] = []
     seen: set[str] = set()
@@ -368,7 +444,7 @@ def _select_rerank_candidates(
     for chunk, lexical_score in lexical_ranked[: max(LEXICAL_RECALL_SCAN, candidate_k * 8)]:
         if chunk.id in seen:
             continue
-        recall_score = _recall_match_score(query, chunk.search_text)
+        recall_score = _recall_match_score_for_profile(profile, chunk)
         if recall_score <= 0 and lexical_score < 0.55:
             continue
         score = scored_by_id.get(chunk.id, min(lexical_score, 2.5) * 0.45)
@@ -452,14 +528,15 @@ def _rank_source_siblings(
     except StopIteration:
         anchor_index = -1
 
+    profile = _query_profile(query)
     ranked: list[tuple[KnowledgeChunk, float]] = []
     for index, sibling in enumerate(siblings):
         if sibling.id == anchor.id:
             continue
-        lexical_score = _lexical_score(query, sibling.search_text)
-        recall_score = _recall_match_score(query, sibling.search_text)
-        procedure_score = _procedure_stage_score(query, sibling)
-        detail_score = _configuration_detail_score(query, sibling)
+        lexical_score = _lexical_score_for_profile(profile, sibling)
+        recall_score = _recall_match_score_for_profile(profile, sibling)
+        procedure_score = _procedure_stage_score_for_profile(profile, sibling)
+        detail_score = _configuration_detail_score_for_profile(profile, sibling)
         if lexical_score <= 0 and recall_score <= 0:
             continue
         proximity = 0.0
@@ -523,12 +600,17 @@ def _source_context_replacement_index(
 
 
 def _context_utility(query: str, chunk: KnowledgeChunk) -> float:
+    profile = _query_profile(query)
+    return _context_utility_for_profile(profile, chunk)
+
+
+def _context_utility_for_profile(profile: _QueryProfile, chunk: KnowledgeChunk) -> float:
     return (
-        _lexical_score(query, chunk.search_text)
-        + _recall_match_score(query, chunk.search_text)
-        + _procedure_stage_score(query, chunk)
-        + _configuration_detail_score(query, chunk)
-        + _comparison_table_hint_score(query, chunk)
+        _lexical_score_for_profile(profile, chunk)
+        + _recall_match_score_for_profile(profile, chunk)
+        + _procedure_stage_score_for_profile(profile, chunk)
+        + _configuration_detail_score_for_profile(profile, chunk)
+        + _comparison_table_hint_score_for_profile(profile, chunk)
     )
 
 
@@ -544,8 +626,12 @@ def _source_context_key(chunk: KnowledgeChunk) -> str:
 
 
 def _procedure_stage_score(query: str, chunk: KnowledgeChunk) -> float:
-    q = query.lower()
-    text = f"{chunk.title}\n{chunk.text}".lower()
+    return _procedure_stage_score_for_profile(_query_profile(query), chunk)
+
+
+def _procedure_stage_score_for_profile(profile: _QueryProfile, chunk: KnowledgeChunk) -> float:
+    q = profile.lower
+    text = _chunk_title_text_lower(chunk)
     if not any(
         term in q
         for term in (
@@ -579,8 +665,12 @@ def _procedure_stage_score(query: str, chunk: KnowledgeChunk) -> float:
 
 
 def _configuration_detail_score(query: str, chunk: KnowledgeChunk) -> float:
-    q = query.lower()
-    text = f"{chunk.title}\n{chunk.text}".lower()
+    return _configuration_detail_score_for_profile(_query_profile(query), chunk)
+
+
+def _configuration_detail_score_for_profile(profile: _QueryProfile, chunk: KnowledgeChunk) -> float:
+    q = profile.lower
+    text = _chunk_title_text_lower(chunk)
     score = 0.0
 
     if (
@@ -612,6 +702,7 @@ def _merge_vector_and_lexical_scores(
     vector_matches,
     lexical_ranked: list[tuple[KnowledgeChunk, float]],
 ) -> list[tuple[KnowledgeChunk, float]]:
+    profile = _query_profile(query)
     lexical_by_id = {chunk.id: score for chunk, score in lexical_ranked}
     candidates: dict[str, KnowledgeChunk] = {}
     vector_by_id: dict[str, float] = {}
@@ -634,11 +725,11 @@ def _merge_vector_and_lexical_scores(
             score = min(lexical_score, 2.5) * 0.45
         else:
             score = vector_score + min(lexical_score, 2.5) * 0.12
-        score += _board_hint_score(query, chunk) * 0.15
-        score += _kind_hint_score(query, chunk) * 0.05
-        score += _capability_hint_score(query, chunk) * 0.45
-        score += _configuration_detail_score(query, chunk)
-        score += _comparison_table_hint_score(query, chunk)
+        score += _board_hint_score_for_profile(profile, chunk) * 0.15
+        score += _kind_hint_score_for_profile(profile, chunk) * 0.05
+        score += _capability_hint_score_for_profile(profile, chunk) * 0.45
+        score += _configuration_detail_score_for_profile(profile, chunk)
+        score += _comparison_table_hint_score_for_profile(profile, chunk)
         scored.append((chunk, score))
 
     return scored
@@ -649,15 +740,16 @@ def _lexical_prefilter(
     chunks: list[KnowledgeChunk],
     settings: Settings,
 ) -> list[tuple[KnowledgeChunk, float]]:
+    profile = _query_profile(query)
     minimum = max(settings.candidate_k * 12, settings.top_k * 12, 72)
     scored = [
         (
             chunk,
-            _lexical_score(query, chunk.search_text)
-            + _board_hint_score(query, chunk)
-            + _kind_hint_score(query, chunk)
-            + _configuration_detail_score(query, chunk)
-            + _comparison_table_hint_score(query, chunk),
+            _lexical_score_for_profile(profile, chunk)
+            + _board_hint_score_for_profile(profile, chunk)
+            + _kind_hint_score_for_profile(profile, chunk)
+            + _configuration_detail_score_for_profile(profile, chunk)
+            + _comparison_table_hint_score_for_profile(profile, chunk),
         )
         for chunk in chunks
     ]
@@ -692,6 +784,14 @@ def _cosine(a: list[float], b: list[float]) -> float:
 def _lexical_score(query: str, text: str) -> float:
     query_terms = Counter(_tokens(query))
     text_terms = Counter(_tokens(text))
+    return _lexical_score_counts(query_terms, text_terms)
+
+
+def _lexical_score_for_profile(profile: _QueryProfile, chunk: KnowledgeChunk) -> float:
+    return _lexical_score_counts(profile.token_counts, _chunk_token_counts(chunk))
+
+
+def _lexical_score_counts(query_terms: Counter[str], text_terms: Counter[str]) -> float:
     if not query_terms:
         return 0.0
     return sum(min(count, text_terms.get(term, 0)) for term, count in query_terms.items()) / len(query_terms)
@@ -713,11 +813,94 @@ def _tokens(text: str) -> list[str]:
     return tokens
 
 
+def _query_profile(query: str) -> _QueryProfile:
+    lower = query.lower()
+    tokens = tuple(_tokens(query))
+    return _QueryProfile(
+        text=query,
+        lower=lower,
+        normalized=_normalize_id(query),
+        token_counts=Counter(tokens),
+        token_set=frozenset(tokens),
+        distinctive_terms=_distinctive_terms_from_tokens(tokens),
+        technical_terms=_technical_terms_from_tokens(tokens),
+    )
+
+
+def _chunk_search_text(chunk: KnowledgeChunk) -> str:
+    key = _chunk_cache_key(chunk)
+    cached = _CHUNK_SEARCH_TEXT_CACHE.get(key)
+    if cached is None:
+        cached = chunk.search_text
+        _CHUNK_SEARCH_TEXT_CACHE[key] = cached
+    return cached
+
+
+def _chunk_search_lower(chunk: KnowledgeChunk) -> str:
+    key = _chunk_cache_key(chunk)
+    cached = _CHUNK_SEARCH_LOWER_CACHE.get(key)
+    if cached is None:
+        cached = _chunk_search_text(chunk).lower()
+        _CHUNK_SEARCH_LOWER_CACHE[key] = cached
+    return cached
+
+
+def _chunk_title_text_lower(chunk: KnowledgeChunk) -> str:
+    key = _chunk_cache_key(chunk)
+    cached = _CHUNK_TEXT_LOWER_CACHE.get(key)
+    if cached is None:
+        cached = f"{chunk.title}\n{chunk.text}".lower()
+        _CHUNK_TEXT_LOWER_CACHE[key] = cached
+    return cached
+
+
+def _chunk_token_counts(chunk: KnowledgeChunk) -> Counter[str]:
+    key = _chunk_cache_key(chunk)
+    cached = _CHUNK_TOKEN_COUNTS_CACHE.get(key)
+    if cached is None:
+        cached = Counter(_tokens(_chunk_search_text(chunk)))
+        _CHUNK_TOKEN_COUNTS_CACHE[key] = cached
+    return cached
+
+
+def _chunk_token_set(chunk: KnowledgeChunk) -> frozenset[str]:
+    key = _chunk_cache_key(chunk)
+    cached = _CHUNK_TOKEN_SET_CACHE.get(key)
+    if cached is None:
+        cached = frozenset(_chunk_token_counts(chunk))
+        _CHUNK_TOKEN_SET_CACHE[key] = cached
+    return cached
+
+
+def _chunk_cache_key(chunk: KnowledgeChunk) -> tuple[object, ...]:
+    aliases = chunk.metadata.get("aliases", [])
+    tags = chunk.metadata.get("tags", [])
+    return (
+        chunk.id,
+        len(chunk.title),
+        len(chunk.source),
+        len(chunk.text),
+        chunk.board_id,
+        chunk.kind,
+        len(aliases) if isinstance(aliases, list) else 0,
+        len(tags) if isinstance(tags, list) else 0,
+    )
+
+
 def _distinctive_match_score(query: str, text: str) -> float:
     terms = _distinctive_query_terms(query)
     if not terms:
         return 0.0
     text_terms = set(_tokens(text))
+    matched = sum(1 for term in terms if term in text_terms)
+    return matched / len(terms)
+
+
+def _distinctive_match_score_for_profile(profile: _QueryProfile, chunk: KnowledgeChunk) -> float:
+    terms = profile.distinctive_terms
+    if not terms:
+        return 0.0
+    text_terms = _chunk_token_set(chunk)
     matched = sum(1 for term in terms if term in text_terms)
     return matched / len(terms)
 
@@ -732,28 +915,46 @@ def _recall_match_score(query: str, text: str) -> float:
     return (technical_matches / len(technical_terms)) * 1.5 + distinctive_score * 0.35
 
 
+def _recall_match_score_for_profile(profile: _QueryProfile, chunk: KnowledgeChunk) -> float:
+    technical_terms = profile.technical_terms
+    distinctive_score = _distinctive_match_score_for_profile(profile, chunk)
+    if not technical_terms:
+        return distinctive_score * 0.4
+    text_terms = _chunk_token_set(chunk)
+    technical_matches = sum(1 for term in technical_terms if term in text_terms)
+    return (technical_matches / len(technical_terms)) * 1.5 + distinctive_score * 0.35
+
+
 def _distinctive_query_terms(query: str) -> list[str]:
-    terms = []
+    return list(_query_profile(query).distinctive_terms)
+
+
+def _distinctive_terms_from_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    terms: list[str] = []
     seen: set[str] = set()
-    for token in _tokens(query):
+    for token in tokens:
         if token in seen or token in COMMON_QUERY_TERMS:
             continue
         if _is_distinctive_token(token):
             seen.add(token)
             terms.append(token)
-    return terms
+    return tuple(terms)
 
 
 def _technical_query_terms(query: str) -> list[str]:
-    terms = []
+    return list(_query_profile(query).technical_terms)
+
+
+def _technical_terms_from_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    terms: list[str] = []
     seen: set[str] = set()
-    for token in _tokens(query):
+    for token in tokens:
         if token in seen or token in COMMON_QUERY_TERMS:
             continue
         if _is_technical_token(token):
             seen.add(token)
             terms.append(token)
-    return terms
+    return tuple(terms)
 
 
 def _is_distinctive_token(token: str) -> bool:
@@ -775,7 +976,11 @@ def _is_technical_token(token: str) -> bool:
 
 
 def _board_hint_score(query: str, chunk: KnowledgeChunk) -> float:
-    normalized_query = _normalize_id(query)
+    return _board_hint_score_for_profile(_query_profile(query), chunk)
+
+
+def _board_hint_score_for_profile(profile: _QueryProfile, chunk: KnowledgeChunk) -> float:
+    normalized_query = profile.normalized
     hints = [chunk.board_id, *chunk.metadata.get("aliases", [])]
     for hint in hints:
         normalized_hint = _normalize_id(hint)
@@ -785,7 +990,11 @@ def _board_hint_score(query: str, chunk: KnowledgeChunk) -> float:
 
 
 def _kind_hint_score(query: str, chunk: KnowledgeChunk) -> float:
-    q = query.lower()
+    return _kind_hint_score_for_profile(_query_profile(query), chunk)
+
+
+def _kind_hint_score_for_profile(profile: _QueryProfile, chunk: KnowledgeChunk) -> float:
+    q = profile.lower
     score = 0.0
 
     # Keep the hand-curated board facts prominent. The imported wiki gives
@@ -807,13 +1016,17 @@ def _kind_hint_score(query: str, chunk: KnowledgeChunk) -> float:
 
 
 def _comparison_table_hint_score(query: str, chunk: KnowledgeChunk) -> float:
-    q = query.lower()
+    return _comparison_table_hint_score_for_profile(_query_profile(query), chunk)
+
+
+def _comparison_table_hint_score_for_profile(profile: _QueryProfile, chunk: KnowledgeChunk) -> float:
+    q = profile.lower
     if "xiao" not in q:
         return 0.0
     if not any(term in q for term in ("between", "compare", "comparison", "table")):
         return 0.0
     title = chunk.title.lower()
-    text = chunk.text.lower()
+    text = _chunk_title_text_lower(chunk)
     if "comparison table" not in title:
         return 0.0
 
@@ -826,13 +1039,17 @@ def _comparison_table_hint_score(query: str, chunk: KnowledgeChunk) -> float:
 
 
 def _capability_hint_score(query: str, chunk: KnowledgeChunk) -> float:
-    q = query.lower()
-    text = chunk.search_text.lower()
+    return _capability_hint_score_for_profile(_query_profile(query), chunk)
+
+
+def _capability_hint_score_for_profile(profile: _QueryProfile, chunk: KnowledgeChunk) -> float:
+    q = profile.lower
+    text = _chunk_search_lower(chunk)
     score = 0.0
 
     image_query = any(term in q for term in ("image", "vision", "camera", "photo"))
     audio_query = any(term in q for term in ("audio", "microphone", "mic", "speech", "keyword"))
-    query_tokens = set(_tokens(q))
+    query_tokens = profile.token_set
     tinyml_query = (
         any(term in q for term in ("tinyml", "machine learning", "edge impulse", "classification"))
         or "ml" in query_tokens

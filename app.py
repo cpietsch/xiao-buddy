@@ -4,6 +4,7 @@ import gradio as gr
 
 from xiao_copilot.config import load_settings
 from xiao_copilot.pipeline import answer_question_stream, format_progress
+from xiao_copilot.retrieval import warm_retrieval_caches
 
 
 EXAMPLES = [
@@ -554,6 +555,8 @@ demo = build_demo()
 
 if __name__ == "__main__":
     settings = load_settings()
+    warm_diagnostics = warm_retrieval_caches(settings)
+    print(f"warmed retrieval caches: {warm_diagnostics}", flush=True)
     demo.launch(
         server_name=settings.gradio_server_name,
         server_port=settings.gradio_server_port,

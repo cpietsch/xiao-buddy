@@ -101,8 +101,16 @@ def _assert_summary_reports_latency_and_rates() -> None:
                 "agent_ok": True,
                 "stream_ok": True,
                 "draft_visible_ms": 2.0,
+                "source_draft_build_ms": 0.2,
                 "first_token_ms": 4.0,
                 "agent_first_visible_ms": 6.0,
+                "retrieval_timings_ms": {
+                    "knowledge_load": 0.1,
+                    "query_embedding": 1.0,
+                    "vector_search": 2.0,
+                    "reranker": 3.0,
+                    "total": 7.0,
+                },
                 "total_ms": 10.0,
             },
             {
@@ -114,8 +122,16 @@ def _assert_summary_reports_latency_and_rates() -> None:
                 "agent_ok": True,
                 "stream_ok": True,
                 "draft_visible_ms": 6.0,
+                "source_draft_build_ms": 0.6,
                 "first_token_ms": 20.0,
                 "agent_first_visible_ms": 26.0,
+                "retrieval_timings_ms": {
+                    "knowledge_load": 0.3,
+                    "query_embedding": 5.0,
+                    "vector_search": 6.0,
+                    "reranker": 9.0,
+                    "total": 21.0,
+                },
                 "total_ms": 30.0,
             },
         ]
@@ -131,6 +147,12 @@ def _assert_summary_reports_latency_and_rates() -> None:
     _assert(summary["p50_draft_visible_ms"] == 4.0, "summary should compute p50 draft latency")
     _assert(abs(float(summary["p95_draft_visible_ms"]) - 5.8) < 0.0001, "summary should compute p95 draft latency")
     _assert(summary["max_draft_visible_ms"] == 6.0, "summary should compute max draft latency")
+    _assert(summary["p50_source_draft_build_ms"] == 0.4, "summary should compute p50 draft-build latency")
+    _assert(
+        abs(float(summary["p95_source_draft_build_ms"]) - 0.58) < 0.0001,
+        "summary should compute p95 draft-build latency",
+    )
+    _assert(summary["max_source_draft_build_ms"] == 0.6, "summary should compute max draft-build latency")
     _assert(summary["p50_first_token_ms"] == 12.0, "summary should compute p50 first-token latency")
     _assert(summary["p95_first_token_ms"] == 19.2, "summary should compute p95 first-token latency")
     _assert(summary["max_first_token_ms"] == 20.0, "summary should compute max first-token latency")
@@ -143,6 +165,11 @@ def _assert_summary_reports_latency_and_rates() -> None:
     _assert(summary["p50_ms"] == 20.0, "summary should compute p50 latency")
     _assert(summary["p95_ms"] == 29.0, "summary should compute p95 latency")
     _assert(summary["max_ms"] == 30.0, "summary should compute max latency")
+    retrieval_stage_ms = summary["retrieval_stage_ms"]
+    _assert(retrieval_stage_ms["query_embedding"]["p50_ms"] == 3.0, "summary should compute retrieval p50")
+    _assert(retrieval_stage_ms["query_embedding"]["p95_ms"] == 4.8, "summary should compute retrieval p95")
+    _assert(retrieval_stage_ms["query_embedding"]["max_ms"] == 5.0, "summary should compute retrieval max")
+    _assert(retrieval_stage_ms["reranker"]["p50_ms"] == 6.0, "summary should include reranker stage")
 
 
 def _assert_main_prints_failure_detail_on_miss() -> None:
@@ -185,7 +212,16 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
                 "agent": {"stream_chunks": 1, "stream_chars": len(answer), "first_token_ms": 3.5},
                 "agent_first_visible_ms": 6.0,
                 "draft": {"visible": True, "chars": 120, "first_visible_ms": 2.5},
-                "timings_ms": {"total": 7},
+                "retrieval": {
+                    "timings_ms": {
+                        "knowledge_load": 0.1,
+                        "query_embedding": 1.2,
+                        "vector_search": 0.8,
+                        "reranker": 2.1,
+                        "total": 5.0,
+                    }
+                },
+                "timings_ms": {"source_draft": 0.4, "total": 7},
             }
             return answer, citations, diagnostics
 
@@ -228,9 +264,13 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
         "answer_excerpt: Use XIAO ESP32C6 for Thread and Zigbee [esp32c6-guide].",
         "first_token_ms=3.5",
         "answer source-draft latency: p50_ms=2.5 p95_ms=2.5 max_ms=2.5",
+        "answer source-draft build latency: p50_ms=0.4 p95_ms=0.4 max_ms=0.4",
         "answer first-token latency: p50_ms=3.5 p95_ms=3.5 max_ms=3.5",
         "answer agent-visible latency: p50_ms=6.0 p95_ms=6.0 max_ms=6.0",
         "answer latency: p50_ms=7.0 p95_ms=7.0 max_ms=7.0",
+        "answer retrieval stage latency:",
+        "query_embedding: p50_ms=1.2 p95_ms=1.2 max_ms=1.2",
+        "reranker: p50_ms=2.1 p95_ms=2.1 max_ms=2.1",
         "wrote ",
     ]:
         _assert(expected in captured, f"main failure output should include {expected!r}")
@@ -247,8 +287,13 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
     _assert(results[0]["required_source_ids"] == ["esp32c6-guide"], "JSON report should include required source ids")
     _assert(results[0]["stream_chunks"] == 1, "JSON report should include stream chunk count")
     _assert(results[0]["draft_visible_ms"] == 2.5, "JSON report should include draft-visible latency")
+    _assert(results[0]["source_draft_build_ms"] == 0.4, "JSON report should include draft-build latency")
     _assert(results[0]["first_token_ms"] == 3.5, "JSON report should include first-token latency")
     _assert(results[0]["agent_first_visible_ms"] == 6.0, "JSON report should include agent-visible latency")
+    _assert(
+        results[0]["retrieval_timings_ms"]["query_embedding"] == 1.2,
+        "JSON report should include retrieval stage timing",
+    )
 
 
 def _assert(condition: bool, message: str) -> None:
