@@ -122,17 +122,19 @@ CSS = """
     border-radius: 8px;
     color: #ffffff;
     font-weight: 720;
-    left: 1rem;
+    left: max(0.5rem, env(safe-area-inset-left));
     padding: 0.65rem 0.85rem;
-    position: absolute;
-    top: 0.75rem;
-    transform: translateY(-140%);
+    position: fixed;
+    top: max(0.5rem, env(safe-area-inset-top));
+    transition: none !important;
+    transform: translateY(-240%);
     z-index: 20;
 }
+.skip-link:focus,
 .skip-link:focus-visible {
-    outline: 3px solid #34d399;
-    outline-offset: 2px;
-    transform: translateY(0);
+    outline: 3px solid #34d399 !important;
+    outline-offset: 2px !important;
+    transform: translateY(0) !important;
 }
 .hero {
     padding: 1.5rem 0 0.65rem;
@@ -343,25 +345,41 @@ CSS = """
 .dark .progress-step-done strong {
     color: #f8fafc;
 }
-.result-box {
+.block.result-box {
     background-color: #ffffff;
     border: 1px solid #dbe7e1;
     border-radius: 8px;
-    min-height: 360px;
+    min-height: 260px;
     padding: 1rem 1.1rem;
 }
-.dark .result-box {
+.block.result-box .prose.result-box {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    min-height: 0;
+    padding: 0;
+}
+.dark .block.result-box {
     background-color: #0f172a;
     border-color: #334155;
     color: #e2e8f0;
 }
-.sources-box {
+.block.sources-box {
     background-color: #ffffff;
     border: 1px solid #dbe7e1;
     border-radius: 8px;
     padding: 0.85rem 1rem;
 }
-.dark .sources-box {
+.block.sources-box:has(.md:empty) {
+    display: none;
+}
+.block.sources-box .prose.sources-box {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+}
+.dark .block.sources-box {
     background-color: #0f172a;
     border-color: #334155;
     color: #e2e8f0;
