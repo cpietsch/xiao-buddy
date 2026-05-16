@@ -23,7 +23,12 @@ def main() -> None:
         output_dir = work / "out"
         _write_test_index(manifest_path, data_path)
 
-        archive_path = _package_test_index(manifest_path, data_path, output_dir)
+        archive_path = _package_test_index(manifest_path, data_path, output_dir, "test-index-a.tar.gz")
+        second_archive_path = _package_test_index(manifest_path, data_path, output_dir, "test-index-b.tar.gz")
+        _assert(
+            sha256_file(archive_path) == sha256_file(second_archive_path),
+            "packaging the same vector index twice should produce identical archive bytes",
+        )
         metadata_path = archive_path.with_suffix(archive_path.suffix + ".json")
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         archive_sha = str(metadata["archive_sha256"])
@@ -94,8 +99,8 @@ def _write_test_index(manifest_path: Path, data_path: Path) -> None:
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
 
-def _package_test_index(manifest_path: Path, data_path: Path, output_dir: Path) -> Path:
-    archive_path = output_dir / "test-index.tar.gz"
+def _package_test_index(manifest_path: Path, data_path: Path, output_dir: Path, name: str) -> Path:
+    archive_path = output_dir / name
     subprocess.run(
         [
             sys.executable,

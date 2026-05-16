@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import sys
 import tarfile
@@ -32,8 +33,7 @@ def main() -> None:
     archive_path = output_dir / archive_name
     metadata_path = archive_path.with_suffix(archive_path.suffix + ".json")
 
-    with tarfile.open(archive_path, "w:gz") as archive:
-        archive.add(data_path, arcname=data_path.name)
+    write_deterministic_tar_gz(archive_path, data_path)
 
     metadata = {
         "archive": str(archive_path),
@@ -48,7 +48,7 @@ def main() -> None:
         "model": meta.get("model"),
         "source_hash": meta.get("source_hash"),
     }
-    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
 
     print(f"wrote archive: {archive_path}")
     print(f"wrote metadata: {metadata_path}")
@@ -77,6 +77,21 @@ def _resolve_data_path(
         path = Path(str(data_file))
         return path if path.is_absolute() else manifest_path.parent / path
     return fallback_data_path
+
+
+def write_deterministic_tar_gz(archive_path: Path, data_path: Path) -> None:
+    with archive_path.open("wb") as raw_output:
+        with gzip.GzipFile(filename="", mode="wb", fileobj=raw_output, mtime=0) as gzip_output:
+            with tarfile.open(fileobj=gzip_output, mode="w") as archive:
+                info = archive.gettarinfo(str(data_path), arcname=data_path.name)
+                info.mtime = 0
+                info.uid = 0
+                info.gid = 0
+                info.uname = ""
+                info.gname = ""
+                info.mode = 0o644
+                with data_path.open("rb") as source:
+                    archive.addfile(info, source)
 
 
 def _default_archive_name(meta: dict[str, object], data_path: Path) -> str:

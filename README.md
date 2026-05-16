@@ -299,6 +299,9 @@ release asset, then set `VECTOR_INDEX_ARCHIVE_URL` and
 make vector-artifact
 ```
 
+The package step writes deterministic tarballs: if the index bytes and manifest
+source hash are unchanged, rerunning the command produces the same archive SHA.
+
 At runtime, if the manifest exists but the local vector data file is missing,
 the app downloads the artifact, verifies the archive checksum when configured,
 extracts the manifest-named data file, and then loads HNSW/FAISS normally. To
