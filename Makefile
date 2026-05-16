@@ -1,4 +1,4 @@
-.PHONY: smoke ui-smoke browser-smoke browser-agent-smoke health health-live app-smoke eval-gate answer-eval eval-all verify-live verify-demo rerank-benchmark vector-artifact verify-vector-artifact install-vector-artifact export-local
+.PHONY: smoke ui-smoke browser-smoke browser-agent-smoke health health-live health-functional app-smoke eval-gate answer-eval eval-all verify-live verify-demo rerank-benchmark vector-artifact verify-vector-artifact install-vector-artifact export-local
 
 PYTHON ?= .venv/bin/python
 
@@ -25,6 +25,9 @@ health:
 
 health-live:
 	$(PYTHON) scripts/health_check.py --live --app --strict-warnings
+
+health-functional:
+	$(PYTHON) scripts/endpoint_smoke.py
 
 app-smoke:
 	$(PYTHON) scripts/app_smoke.py
