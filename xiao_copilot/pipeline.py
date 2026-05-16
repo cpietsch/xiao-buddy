@@ -163,10 +163,8 @@ def answer_question_stream(
                 ),
             )
 
-    answer = _ensure_inline_citations(
-        _repair_generated_text("".join(answer_parts)).strip(),
-        chunks,
-    )
+    generated_answer = _repair_generated_text("".join(answer_parts)).strip()
+    answer = "" if agent_error else _ensure_inline_citations(generated_answer, chunks)
     timings_ms["generate"] = _elapsed_ms(generate_started_at)
 
     if answer:
