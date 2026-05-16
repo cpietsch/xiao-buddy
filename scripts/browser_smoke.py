@@ -169,6 +169,7 @@ def _check_query_interaction(
     timeout_ms: int,
 ) -> str:
     page.get_by_label("Hardware question").fill(query)
+    _install_stream_observer(page)
     page.get_by_role("button", name="Ask Buddy").click()
     page.wait_for_function(
         """
@@ -203,6 +204,7 @@ def _check_query_interaction(
     _require_terms("browser answer", body_text, terms)
     _require_terms("browser citations", body_text, citations)
     _require_inline_citation(body_text, citations)
+    _assert_partial_stream_observed(page)
     _assert("RUN PROGRESS" in body_text, "browser answer should keep progress visible")
     _assert("FIELD ANSWER" in body_text, "browser answer should keep answer panel visible")
     _assert("Sources used" in body_text, "browser answer should keep source trail visible")
@@ -216,6 +218,85 @@ def _check_query_interaction(
     _assert(_is_nonblank_image(screenshot_path), "desktop-after-query: screenshot appears blank")
     case_label = case_id or "custom"
     return f"OK   desktop query {case_label}: {screenshot_path.relative_to(ROOT)}"
+
+
+def _install_stream_observer(page) -> None:
+    page.evaluate(
+        """
+        () => {
+          const loadingLabels = [
+            "Ask a XIAO hardware question to start.",
+            "Preparing the request...",
+            "Retrieving relevant Seeed wiki sources...",
+            "Generating a cited answer with the agent..."
+          ];
+          const snapshots = [];
+          const answerText = () => {
+            const block = document.querySelector(".block.result-box");
+            return block ? (block.innerText || "").trim() : "";
+          };
+          const activeStepText = () => {
+            const active = document.querySelector(".progress-step-active");
+            return active ? (active.innerText || "").trim() : "";
+          };
+          const hasVisiblePartialAnswer = (value) => {
+            if (!value || value.length < 12) return false;
+            return !loadingLabels.some((label) => value.includes(label));
+          };
+          const record = () => {
+            const answer = answerText();
+            const activeStep = activeStepText();
+            const streaming = activeStep.includes("Generate answer")
+              && activeStep.includes("streaming")
+              && activeStep.includes("first token");
+            window.__xiaoBuddyStreamLastState = {
+              activeStep,
+              answerText: answer.slice(0, 500),
+              timestamp: Date.now(),
+            };
+            if (streaming && hasVisiblePartialAnswer(answer)) {
+              snapshots.push({
+                answerText: answer.slice(0, 500),
+                activeStep,
+                timestamp: Date.now(),
+              });
+            }
+          };
+          if (window.__xiaoBuddyStreamObserver) {
+            window.__xiaoBuddyStreamObserver.disconnect();
+          }
+          window.__xiaoBuddyStreamSnapshots = snapshots;
+          window.__xiaoBuddyStreamObserver = new MutationObserver(record);
+          window.__xiaoBuddyStreamObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+          });
+          record();
+        }
+        """
+    )
+
+
+def _assert_partial_stream_observed(page) -> None:
+    snapshots = page.evaluate(
+        """
+        () => {
+          if (window.__xiaoBuddyStreamObserver) {
+            window.__xiaoBuddyStreamObserver.disconnect();
+          }
+          return {
+            snapshots: window.__xiaoBuddyStreamSnapshots || [],
+            lastState: window.__xiaoBuddyStreamLastState || null,
+          };
+        }
+        """
+    )
+    _assert(
+        bool(snapshots["snapshots"]),
+        "browser answer should visibly render partial streamed text while Generate answer is active; "
+        f"last observed state was {snapshots['lastState']!r}",
+    )
 
 
 def _load_query(args: argparse.Namespace) -> tuple[str, tuple[str, ...], tuple[str, ...], str]:
