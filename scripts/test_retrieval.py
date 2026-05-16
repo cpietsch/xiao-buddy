@@ -9,6 +9,7 @@ from xiao_copilot.knowledge_base import KnowledgeChunk
 from xiao_copilot.retrieval import (
     RERANK_METADATA_TAG_LIMIT,
     _include_rerank_board_metadata,
+    _include_rerank_source_topic_metadata,
     _rerank_text,
 )
 
@@ -16,8 +17,10 @@ from xiao_copilot.retrieval import (
 def main() -> None:
     _assert_rerank_text_includes_useful_metadata()
     _assert_rerank_text_adds_board_metadata_only_when_requested()
+    _assert_rerank_text_adds_source_topic_only_when_requested()
     _assert_rerank_text_stays_compact_without_metadata()
     _assert_board_metadata_choice_heuristic()
+    _assert_source_topic_metadata_heuristic()
     print("PASS retrieval formatting regression")
 
 
@@ -58,6 +61,26 @@ def _assert_rerank_text_adds_board_metadata_only_when_requested() -> None:
     )
 
 
+def _assert_rerank_text_adds_source_topic_only_when_requested() -> None:
+    chunk = KnowledgeChunk(
+        id="chunk-topic",
+        title="Wio-SX1262 kit",
+        source="https://example.test/wio",
+        text="kit details",
+        metadata={
+            "source_file": "Network/LoRa_Wio_Series/Wio_SX1262/Wio_SX1262_and_XIAO_ESP32S3_kit_with_3DPrinted_Enclosure_introduction_and_assembly_guide.md",
+            "tags": ["lora"],
+        },
+    )
+    text = _rerank_text(chunk, max_chars=100, include_source_topic_metadata=True)
+    _assert(
+        "source_topic=Wio SX1262 and XIAO ESP32S3 kit with 3DPrinted Enclosure introduction and assembly guide" in text,
+        "source topic should be included when requested",
+    )
+    text_without_topic = _rerank_text(chunk, max_chars=100)
+    _assert("source_topic=" not in text_without_topic, "source topic metadata should be opt-in")
+
+
 def _assert_rerank_text_stays_compact_without_metadata() -> None:
     chunk = KnowledgeChunk(
         id="chunk-2",
@@ -84,6 +107,17 @@ def _assert_board_metadata_choice_heuristic() -> None:
     _assert(
         not _include_rerank_board_metadata("What I2C address is used on XIAO ESP32C3?", [c3, s3]),
         "non-choice board-specific queries should not include board metadata",
+    )
+
+
+def _assert_source_topic_metadata_heuristic() -> None:
+    _assert(
+        _include_rerank_source_topic_metadata("What can the XIAO ESP32S3 & Wio-SX1262 kit with 3D case be used for?"),
+        "3D case queries should include source-topic metadata",
+    )
+    _assert(
+        not _include_rerank_source_topic_metadata("What can the XIAO ESP32S3 Wio-SX1262 kit be used for?"),
+        "generic kit queries should not include source-topic metadata",
     )
 
 

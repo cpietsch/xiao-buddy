@@ -73,7 +73,7 @@ rerank-quality:
 	$(PYTHON) scripts/eval_reranker_quality.py
 
 rerank-quality-all:
-	$(PYTHON) scripts/eval_reranker_quality.py --all --min-pass-rate $${RERANK_QUALITY_ALL_MIN_PASS_RATE:-0.98} --max-failures $${RERANK_QUALITY_ALL_MAX_FAILURES:-1} --json-output dist/reranker-quality/all.json
+	$(PYTHON) scripts/eval_reranker_quality.py --all --min-pass-rate $${RERANK_QUALITY_ALL_MIN_PASS_RATE:-1.0} --max-failures $${RERANK_QUALITY_ALL_MAX_FAILURES:-0} --json-output dist/reranker-quality/all.json
 
 vector-artifact:
 	$(PYTHON) scripts/package_vector_artifact.py

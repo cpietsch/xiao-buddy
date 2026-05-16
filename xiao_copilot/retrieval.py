@@ -169,13 +169,20 @@ def retrieve(
 
     rerank_text_chars = max(200, settings.rerank_text_chars or DEFAULT_RERANK_TEXT_CHARS)
     include_board_metadata = _include_rerank_board_metadata(query, top)
+    include_source_topic_metadata = _include_rerank_source_topic_metadata(query)
     rerank_documents = [
-        _rerank_text(chunk, rerank_text_chars, include_board_metadata=include_board_metadata)
+        _rerank_text(
+            chunk,
+            rerank_text_chars,
+            include_board_metadata=include_board_metadata,
+            include_source_topic_metadata=include_source_topic_metadata,
+        )
         for chunk in top
     ]
     diagnostics["reranker_candidate_count"] = len(rerank_documents)
     diagnostics["reranker_text_chars"] = rerank_text_chars
     diagnostics["reranker_board_metadata"] = include_board_metadata
+    diagnostics["reranker_source_topic_metadata"] = include_source_topic_metadata
     diagnostics["reranker_input_chars"] = {
         "max": max((len(document) for document in rerank_documents), default=0),
         "total": sum(len(document) for document in rerank_documents),
@@ -228,12 +235,17 @@ def _rerank_text(
     chunk: KnowledgeChunk,
     max_chars: int,
     include_board_metadata: bool = False,
+    include_source_topic_metadata: bool = False,
 ) -> str:
     text = chunk.text.strip()
     if len(text) > max_chars:
         text = text[:max_chars].rstrip()
     parts = [chunk.title, chunk.source]
-    metadata = _rerank_metadata(chunk, include_board_metadata=include_board_metadata)
+    metadata = _rerank_metadata(
+        chunk,
+        include_board_metadata=include_board_metadata,
+        include_source_topic_metadata=include_source_topic_metadata,
+    )
     if metadata:
         parts.append(f"Metadata: {'; '.join(metadata)}")
     parts.append(text)
@@ -243,6 +255,7 @@ def _rerank_text(
 def _rerank_metadata(
     chunk: KnowledgeChunk,
     include_board_metadata: bool = False,
+    include_source_topic_metadata: bool = False,
 ) -> list[str]:
     metadata: list[str] = []
     if include_board_metadata and chunk.board_id:
@@ -254,6 +267,10 @@ def _rerank_metadata(
     ][:RERANK_METADATA_TAG_LIMIT]
     if tags:
         metadata.append(f"tags={', '.join(tags)}")
+    if include_source_topic_metadata:
+        source_topic = _source_topic_metadata(chunk)
+        if source_topic:
+            metadata.append(f"source_topic={source_topic}")
     return metadata
 
 
@@ -269,6 +286,21 @@ def _include_rerank_board_metadata(query: str, chunks: list[KnowledgeChunk]) -> 
         return False
     board_ids = {chunk.board_id for chunk in chunks if chunk.board_id}
     return len(board_ids) > 1
+
+
+def _include_rerank_source_topic_metadata(query: str) -> bool:
+    q = query.lower()
+    return any(term in q for term in ("3d case", "3d enclosure", "3d-printed", "3d printed enclosure"))
+
+
+def _source_topic_metadata(chunk: KnowledgeChunk) -> str:
+    source_file = str(chunk.metadata.get("source_file", "")).strip()
+    if not source_file:
+        return ""
+    topic = source_file.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    topic = re.sub(r"[_-]+", " ", topic)
+    topic = re.sub(r"\s+", " ", topic).strip()
+    return topic[:160]
 
 
 def _elapsed_ms(started_at: float) -> float:

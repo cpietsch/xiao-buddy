@@ -15,6 +15,7 @@ from xiao_copilot.config import load_settings
 from xiao_copilot.knowledge_base import KnowledgeChunk, load_knowledge_base
 from xiao_copilot.retrieval import (
     _include_rerank_board_metadata,
+    _include_rerank_source_topic_metadata,
     _is_weekly_wiki_source,
     _lexical_score,
     _rerank_text,
@@ -241,11 +242,13 @@ def _run_case(
     negatives = _select_negatives(query, corpus, citations, positives[0], negative_count)
     candidates = [*positives, *negatives]
     include_board_metadata = _include_rerank_board_metadata(query, candidates)
+    include_source_topic_metadata = _include_rerank_source_topic_metadata(query)
     documents = [
         _rerank_text(
             chunk,
             settings.rerank_text_chars,
             include_board_metadata=include_board_metadata,
+            include_source_topic_metadata=include_source_topic_metadata,
         )
         for chunk in candidates
     ]
@@ -301,6 +304,7 @@ def _run_case(
         "positive_ids": [chunk.id for chunk in positives],
         "best_negative_id": candidates[best_negative_index].id,
         "board_metadata": include_board_metadata,
+        "source_topic_metadata": include_source_topic_metadata,
     }
 
 
