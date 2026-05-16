@@ -112,13 +112,16 @@ def _verify_quality_reports(manifest: dict[str, Any], root: Path = ROOT) -> None
         _assert(sha256_file(path) == expected_sha, f"quality report {name} sha256 mismatch")
         payload = json.loads(path.read_text(encoding="utf-8"))
         _assert(isinstance(payload, dict), f"quality report {name} must be a JSON object")
+        metadata = payload.get("metadata")
         summary = payload.get("summary")
         results = payload.get("results")
+        _assert(isinstance(metadata, dict), f"quality report {name} missing metadata object")
         _assert(isinstance(summary, dict), f"quality report {name} missing summary object")
         _assert(isinstance(results, list), f"quality report {name} missing results list")
         result_ids = _quality_report_result_ids(results, name)
         eval_path = _quality_report_eval_path(name, report, root)
         expected_case_ids = _jsonl_case_ids(eval_path, f"quality report {name} eval cases")
+        _verify_quality_report_metadata(name, metadata, report, eval_path, expected_case_ids, result_ids)
         cases = _quality_report_case_count(summary, results, name)
         _assert(int(report.get("cases") or 0) == cases, f"quality report {name} cases mismatch")
         _assert(cases > 0, f"quality report {name} must include at least one case")
@@ -138,6 +141,7 @@ def _verify_quality_reports(manifest: dict[str, Any], root: Path = ROOT) -> None
         )
         manifest_case_ids = report.get("case_ids")
         _assert(manifest_case_ids == result_ids, f"quality report {name} manifest case_ids mismatch")
+        _assert(report.get("metadata") == metadata, f"quality report {name} manifest metadata mismatch")
         failures = _quality_report_failures(summary, name)
         _assert(report.get("failures") == failures, f"quality report {name} failures mismatch")
         _assert(not failures, f"quality report {name} has failures: {failures}")
@@ -194,6 +198,33 @@ def _quality_report_eval_path(name: str, report: dict[str, Any], root: Path) -> 
     eval_path_value = report.get("eval_path") or (QUALITY_REPORTS.get(name) or {}).get("eval_path")
     _assert(eval_path_value, f"quality report {name} missing eval_path")
     return _resolve_path_at(str(eval_path_value), root)
+
+
+def _verify_quality_report_metadata(
+    name: str,
+    metadata: dict[str, Any],
+    report: dict[str, Any],
+    eval_path: Path,
+    expected_case_ids: list[str],
+    result_ids: list[str],
+) -> None:
+    _assert(metadata.get("schema_version") == 1, f"quality report {name} has unsupported metadata schema")
+    _assert(metadata.get("report_type") == name, f"quality report {name} metadata report_type mismatch")
+    _assert(metadata.get("git_head") == _git_one("rev-parse", "HEAD"), f"quality report {name} is stale for current HEAD")
+    _assert(metadata.get("eval_path") == str(report.get("eval_path") or ""), f"quality report {name} metadata eval_path mismatch")
+    _assert(metadata.get("eval_sha256") == sha256_file(eval_path), f"quality report {name} metadata eval_sha256 mismatch")
+    _assert(
+        metadata.get("total_eval_cases") == len(expected_case_ids),
+        f"quality report {name} metadata total_eval_cases mismatch",
+    )
+    _assert(
+        metadata.get("selected_case_count") == len(result_ids),
+        f"quality report {name} metadata selected_case_count mismatch",
+    )
+    _assert(
+        metadata.get("selected_case_ids") == result_ids,
+        f"quality report {name} metadata selected_case_ids mismatch",
+    )
 
 
 def _jsonl_case_ids(path: Path, label: str) -> list[str]:

@@ -251,7 +251,9 @@ path, backend, vector count, model, source hash, and
 `VECTOR_INDEX_ARCHIVE_SHA256` needed after uploading the archive. Browser smoke
 screenshots and full answer/reranker quality reports are required handoff
 evidence; their paths, hashes, covered eval case IDs, and summary metadata are
-recorded in the manifest.
+recorded in the manifest. Quality reports also record the git commit and eval
+file hash they were generated from, and export verification rejects stale
+reports.
 By default each export keeps only the current `xiao-buddy-*.bundle`; set
 `EXPORT_LOCAL_KEEP_BUNDLES` or pass `--keep-bundles` to retain more local bundle
 history.

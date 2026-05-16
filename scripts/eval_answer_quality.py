@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from xiao_copilot.pipeline import answer_question
+from scripts.report_metadata import quality_report_metadata
 
 
 def main() -> None:
@@ -130,7 +131,20 @@ def main() -> None:
     )
     if json_output:
         json_output.parent.mkdir(parents=True, exist_ok=True)
-        json_output.write_text(json.dumps({"summary": summary, "results": results}, indent=2) + "\n")
+        metadata = quality_report_metadata(
+            report_type="answer_quality",
+            eval_path=eval_path,
+            selected_cases=cases,
+            extra={
+                "require_agent": require_agent,
+                "require_stream": require_stream,
+                "case_filter": sorted(case_ids),
+                "limit": limit,
+            },
+        )
+        json_output.write_text(
+            json.dumps({"metadata": metadata, "summary": summary, "results": results}, indent=2) + "\n"
+        )
         print(f"wrote {json_output}", flush=True)
     if failures:
         print(f"\nanswer eval failures: {', '.join(failures)}", flush=True)

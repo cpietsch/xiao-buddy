@@ -219,6 +219,10 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
         _assert(expected in captured, f"main failure output should include {expected!r}")
     summary = report_payload["summary"]
     results = report_payload["results"]
+    metadata = report_payload["metadata"]
+    _assert(isinstance(metadata, dict), "JSON report should include metadata object")
+    _assert(metadata["report_type"] == "answer_quality", "JSON report should identify answer quality report type")
+    _assert(metadata["selected_case_ids"] == ["synthetic-miss"], "JSON report metadata should include selected case ids")
     _assert(isinstance(summary, dict), "JSON report should include summary object")
     _assert(isinstance(results, list) and len(results) == 1, "JSON report should include one result")
     _assert(summary["failures"] == ["synthetic-miss"], "JSON report should include failing case id")

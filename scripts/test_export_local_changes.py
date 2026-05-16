@@ -159,11 +159,25 @@ def _assert_quality_reports_manifest(work: Path) -> None:
         [{"id": "answer-one"}, {"id": "answer-two"}],
     )
     _write_jsonl(work / "data" / "corpus" / "eval_queries.jsonl", [{"id": "rerank-one"}])
+    answer_metadata = _report_metadata(
+        work,
+        "answer_quality",
+        Path("data/corpus/answer_eval_queries.jsonl"),
+        ["answer-one", "answer-two"],
+    )
+    reranker_metadata = _report_metadata(
+        work,
+        "reranker_quality",
+        Path("data/corpus/eval_queries.jsonl"),
+        ["rerank-one"],
+    )
     answer_payload = {
+        "metadata": answer_metadata,
         "summary": {"cases": 2, "passes": 2, "failures": [], "p50_ms": 123.4},
         "results": [{"id": "answer-one", "ok": True}, {"id": "answer-two", "ok": True}],
     }
     reranker_payload = {
+        "metadata": reranker_metadata,
         "summary": {"cases": 1, "passes": 1, "failures": [], "min_margin": 0.4},
         "results": [{"id": "rerank-one", "ok": True}],
     }
@@ -184,12 +198,26 @@ def _assert_quality_reports_manifest(work: Path) -> None:
         reports["answer_quality"]["case_ids"] == ["answer-one", "answer-two"],
         "answer report should record covered case ids",
     )
+    _assert(reports["answer_quality"]["metadata"] == answer_metadata, "answer report metadata should be recorded")
     _assert(reports["answer_quality"]["failures"] == [], "answer report failures should come from summary")
     _assert(reports["reranker_quality"]["failures"] == [], "reranker report failures should come from summary")
 
     _verify_quality_reports({"quality_reports": reports}, work)
 
+    stale_payload = {
+        **answer_payload,
+        "metadata": {**answer_metadata, "git_head": "0" * 40},
+    }
+    answer_report.write_text(json.dumps(stale_payload), encoding="utf-8")
+    _assert_raises_system_exit(lambda: _quality_reports(work), "stale quality report should block export")
+
     partial_payload = {
+        "metadata": _report_metadata(
+            work,
+            "answer_quality",
+            Path("data/corpus/answer_eval_queries.jsonl"),
+            ["answer-one"],
+        ),
         "summary": {"cases": 1, "passes": 1, "failures": [], "p50_ms": 12.3},
         "results": [{"id": "answer-one", "ok": True}],
     }
@@ -203,6 +231,7 @@ def _assert_quality_reports_manifest(work: Path) -> None:
             "cases": 1,
             "expected_cases": 2,
             "case_ids": ["answer-one"],
+            "metadata": partial_payload["metadata"],
             "failures": [],
             "summary": partial_payload["summary"],
         },
@@ -212,6 +241,7 @@ def _assert_quality_reports_manifest(work: Path) -> None:
 
     answer_report.write_text(json.dumps(answer_payload), encoding="utf-8")
     failing_payload = {
+        "metadata": reranker_metadata,
         "summary": {"cases": 1, "passes": 0, "failures": ["rerank-one"], "min_margin": -0.1},
         "results": [{"id": "rerank-one", "ok": False}],
     }
@@ -225,6 +255,7 @@ def _assert_quality_reports_manifest(work: Path) -> None:
             "cases": 2,
             "expected_cases": 2,
             "case_ids": ["answer-one", "answer-two"],
+            "metadata": answer_metadata,
             "failures": [],
             "summary": answer_payload["summary"],
         },
@@ -235,6 +266,7 @@ def _assert_quality_reports_manifest(work: Path) -> None:
             "cases": 1,
             "expected_cases": 1,
             "case_ids": ["rerank-one"],
+            "metadata": reranker_metadata,
             "failures": ["rerank-one"],
             "summary": failing_payload["summary"],
         }
@@ -313,6 +345,26 @@ def _write_png(path: Path, *, size: tuple[int, int], color: tuple[int, int, int]
 def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+
+def _report_metadata(work: Path, report_type: str, eval_path: Path, selected_ids: list[str]) -> dict[str, object]:
+    eval_file = work / eval_path
+    all_ids = [
+        str(json.loads(line)["id"])
+        for line in eval_file.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    return {
+        "schema_version": 1,
+        "report_type": report_type,
+        "generated_at": "2026-05-16T00:00:00+00:00",
+        "git_head": _git(Path(__file__).resolve().parents[1], "rev-parse", "HEAD"),
+        "eval_path": str(eval_path),
+        "eval_sha256": sha256_file(eval_file),
+        "total_eval_cases": len(all_ids),
+        "selected_case_count": len(selected_ids),
+        "selected_case_ids": selected_ids,
+    }
 
 
 def _git(repo: Path, *args: str) -> str:

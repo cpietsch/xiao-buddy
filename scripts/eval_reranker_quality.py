@@ -20,6 +20,7 @@ from xiao_copilot.retrieval import (
     _lexical_score,
     _rerank_text,
 )
+from scripts.report_metadata import quality_report_metadata
 
 
 DEFAULT_CASE_IDS = (
@@ -71,7 +72,25 @@ def main() -> None:
     _print_summary(summary)
     if args.json_output:
         args.json_output.parent.mkdir(parents=True, exist_ok=True)
-        args.json_output.write_text(json.dumps({"summary": summary, "results": results}, indent=2) + "\n")
+        metadata = quality_report_metadata(
+            report_type="reranker_quality",
+            eval_path=args.eval_path,
+            selected_cases=cases,
+            extra={
+                "all_cases": args.all_cases,
+                "case_filter": list(args.case_ids),
+                "limit": args.limit,
+                "positives": args.positives,
+                "negatives": args.negatives,
+                "min_margin": args.min_margin,
+                "min_pass_rate": args.min_pass_rate,
+                "max_failures": args.max_failures,
+                "close_margin": args.close_margin,
+            },
+        )
+        args.json_output.write_text(
+            json.dumps({"metadata": metadata, "summary": summary, "results": results}, indent=2) + "\n"
+        )
         print(f"wrote {args.json_output}", flush=True)
 
     failures = [str(result["id"]) for result in results if not result["ok"]]

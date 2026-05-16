@@ -175,12 +175,25 @@ def _quality_report_entry(name: str, path: Path, root: Path, eval_path: Path) ->
         raise SystemExit(f"Quality report must be a JSON object: {_relative_to_root(path, root)}")
     summary = payload.get("summary")
     results = payload.get("results")
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, dict):
+        raise SystemExit(f"Quality report must include metadata object: {_relative_to_root(path, root)}")
     if not isinstance(summary, dict) or not isinstance(results, list):
         raise SystemExit(
             f"Quality report must include summary object and results list: {_relative_to_root(path, root)}"
         )
     expected_case_ids = _jsonl_case_ids(root / eval_path, root, f"{name} eval cases")
     result_ids = _quality_report_result_ids(results, path, root)
+    _verify_quality_report_metadata(
+        name=name,
+        metadata=metadata,
+        eval_path=eval_path,
+        eval_file=root / eval_path,
+        expected_case_ids=expected_case_ids,
+        result_ids=result_ids,
+        report_path=path,
+        root=root,
+    )
     cases_value = summary.get("cases", len(results))
     try:
         cases = int(cases_value)
@@ -219,9 +232,39 @@ def _quality_report_entry(name: str, path: Path, root: Path, eval_path: Path) ->
         "cases": cases,
         "expected_cases": len(expected_case_ids),
         "case_ids": result_ids,
+        "metadata": metadata,
         "failures": [str(item) for item in failures],
         "summary": summary,
     }
+
+
+def _verify_quality_report_metadata(
+    *,
+    name: str,
+    metadata: dict[str, object],
+    eval_path: Path,
+    eval_file: Path,
+    expected_case_ids: list[str],
+    result_ids: list[str],
+    report_path: Path,
+    root: Path,
+) -> None:
+    if metadata.get("schema_version") != 1:
+        raise SystemExit(f"Quality report {name} has unsupported metadata schema: {_relative_to_root(report_path, root)}")
+    if metadata.get("report_type") != name:
+        raise SystemExit(f"Quality report {name} metadata report_type mismatch: {_relative_to_root(report_path, root)}")
+    if metadata.get("git_head") != _git_one("rev-parse", "HEAD"):
+        raise SystemExit(f"Quality report {name} is stale for current HEAD: {_relative_to_root(report_path, root)}")
+    if metadata.get("eval_path") != str(eval_path):
+        raise SystemExit(f"Quality report {name} metadata eval_path mismatch: {_relative_to_root(report_path, root)}")
+    if metadata.get("eval_sha256") != sha256_file(eval_file):
+        raise SystemExit(f"Quality report {name} metadata eval_sha256 mismatch: {_relative_to_root(report_path, root)}")
+    if metadata.get("total_eval_cases") != len(expected_case_ids):
+        raise SystemExit(f"Quality report {name} metadata total_eval_cases mismatch: {_relative_to_root(report_path, root)}")
+    if metadata.get("selected_case_count") != len(result_ids):
+        raise SystemExit(f"Quality report {name} metadata selected_case_count mismatch: {_relative_to_root(report_path, root)}")
+    if metadata.get("selected_case_ids") != result_ids:
+        raise SystemExit(f"Quality report {name} metadata selected_case_ids mismatch: {_relative_to_root(report_path, root)}")
 
 
 def _jsonl_case_ids(path: Path, root: Path, label: str) -> list[str]:
