@@ -118,10 +118,10 @@ def _check_page(page, url: str, screenshot_dir: Path, name: str, timeout_ms: int
     _assert(page.locator(".chip", has_text="Raspberry Pi HATs").count() == 1, f"{name}: Raspberry Pi chip missing")
     _assert(page.locator(".chip", has_text="Jetson robotics").count() == 1, f"{name}: Jetson chip missing")
     _assert(page.locator("textarea").count() >= 1, f"{name}: question textarea missing")
+    _assert_initial_layout_state(page, name)
 
     page.keyboard.press("Tab")
-    focused = page.evaluate("() => document.activeElement && document.activeElement.classList.contains('skip-link')")
-    _assert(bool(focused), f"{name}: first Tab should focus skip link")
+    _assert_focused_skip_link_visible(page, name)
 
     metrics = page.evaluate(
         """
@@ -207,6 +207,7 @@ def _check_query_interaction(
     _assert("Sources used" in body_text, "browser answer should keep source trail visible")
     _assert("streamed" in body_text, "browser answer should expose streamed progress")
     _assert("agent answer" in body_text, "browser answer should expose final agent status")
+    _assert_sources_panel_rendered_once(page)
 
     screenshot_path = screenshot_dir / "desktop-after-query.png"
     page.screenshot(path=str(screenshot_path), full_page=True)
@@ -229,6 +230,75 @@ def _load_query(args: argparse.Namespace) -> tuple[str, tuple[str, ...], tuple[s
     terms = tuple(args.must_include) if args.must_include else _csv_env("BROWSER_SMOKE_MUST_INCLUDE", DEFAULT_TERMS)
     citations = tuple(args.must_cite) if args.must_cite else _csv_env("BROWSER_SMOKE_MUST_CITE", DEFAULT_CITATIONS)
     return query, terms, citations, ""
+
+
+def _assert_initial_layout_state(page, name: str) -> None:
+    state = page.evaluate(
+        """
+        () => {
+          const skip = document.querySelector(".skip-link");
+          const skipRect = skip ? skip.getBoundingClientRect() : null;
+          const sourceBlock = document.querySelector(".block.sources-box");
+          const sourceRect = sourceBlock ? sourceBlock.getBoundingClientRect() : null;
+          const sourceStyle = sourceBlock ? getComputedStyle(sourceBlock) : null;
+          const resultBlock = document.querySelector(".block.result-box");
+          const resultRect = resultBlock ? resultBlock.getBoundingClientRect() : null;
+          return {
+            skipBottom: skipRect ? skipRect.bottom : 0,
+            sourceDisplay: sourceStyle ? sourceStyle.display : "",
+            sourceHeight: sourceRect ? sourceRect.height : 0,
+            resultHeight: resultRect ? resultRect.height : 0,
+          };
+        }
+        """
+    )
+    _assert(state["skipBottom"] <= 0, f"{name}: unfocused skip link should be outside the viewport")
+    _assert(state["sourceDisplay"] == "none" or state["sourceHeight"] == 0, f"{name}: empty source panel should be hidden")
+    _assert(180 <= state["resultHeight"] <= 330, f"{name}: initial answer panel height looks wrong: {state['resultHeight']}px")
+
+
+def _assert_focused_skip_link_visible(page, name: str) -> None:
+    state = page.evaluate(
+        """
+        () => {
+          const skip = document.querySelector(".skip-link");
+          const rect = skip ? skip.getBoundingClientRect() : null;
+          const style = skip ? getComputedStyle(skip) : null;
+          return {
+            focused: document.activeElement === skip,
+            visible: Boolean(rect && rect.bottom > 0 && rect.top < window.innerHeight),
+            transition: style ? style.transition : "",
+            outlineWidth: style ? parseFloat(style.outlineWidth) : 0,
+          };
+        }
+        """
+    )
+    _assert(state["focused"], f"{name}: first Tab should focus skip link")
+    _assert(state["visible"], f"{name}: focused skip link should be visible immediately")
+    _assert(state["outlineWidth"] >= 2, f"{name}: focused skip link should have a visible focus ring")
+    _assert(state["transition"] == "none", f"{name}: skip link reveal should not inherit transition: {state['transition']}")
+
+
+def _assert_sources_panel_rendered_once(page) -> None:
+    state = page.evaluate(
+        """
+        () => {
+          const sourceBlock = document.querySelector(".block.sources-box");
+          const innerSource = document.querySelector(".block.sources-box .prose.sources-box");
+          const sourceRect = sourceBlock ? sourceBlock.getBoundingClientRect() : null;
+          const blockStyle = sourceBlock ? getComputedStyle(sourceBlock) : null;
+          const innerStyle = innerSource ? getComputedStyle(innerSource) : null;
+          return {
+            visible: Boolean(sourceRect && sourceRect.height > 0 && blockStyle && blockStyle.display !== "none"),
+            borderTopWidth: innerStyle ? parseFloat(innerStyle.borderTopWidth) : 0,
+            paddingTop: innerStyle ? parseFloat(innerStyle.paddingTop) : 0,
+          };
+        }
+        """
+    )
+    _assert(state["visible"], "sources panel should become visible after a cited answer")
+    _assert(state["borderTopWidth"] == 0, "inner sources markdown should not add a second framed border")
+    _assert(state["paddingTop"] == 0, "inner sources markdown should not add nested panel padding")
 
 
 def _load_answer_eval_case(path: Path, case_id: str) -> dict[str, object]:
