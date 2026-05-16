@@ -165,6 +165,7 @@ def chunks_for_doc(path: Path, docs_root: Path, board_hints: list[BoardHint]) ->
             chunk_title = title if not heading else f"{title} > {heading}"
             board_id, aliases = infer_board(chunk_title + "\n" + part + "\n" + rel, board_hints)
             chunk_id = stable_id(rel, index, part_index)
+            text_for_tags = f"{chunk_title} {part}"
             doc_chunks.append(
                 {
                     "id": f"wiki-{chunk_id}",
@@ -175,7 +176,7 @@ def chunks_for_doc(path: Path, docs_root: Path, board_hints: list[BoardHint]) ->
                     "kind": "wiki",
                     "metadata": {
                         "aliases": aliases,
-                        "tags": ["wiki", "xiao", *keywords_for_text(chunk_title + " " + part)],
+                        "tags": tags_for_chunk(rel, chunk_title, text_for_tags, board_id),
                         "citations": [{"title": title, "url": wiki_url}],
                         "source_file": rel,
                         "heading_path": heading,
@@ -412,6 +413,33 @@ def keywords_for_text(text: str) -> list[str]:
         if needle in lowered:
             keywords.append(keyword)
     return keywords
+
+
+def tags_for_chunk(source_file: str, title: str, text: str, board_id: str) -> list[str]:
+    tags = ["wiki"]
+    if board_id or is_xiao_doc(source_file, title):
+        tags.append("xiao")
+    tags.extend(path_tags_for_source(source_file))
+    tags.extend(keywords_for_text(text))
+    return list(dict.fromkeys(tag for tag in tags if tag))
+
+
+def is_xiao_doc(source_file: str, title: str) -> bool:
+    haystack = f"{source_file} {title}".lower()
+    return "seeedstudio_xiao" in haystack or "xiao" in re.split(r"[^a-z0-9]+", haystack)
+
+
+def path_tags_for_source(source_file: str) -> list[str]:
+    tags: list[str] = []
+    path = Path(source_file)
+    parts = [*path.parts[:-1], path.stem]
+    for part in parts:
+        words = [word.lower() for word in re.split(r"[^A-Za-z0-9]+", part) if len(word) > 1]
+        tags.extend(words)
+        collapsed = "".join(words)
+        if len(collapsed) > 3:
+            tags.append(collapsed)
+    return tags[:32]
 
 
 def stable_id(source_file: str, index: int, part_index: int) -> str:

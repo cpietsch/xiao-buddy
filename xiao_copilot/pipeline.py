@@ -163,7 +163,10 @@ def answer_question_stream(
                 ),
             )
 
-    answer = _repair_generated_text("".join(answer_parts)).strip()
+    answer = _ensure_primary_inline_citation(
+        _repair_generated_text("".join(answer_parts)).strip(),
+        chunks,
+    )
     timings_ms["generate"] = _elapsed_ms(generate_started_at)
 
     if answer:
@@ -528,6 +531,15 @@ def _repair_generated_text(text: str) -> str:
     for source, target in replacements.items():
         text = text.replace(source, target)
     return text
+
+
+def _ensure_primary_inline_citation(text: str, chunks: list[KnowledgeChunk]) -> str:
+    if not text or not chunks:
+        return text
+    primary_citation = f"[{chunks[0].id}]"
+    if primary_citation in text:
+        return text
+    return f"{text.rstrip()} {primary_citation}"
 
 
 def _format_citations(chunks: list[KnowledgeChunk]) -> str:
