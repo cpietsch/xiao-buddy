@@ -17,18 +17,21 @@
 ## Live Endpoint / Report Status
 
 - Live app endpoint is available at http://100.103.106.102:7861/.
-- Reranker quality report status: complete, metadata present, `62/62` passing.
-- Answer quality report status: complete, metadata present, `33/33` passing.
-- Local export verification status: rerun after reports are regenerated at the current commit.
+- Reranker quality report status: must be regenerated after the latency-control commit.
+- Answer quality report status: must be regenerated after the latency-control commit.
+- Local export verification status: must be rerun after regenerated quality reports are present.
 
 ## Current In-Progress Work
 
-- Refreshing report metadata and local export evidence after progress-log updates.
+- Reducing hosted agent response latency without dropping required answer facts.
+- Added `AGENT_MAX_TOKENS=350` and tightened the agent prompt to put direct settings first.
+- Targeted live YAML answer case passed at the new default: `350` streamed chunks, `964` chars, first token `204.0 ms`, total `32430.3 ms`.
 
 ## Remaining Next Steps
 
+- Commit the latency-control change and this progress update.
 - Regenerate answer and reranker quality reports after any new commit.
-- Run `make export-local verify-local-export`.
+- Run `make export-local verify-local-export` after regenerated reports are present.
 - Check `dist/local-export/manifest.json` for final bundle path and verification evidence.
 
 ## Key Commands / Artifacts

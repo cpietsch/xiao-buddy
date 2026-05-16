@@ -304,11 +304,12 @@ def chat_completion(
     messages: list[dict[str, Any]],
     api_key: str = "",
     timeout: float = 20,
+    max_tokens: int = 350,
 ) -> EndpointResult:
     if not base_url:
         return EndpointResult(ok=False, error="Agent endpoint is not configured.")
 
-    payload = _chat_payload(model, messages)
+    payload = _chat_payload(model, messages, max_tokens=max_tokens)
 
     try:
         response = requests.post(
@@ -336,12 +337,13 @@ def chat_completion_stream(
     messages: list[dict[str, Any]],
     api_key: str = "",
     timeout: float = 20,
+    max_tokens: int = 350,
 ) -> Iterator[EndpointResult]:
     if not base_url:
         yield EndpointResult(ok=False, error="Agent endpoint is not configured.")
         return
 
-    payload = _chat_payload(model, messages)
+    payload = _chat_payload(model, messages, max_tokens=max_tokens)
     payload["stream"] = True
 
     try:
@@ -375,12 +377,12 @@ def chat_completion_stream(
         yield EndpointResult(ok=False, error=str(exc))
 
 
-def _chat_payload(model: str, messages: list[dict[str, Any]]) -> dict[str, Any]:
+def _chat_payload(model: str, messages: list[dict[str, Any]], max_tokens: int = 350) -> dict[str, Any]:
     return {
         "model": model,
         "messages": messages,
         "temperature": 0.0,
-        "max_tokens": 700,
+        "max_tokens": max(1, int(max_tokens)),
         "chat_template_kwargs": {"enable_thinking": False},
     }
 

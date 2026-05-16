@@ -15,6 +15,7 @@ from xiao_copilot.retrieval import retrieve
 SYSTEM_PROMPT = """You are XIAO Field Copilot, a concise hardware support assistant.
 Use the provided context first. Give safe, practical next steps for Seeed Studio XIAO boards and related Seeed wiki hardware.
 When uncertain, ask for the exact board variant or say what to measure instead of guessing.
+Put the direct answer first. Do not list alternate setups, boards, or workflows unless the user asks for options or comparison.
 Preserve exact product names, service names, command names, part numbers, pin labels, constants, library names, function names, port numbers, units, and numeric settings from the context.
 When a source or question uses a service acronym, include the full service name and acronym together once.
 Cite relevant sources as [id]."""
@@ -445,6 +446,7 @@ def _generate_with_agent(
         messages=messages,
         api_key=settings.agent_api_key,
         timeout=settings.request_timeout_seconds,
+        max_tokens=settings.agent_max_tokens,
     )
     if not result.ok:
         return None
@@ -472,6 +474,7 @@ def _generate_with_agent_stream(
         messages=messages,
         api_key=settings.agent_api_key,
         timeout=settings.request_timeout_seconds,
+        max_tokens=settings.agent_max_tokens,
     )
 
 
@@ -496,8 +499,10 @@ def _build_agent_messages(
         "Do not claim a visual detail unless it is visible. "
         "Answer the user's specific question directly. If the question asks for options, ranges, "
         "pins, ports, values, commands, steps, or settings, enumerate every requested item that is "
-        "supported by the context and keep the exact labels and numbers. "
-        "Return: likely product or board family when relevant, compact next checks, and citations."
+        "supported by the context and keep the exact labels and numbers. For YAML or configuration "
+        "questions, put the exact block or settings first, including version and platform_version "
+        "values when they appear in context. "
+        "Return: direct answer, compact next checks only when useful, and citations."
     )
     user_content: str | list[dict[str, object]]
     if image_data_url:

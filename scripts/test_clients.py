@@ -34,6 +34,13 @@ def _assert_chat_payload_is_deterministic() -> None:
     payload = _chat_payload("test-model", [{"role": "user", "content": "hello"}])
     _assert(payload["temperature"] == 0.0, "agent chat payload should be deterministic for eval stability")
     _assert(payload["chat_template_kwargs"] == {"enable_thinking": False}, "chat payload should disable thinking")
+    _assert(payload["max_tokens"] == 350, "agent chat payload should use the compact default token budget")
+
+    override = _chat_payload("test-model", [{"role": "user", "content": "hello"}], max_tokens=128)
+    _assert(override["max_tokens"] == 128, "agent chat payload should accept configured token budgets")
+
+    clamped = _chat_payload("test-model", [{"role": "user", "content": "hello"}], max_tokens=0)
+    _assert(clamped["max_tokens"] == 1, "agent chat payload should clamp invalid token budgets")
 
 
 def _assert_embedding_url_variants() -> None:

@@ -50,6 +50,7 @@ RERANK_TEXT_CHARS=3200
 AGENT_BASE_URL=https://your-llm-host/v1
 AGENT_MODEL=your-agent-model-id
 AGENT_API_KEY=
+AGENT_MAX_TOKENS=350
 
 TOP_K=5
 CANDIDATE_K=16
@@ -419,6 +420,8 @@ chunks with family-level summaries.
 This Space is a thin UI and orchestration layer. It needs an embedding endpoint
 for vector search, can use an optional reranker endpoint for better ordering, and
 can call any OpenAI-compatible chat-completions endpoint for the final answer.
+Use `AGENT_MAX_TOKENS` to cap generated answer length when a larger hosted model
+streams quickly but takes too long to finish full responses.
 
 One tested all-vLLM setup self-hosts the Qwen services on a single AMD Instinct
 MI300X GPU:
