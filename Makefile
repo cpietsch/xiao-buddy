@@ -1,4 +1,4 @@
-.PHONY: smoke ui-smoke health health-live app-smoke eval-gate answer-eval eval-all verify-live rerank-benchmark vector-artifact verify-vector-artifact install-vector-artifact export-local
+.PHONY: smoke ui-smoke browser-smoke health health-live app-smoke eval-gate answer-eval eval-all verify-live rerank-benchmark vector-artifact verify-vector-artifact install-vector-artifact export-local
 
 PYTHON ?= .venv/bin/python
 
@@ -12,6 +12,9 @@ smoke:
 
 ui-smoke:
 	$(PYTHON) scripts/ui_contract_smoke.py
+
+browser-smoke:
+	$(PYTHON) scripts/browser_smoke.py
 
 health:
 	$(PYTHON) scripts/health_check.py

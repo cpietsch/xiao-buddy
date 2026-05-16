@@ -164,6 +164,17 @@ To reuse a generated-answer eval case directly:
 APP_SMOKE_CASE_ID=answer-grove-vision-ai-trigger-actions make app-smoke
 ```
 
+For rendered UI checks, install the dev-only browser dependency once and run the
+Chromium smoke. It verifies desktop/mobile rendering, progress live-region DOM,
+skip-link focus, horizontal overflow, button hit targets, and saves screenshots
+under `dist/browser-smoke/`:
+
+```bash
+pip install -r requirements-dev.txt
+python -m playwright install chromium
+make browser-smoke
+```
+
 Run the complete local and live verification sequence before a demo or handoff:
 
 ```bash
