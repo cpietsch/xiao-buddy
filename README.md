@@ -355,6 +355,8 @@ make vector-artifact
 
 The package step writes deterministic tarballs: if the index bytes and manifest
 source hash are unchanged, rerunning the command produces the same archive SHA.
+The metadata file is portable: it stores the archive as a co-located filename
+and the manifest as a repo-relative path, not a machine-local absolute path.
 By default it keeps only the current `*.tar.gz` artifact plus metadata in
 `dist/vector-index`; set `VECTOR_ARTIFACT_KEEP` or pass `--keep-artifacts` to
 retain more local archive history.

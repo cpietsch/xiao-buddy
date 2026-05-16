@@ -37,12 +37,12 @@ def main() -> None:
     write_deterministic_tar_gz(archive_path, data_path)
 
     metadata = {
-        "archive": str(archive_path),
+        "archive": archive_path.name,
         "archive_sha256": sha256_file(archive_path),
         "data_file": data_path.name,
         "data_bytes": data_path.stat().st_size,
         "data_sha256": sha256_file(data_path),
-        "manifest": str(manifest_path),
+        "manifest": _relative_to_root(manifest_path),
         "backend": meta.get("backend") or meta.get("index_backend") or "flat",
         "count": meta.get("count", len(meta.get("ids", []))),
         "dim": meta.get("dim"),
@@ -141,6 +141,13 @@ def _prune_old_artifacts(output_dir: Path, current_archive: Path, keep_artifacts
         metadata.unlink()
         pruned.append(metadata.name)
     return pruned
+
+
+def _relative_to_root(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(ROOT.resolve()))
+    except ValueError:
+        return path.name
 
 
 if __name__ == "__main__":

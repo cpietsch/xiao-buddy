@@ -105,7 +105,12 @@ def _resolve_archive_path(metadata: dict[str, object], metadata_path: Path) -> P
     archive = str(metadata.get("archive") or "")
     if archive:
         path = Path(archive).expanduser()
-        return path if path.is_absolute() else ROOT / path
+        if path.is_absolute():
+            return path
+        metadata_relative = metadata_path.parent / path
+        if metadata_relative.exists():
+            return metadata_relative
+        return ROOT / path
     return metadata_path.with_suffix("")
 
 

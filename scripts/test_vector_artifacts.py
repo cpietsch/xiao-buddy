@@ -33,6 +33,11 @@ def main() -> None:
         metadata_path = archive_path.with_suffix(archive_path.suffix + ".json")
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         archive_sha = str(metadata["archive_sha256"])
+        _assert(metadata["archive"] == archive_path.name, "artifact metadata archive should be a portable filename")
+        _assert(
+            metadata["manifest"].endswith("test_vectors.json") and not Path(str(metadata["manifest"])).is_absolute(),
+            "artifact metadata manifest should not use an absolute local path",
+        )
 
         data_path.unlink()
         result = install_vector_artifact(

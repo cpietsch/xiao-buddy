@@ -187,9 +187,12 @@ def _resolve_vector_archive_path(metadata: dict[str, object], metadata_path: Pat
     archive = str(metadata.get("archive") or "")
     if archive:
         path = Path(archive).expanduser()
-        if not path.is_absolute():
-            path = root / path
-        return path
+        if path.is_absolute():
+            return path
+        metadata_relative = metadata_path.parent / path
+        if metadata_relative.exists():
+            return metadata_relative
+        return root / path
     return metadata_path.with_suffix("")
 
 
