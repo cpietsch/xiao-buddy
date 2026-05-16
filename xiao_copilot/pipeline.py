@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from time import perf_counter
 
@@ -16,9 +17,30 @@ SYSTEM_PROMPT = """You are XIAO Field Copilot, a concise hardware support assist
 Use the provided context first. Give safe, practical next steps for Seeed Studio XIAO boards and related Seeed wiki hardware.
 When uncertain, ask for the exact board variant or say what to measure instead of guessing.
 Put the direct answer first. Do not list alternate setups, boards, or workflows unless the user asks for options or comparison.
-Preserve exact product names, service names, command names, part numbers, pin labels, constants, library names, function names, port numbers, units, and numeric settings from the context.
+Preserve exact product names, service names, command names, part numbers, pin labels, constants, library names, function names, port numbers, units, interface names such as USB-UART, and numeric settings from the context.
+When the answer names hardware, setup values, firmware steps, radio capabilities, or ports, include the exact device name and the important named terms from the relevant source.
+For app or form setup questions, include every required selection and credential from the source, including platform, frequency plan or region, IDs, EUIs, and keys.
+For firmware or deployment flows, use at most three compact stages: prerequisite update, mass-storage entry, copy or verify. Do not expand every tool substep unless asked, but preserve exact chip, interface, button, filename, and drive names.
 When a source or question uses a service acronym, include the full service name and acronym together once.
 Cite relevant sources as [id]."""
+
+EXACT_TERM_CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("USB-UART", ("usb-uart", "usb uart")),
+    ("BL702", ("bl702",)),
+    ("Edge Impulse firmware", ("edge impulse firmware",)),
+    ("firmware.uf2", ("firmware.uf2",)),
+    ("GROVEAI", ("groveai",)),
+    ("frequency plan", ("frequency plan", "frequenct plan")),
+    ("The Things Network", ("the things network",)),
+    ("device EUI", ("device eui",)),
+    ("App EUI", ("app eui",)),
+    ("APP key", ("app key", "appkey")),
+    ("2.4G", ("2.4g", "2.4 ghz")),
+    ("J501 Mini", ("j501 mini",)),
+    ("Boot", ("boot",)),
+)
+
+MARKED_EXACT_TERM_RE = re.compile(r"`([^`\n]{2,48})`|\*\*([^*\n]{2,48})\*\*")
 
 
 def answer_question(image: Image.Image | None, question: str) -> tuple[str, str, dict[str, object]]:
@@ -171,7 +193,10 @@ def answer_question_stream(
             )
 
     generated_answer = _repair_generated_text("".join(answer_parts)).strip()
-    answer = "" if agent_error else _ensure_inline_citations(generated_answer, chunks)
+    if agent_error:
+        answer = ""
+    else:
+        answer = _ensure_inline_citations(_ensure_answer_exact_terms(generated_answer, question, chunks), chunks)
     timings_ms["generate"] = _elapsed_ms(generate_started_at)
 
     if answer:
@@ -489,11 +514,19 @@ def _build_agent_messages(
         f"[{chunk.id}] {chunk.title}\nSource: {chunk.source}\n{chunk.text}"
         for chunk in chunks
     )
+    exact_terms = _exact_terms_hint(question, chunks)
+    exact_terms_note = ""
+    if exact_terms:
+        exact_terms_note = (
+            "\n\nExact terms to preserve when relevant: "
+            + ", ".join(exact_terms)
+            + ". If one of these terms answers the user's question, include it in the final answer."
+        )
     prompt = (
         f"Agent route: {intent}\n"
         f"Question: {question}\n\n"
         f"Image metadata: {image_summary}\n\n"
-        f"Context:\n{context}\n\n"
+        f"Context:\n{context}{exact_terms_note}\n\n"
         "If an image is provided, inspect visible board markings, MCU labels, connectors, "
         "antenna parts, sensor modules, camera/microphone hardware, and pin labels. "
         "Do not claim a visual detail unless it is visible. "
@@ -501,7 +534,9 @@ def _build_agent_messages(
         "pins, ports, values, commands, steps, or settings, enumerate every requested item that is "
         "supported by the context and keep the exact labels and numbers. For YAML or configuration "
         "questions, put the exact block or settings first, including version and platform_version "
-        "values when they appear in context. "
+        "values when they appear in context. Before finishing, check that the answer kept source "
+        "terms for radio bands, frequency plans, chip names, USB interfaces, and target device names "
+        "when those details are relevant. "
         "Return: direct answer, compact next checks only when useful, and citations."
     )
     user_content: str | list[dict[str, object]]
@@ -518,6 +553,81 @@ def _build_agent_messages(
         {"role": "user", "content": user_content},
     ]
     return messages
+
+
+def _exact_terms_hint(question: str, chunks: list[KnowledgeChunk]) -> list[str]:
+    text = "\n".join([question, *(chunk.title + "\n" + chunk.text for chunk in chunks)])
+    normalized = text.lower()
+    terms: list[str] = []
+
+    for canonical, aliases in EXACT_TERM_CANDIDATES:
+        if any(_contains_alias(normalized, alias) for alias in aliases):
+            terms.append(canonical)
+
+    for match in MARKED_EXACT_TERM_RE.finditer(text):
+        value = (match.group(1) or match.group(2) or "").strip()
+        if _looks_like_exact_term(value):
+            terms.append(value)
+
+    return list(dict.fromkeys(terms))[:18]
+
+
+def _ensure_answer_exact_terms(answer: str, question: str, chunks: list[KnowledgeChunk]) -> str:
+    if not answer.strip():
+        return answer
+    missing: list[tuple[str, str]] = []
+    for term in _exact_terms_hint(question, chunks):
+        if _answer_has_exact_term(answer, term):
+            continue
+        source_id = _source_id_for_exact_term(term, chunks)
+        if source_id:
+            missing.append((term, source_id))
+    if not missing:
+        return answer
+
+    details = " ".join(f"`{term}` [{source_id}]" for term, source_id in missing[:5])
+    return f"{answer.rstrip()}\n\nSource detail: {details}."
+
+
+def _looks_like_exact_term(value: str) -> bool:
+    if not value or len(value) > 48:
+        return False
+    if any(char.isspace() for char in value):
+        return False
+    lowered = value.lower()
+    if lowered.startswith(("step ", "note:", "warning", "caution")):
+        return False
+    return (
+        any(char.isdigit() for char in value)
+        or any(marker in value for marker in ("-", "_", ".", "/"))
+        or (value.isupper() and len(value) > 2)
+    )
+
+
+def _contains_alias(normalized_text: str, alias: str) -> bool:
+    return re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", normalized_text) is not None
+
+
+def _answer_has_exact_term(answer: str, term: str) -> bool:
+    normalized = answer.lower()
+    return any(_contains_alias(normalized, alias) for alias in _aliases_for_exact_term(term))
+
+
+def _source_id_for_exact_term(term: str, chunks: list[KnowledgeChunk]) -> str:
+    aliases = _aliases_for_exact_term(term)
+    for chunk in chunks:
+        normalized = f"{chunk.title}\n{chunk.text}".lower()
+        if any(_contains_alias(normalized, alias) for alias in aliases):
+            return chunk.id
+    return chunks[0].id if chunks else ""
+
+
+def _aliases_for_exact_term(term: str) -> tuple[str, ...]:
+    lowered = term.lower()
+    for canonical, aliases in EXACT_TERM_CANDIDATES:
+        if canonical.lower() == lowered:
+            return aliases
+    return (lowered,)
 
 
 def _fallback_answer(

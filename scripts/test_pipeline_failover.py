@@ -15,6 +15,8 @@ from xiao_copilot.knowledge_base import KnowledgeChunk
 def main() -> None:
     _assert_text_repair()
     _assert_system_prompt_preserves_acronyms()
+    _assert_exact_term_hint_preserves_hardware_terms()
+    _assert_exact_term_append_cites_missing_terms()
     _assert_success_stream_reports_first_token_latency()
 
     original_load_settings = pipeline.load_settings
@@ -99,6 +101,38 @@ def _assert_text_repair() -> None:
     repaired = pipeline._repair_generated_text("Basics\u00e2\u0084\u00a2 Station and LoRaWAN\u00c2\u00ae coverage")
     _assert("Basics™ Station" in repaired, "agent text repair should handle trademark mojibake")
     _assert("LoRaWAN® coverage" in repaired, "agent text repair should handle registered-symbol mojibake")
+
+
+def _assert_exact_term_hint_preserves_hardware_terms() -> None:
+    chunk = KnowledgeChunk(
+        id="term-source",
+        title="Firmware setup",
+        source="https://wiki.seeedstudio.com/test/",
+        text=(
+            "BL702 is the USB-UART chip. Select the Frequenct Plan, then copy "
+            "**firmware.uf2** to **GROVEAI**."
+        ),
+        kind="wiki",
+    )
+    terms = pipeline._exact_terms_hint("What values do I need from the app?", [chunk])
+    for expected in ("BL702", "USB-UART", "frequency plan", "firmware.uf2", "GROVEAI"):
+        _assert(expected in terms, f"exact term hint should include {expected}")
+
+
+def _assert_exact_term_append_cites_missing_terms() -> None:
+    chunk = KnowledgeChunk(
+        id="wifi-source",
+        title="Gateway network",
+        source="https://wiki.seeedstudio.com/test/",
+        text="The wifi you expect to use should be 2.4G.",
+        kind="wiki",
+    )
+    answer = pipeline._ensure_answer_exact_terms(
+        "Use the XIAO ESP32S3 & Wio-SX1262 Kit [wifi-source].",
+        "What hardware needs LoRa and WiFi?",
+        [chunk],
+    )
+    _assert("`2.4G` [wifi-source]" in answer, "missing exact terms should be appended with citations")
 
 
 def _fake_settings() -> Settings:

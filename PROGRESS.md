@@ -25,11 +25,12 @@
 
 - Reducing hosted agent response latency without dropping required answer facts.
 - Added `AGENT_MAX_TOKENS=350` and tightened the agent prompt to put direct settings first.
-- Targeted live YAML answer case passed at the new default: `350` streamed chunks, `964` chars, first token `204.0 ms`, total `32430.3 ms`.
+- Added a deterministic exact-term safety pass so compact agent answers keep cited hardware terms such as `2.4G`, `USB-UART`, `firmware.uf2`, and `frequency plan`.
+- Targeted live repair set passed: `4/4` answer cases, citation and inline-citation checks `4/4`, p50 total `28206.3 ms`.
 
 ## Remaining Next Steps
 
-- Commit the latency-control change and this progress update.
+- Commit the exact-term safety change and this progress update.
 - Regenerate answer and reranker quality reports after any new commit.
 - Run `make export-local verify-local-export` after regenerated reports are present.
 - Check `dist/local-export/manifest.json` for final bundle path and verification evidence.
