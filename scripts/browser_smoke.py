@@ -16,6 +16,7 @@ from xiao_copilot.config import load_settings
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_QUERY = "Which XIAO should I choose for 5 GHz WiFi?"
 DEFAULT_TERMS = ("XIAO ESP32-C5", "5 GHz", "Wi-Fi 6")
+DEFAULT_CITATIONS = ("https://wiki.seeedstudio.com/xiao_esp32c5_wifi_usage/",)
 DEFAULT_EVAL_PATH = Path("data/corpus/answer_eval_queries.jsonl")
 
 
@@ -35,7 +36,7 @@ def main() -> None:
     url = args.url or _app_url(settings)
     screenshot_dir = _resolve_output_dir(args.screenshot_dir)
     screenshot_dir.mkdir(parents=True, exist_ok=True)
-    query, terms, case_id = _load_query(args)
+    query, terms, citations, case_id = _load_query(args)
 
     with sync_playwright() as playwright:
         try:
@@ -61,6 +62,7 @@ def main() -> None:
                                 screenshot_dir,
                                 query=query,
                                 terms=terms,
+                                citations=citations,
                                 case_id=case_id,
                                 timeout_ms=args.timeout_ms,
                             )
@@ -87,6 +89,12 @@ def _parse_args() -> argparse.Namespace:
         action="append",
         default=[],
         help="Required answer/body term for --run-query. May be passed more than once.",
+    )
+    parser.add_argument(
+        "--must-cite",
+        action="append",
+        default=[],
+        help="Required rendered citation URL for --run-query. May be passed more than once.",
     )
     parser.add_argument("--case-id", default="", help="Load query and required terms from answer eval JSONL.")
     parser.add_argument("--eval-path", default=str(DEFAULT_EVAL_PATH), help="Answer eval JSONL path for --case-id.")
@@ -156,6 +164,7 @@ def _check_query_interaction(
     *,
     query: str,
     terms: tuple[str, ...],
+    citations: tuple[str, ...],
     case_id: str,
     timeout_ms: int,
 ) -> str:
@@ -179,6 +188,8 @@ def _check_query_interaction(
           const text = document.body.innerText || "";
           const normalized = normalize(text);
           return terms.every((term) => normalized.includes(normalize(term)))
+            && text.includes("streamed")
+            && text.includes("agent answer")
             && text.includes("Sources used")
             && text.includes("Ready");
         }
@@ -189,9 +200,13 @@ def _check_query_interaction(
 
     body_text = page.evaluate("() => document.body.innerText || ''")
     _require_terms("browser answer", body_text, terms)
+    _require_terms("browser citations", body_text, citations)
+    _require_inline_citation(body_text, citations)
     _assert("RUN PROGRESS" in body_text, "browser answer should keep progress visible")
     _assert("FIELD ANSWER" in body_text, "browser answer should keep answer panel visible")
     _assert("Sources used" in body_text, "browser answer should keep source trail visible")
+    _assert("streamed" in body_text, "browser answer should expose streamed progress")
+    _assert("agent answer" in body_text, "browser answer should expose final agent status")
 
     screenshot_path = screenshot_dir / "desktop-after-query.png"
     page.screenshot(path=str(screenshot_path), full_page=True)
@@ -200,18 +215,20 @@ def _check_query_interaction(
     return f"OK   desktop query {case_label}: {screenshot_path.relative_to(ROOT)}"
 
 
-def _load_query(args: argparse.Namespace) -> tuple[str, tuple[str, ...], str]:
+def _load_query(args: argparse.Namespace) -> tuple[str, tuple[str, ...], tuple[str, ...], str]:
     case_id = args.case_id or os.environ.get("BROWSER_SMOKE_CASE_ID", "").strip()
     if case_id:
         case = _load_answer_eval_case(Path(args.eval_path), case_id)
         return (
             str(case["query"]),
             tuple(str(term) for term in case.get("must_include", [])),
+            tuple(str(citation) for citation in case.get("must_cite", [])),
             case_id,
         )
     query = args.query or os.environ.get("BROWSER_SMOKE_QUERY", DEFAULT_QUERY)
     terms = tuple(args.must_include) if args.must_include else _csv_env("BROWSER_SMOKE_MUST_INCLUDE", DEFAULT_TERMS)
-    return query, terms, ""
+    citations = tuple(args.must_cite) if args.must_cite else _csv_env("BROWSER_SMOKE_MUST_CITE", DEFAULT_CITATIONS)
+    return query, terms, citations, ""
 
 
 def _load_answer_eval_case(path: Path, case_id: str) -> dict[str, object]:
@@ -238,6 +255,50 @@ def _require_terms(label: str, text: str, terms: tuple[str, ...]) -> None:
     missing = [term for term in terms if _normalize(term) not in normalized]
     if missing:
         raise AssertionError(f"{label} missing required terms: {', '.join(missing)}")
+
+
+def _require_inline_citation(body_text: str, citations: tuple[str, ...]) -> None:
+    source_ids = _source_ids_for_required_citations(body_text, citations)
+    if not source_ids:
+        source_ids = _source_ids_from_source_text(body_text)
+    answer_text = body_text.split("Sources used", 1)[0]
+    if not any(f"[{source_id}]" in answer_text for source_id in source_ids):
+        expected = ", ".join(f"[{source_id}]" for source_id in source_ids) or "a rendered source id"
+        raise AssertionError(f"browser answer missing inline citation for {expected}")
+
+
+def _source_ids_for_required_citations(body_text: str, citations: tuple[str, ...]) -> list[str]:
+    if not citations:
+        return []
+    required = [_normalize(citation) for citation in citations]
+    source_ids: list[str] = []
+    for line in body_text.splitlines():
+        normalized_line = _normalize(line)
+        if any(citation in normalized_line for citation in required):
+            source_id = _source_id_from_line(line)
+            if source_id:
+                source_ids.append(source_id)
+    return source_ids
+
+
+def _source_ids_from_source_text(body_text: str) -> list[str]:
+    return [
+        source_id
+        for line in body_text.splitlines()
+        if (source_id := _source_id_from_line(line))
+    ]
+
+
+def _source_id_from_line(line: str) -> str:
+    line = line.strip()
+    if line.startswith("- ["):
+        line = line[2:].strip()
+    if not line.startswith("["):
+        return ""
+    end = line.find("]")
+    if end <= 1:
+        return ""
+    return line[1:end]
 
 
 def _normalize(text: str) -> str:

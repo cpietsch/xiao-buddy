@@ -177,7 +177,8 @@ make browser-smoke
 
 To exercise the real hydrated browser flow against the hosted pipeline, run the
 agent-backed browser smoke. It fills the question textbox, clicks the visible
-button, waits for required answer terms to stream into the page, and saves
+button, waits for required answer terms, cited source URLs, inline citations,
+and streamed progress to appear in the page, and saves
 `dist/browser-smoke/desktop-after-query.png`:
 
 ```bash
