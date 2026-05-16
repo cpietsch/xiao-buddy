@@ -75,6 +75,18 @@ EXAMPLES = [
         None,
         "In the XIAO RS485 Expansion Board ESP32C3 example, which pins are used for RS485 UART RX/TX and enable?",
     ],
+    [
+        None,
+        "What voltage, MCU, ADC, Grove ports, bus, and I2C address does Grove Base Hat for Raspberry Pi Zero use?",
+    ],
+    [
+        None,
+        "For the Reachy Mini fleet dance demo, which Jetson-side and laptop-side services run, and what ports are used?",
+    ],
+    [
+        None,
+        "In the Jetson Thor OpenClaw SO-Arm guide, what roles do OpenClaw and LeRobot play?",
+    ],
 ]
 
 INITIAL_ANSWER = (
@@ -432,6 +444,8 @@ def build_demo() -> gr.Blocks:
     <span class="chip">nRF54L15</span>
     <span class="chip">Wio-SX1262</span>
     <span class="chip">Grove Vision AI V2</span>
+    <span class="chip">Raspberry Pi HATs</span>
+    <span class="chip">Jetson robotics</span>
     <span class="chip">RS485 expansion</span>
     <span class="chip">SenseCraft AI</span>
   </div>

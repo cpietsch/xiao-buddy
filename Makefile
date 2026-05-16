@@ -1,13 +1,17 @@
-.PHONY: smoke health health-live app-smoke eval-gate answer-eval eval-all verify-live rerank-benchmark vector-artifact install-vector-artifact export-local
+.PHONY: smoke ui-smoke health health-live app-smoke eval-gate answer-eval eval-all verify-live rerank-benchmark vector-artifact verify-vector-artifact install-vector-artifact export-local
 
 PYTHON ?= .venv/bin/python
 
 smoke:
 	$(PYTHON) -m py_compile app.py xiao_copilot/*.py scripts/*.py
 	$(PYTHON) scripts/test_app_scope.py
+	$(PYTHON) scripts/ui_contract_smoke.py
 	$(PYTHON) scripts/test_vector_artifacts.py
 	$(PYTHON) scripts/test_health_checks.py
 	OFFLINE_EVAL=1 STRICT_EVAL=1 EVAL_LIMIT=9 $(PYTHON) scripts/eval_smoke.py
+
+ui-smoke:
+	$(PYTHON) scripts/ui_contract_smoke.py
 
 health:
 	$(PYTHON) scripts/health_check.py
@@ -33,6 +37,9 @@ rerank-benchmark:
 
 vector-artifact:
 	$(PYTHON) scripts/package_vector_artifact.py
+
+verify-vector-artifact:
+	$(PYTHON) scripts/verify_vector_artifact.py
 
 install-vector-artifact:
 	test -n "$$VECTOR_INDEX_ARCHIVE_URL"
