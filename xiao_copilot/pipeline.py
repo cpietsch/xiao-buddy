@@ -15,7 +15,7 @@ from xiao_copilot.retrieval import retrieve
 SYSTEM_PROMPT = """You are XIAO Field Copilot, a concise hardware support assistant.
 Use the provided context first. Give safe, practical next steps for Seeed Studio XIAO boards.
 When uncertain, ask for the exact board variant or say what to measure instead of guessing.
-Preserve exact part numbers, pin labels, constants, library names, function names, units, and numeric settings from the context.
+Preserve exact product names, service names, command names, part numbers, pin labels, constants, library names, function names, port numbers, units, and numeric settings from the context.
 Cite relevant sources as [id]."""
 
 
@@ -163,7 +163,7 @@ def answer_question_stream(
                 ),
             )
 
-    answer = _ensure_primary_inline_citation(
+    answer = _ensure_inline_citations(
         _repair_generated_text("".join(answer_parts)).strip(),
         chunks,
     )
@@ -533,13 +533,14 @@ def _repair_generated_text(text: str) -> str:
     return text
 
 
-def _ensure_primary_inline_citation(text: str, chunks: list[KnowledgeChunk]) -> str:
+def _ensure_inline_citations(text: str, chunks: list[KnowledgeChunk]) -> str:
     if not text or not chunks:
         return text
-    primary_citation = f"[{chunks[0].id}]"
-    if primary_citation in text:
+    source_ids = list(dict.fromkeys(chunk.id for chunk in chunks))
+    missing_citations = [f"[{source_id}]" for source_id in source_ids if f"[{source_id}]" not in text]
+    if not missing_citations:
         return text
-    return f"{text.rstrip()} {primary_citation}"
+    return f"{text.rstrip()}\n\nSources: {' '.join(missing_citations)}"
 
 
 def _format_citations(chunks: list[KnowledgeChunk]) -> str:
