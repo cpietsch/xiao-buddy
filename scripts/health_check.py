@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -14,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from xiao_copilot.config import load_settings
 from xiao_copilot.index_corpus import hash_chunks, indexable_chunks
 from xiao_copilot.knowledge_base import KnowledgeChunk, load_knowledge_base
+from xiao_copilot.vector_artifacts import install_vector_artifact
 from xiao_copilot.vector_index import configured_index_paths
 
 
@@ -39,6 +41,9 @@ def main() -> None:
             settings.vector_index_data,
             chunks,
             artifact_url=settings.vector_index_archive_url,
+            artifact_sha256=settings.vector_index_archive_sha256,
+            verify_artifact=args.verify_artifacts,
+            artifact_timeout=args.timeout,
         )
     )
     checks.extend(_check_settings(settings))
@@ -63,6 +68,11 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Check local XIAO Buddy readiness.")
     parser.add_argument("--live", action="store_true", help="Check configured hosted endpoints.")
     parser.add_argument("--app", action="store_true", help="Check the configured Gradio app URL.")
+    parser.add_argument(
+        "--verify-artifacts",
+        action="store_true",
+        help="Download/verify configured vector artifacts into a temporary file.",
+    )
     parser.add_argument("--strict-warnings", action="store_true", help="Exit non-zero when warnings are present.")
     parser.add_argument("--timeout", type=float, default=8.0, help="Network timeout in seconds.")
     return parser.parse_args()
@@ -100,6 +110,9 @@ def _check_vector_index(
     chunks: list[KnowledgeChunk],
     *,
     artifact_url: str,
+    artifact_sha256: str = "",
+    verify_artifact: bool = False,
+    artifact_timeout: float = 60.0,
 ) -> list[Check]:
     checks: list[Check] = []
     manifest, fallback_data = configured_index_paths(manifest_path, data_path)
@@ -162,13 +175,33 @@ def _check_vector_index(
     if data.exists():
         checks.append(Check("ok", "vector data", f"{data.name} exists ({_format_bytes(data.stat().st_size)})"))
     else:
-        detail = f"missing {data}; run scripts/build_wiki_vector_index.py"
-        if artifact_url:
-            detail = f"missing {data}; runtime artifact restore is configured"
-        checks.append(Check("warn", "vector data", detail))
+        if artifact_url and artifact_sha256:
+            checks.append(
+                Check(
+                    "ok",
+                    "vector data",
+                    f"missing {data}; runtime artifact restore is configured with checksum",
+                )
+            )
+        elif artifact_url:
+            checks.append(
+                Check(
+                    "warn",
+                    "vector data",
+                    f"missing {data}; runtime artifact restore is configured without checksum",
+                )
+            )
+        else:
+            checks.append(Check("warn", "vector data", f"missing {data}; run scripts/build_wiki_vector_index.py"))
 
     if artifact_url:
         checks.append(Check("ok", "vector artifact URL", "configured"))
+        if artifact_sha256:
+            checks.append(Check("ok", "vector artifact checksum", "configured"))
+        else:
+            checks.append(Check("warn", "vector artifact checksum", "not configured"))
+        if verify_artifact:
+            checks.append(_check_vector_artifact_restore(artifact_url, artifact_sha256, data.name, artifact_timeout))
 
     if backend == "hnsw":
         try:
@@ -178,6 +211,27 @@ def _check_vector_index(
         except ImportError:
             checks.append(Check("fail", "hnswlib", "required for HNSW indexes"))
     return checks
+
+
+def _check_vector_artifact_restore(
+    artifact_url: str,
+    artifact_sha256: str,
+    member_name: str,
+    timeout: float,
+) -> Check:
+    with tempfile.TemporaryDirectory(prefix="xiao-health-vector-") as temp_dir:
+        target = Path(temp_dir) / member_name
+        result = install_vector_artifact(
+            artifact_url=artifact_url,
+            target_data_path=target,
+            artifact_sha256=artifact_sha256,
+            member_name=member_name,
+            timeout=timeout,
+        )
+        if not result.ok:
+            return Check("fail", "vector artifact restore", result.detail)
+        size = target.stat().st_size if target.exists() else 0
+        return Check("ok", "vector artifact restore", f"verified {member_name} ({_format_bytes(size)})")
 
 
 def _check_settings(settings) -> list[Check]:

@@ -49,6 +49,12 @@ you can install it explicitly with `make install-vector-artifact`. The packaged
 archive is deterministic for unchanged index bytes, so the SHA is stable across
 repeated packaging runs.
 
+To prove an artifact-backed deployment can restore the index, run:
+
+```bash
+python scripts/health_check.py --verify-artifacts --strict-warnings
+```
+
 For tiny/local indexes you can still build an exact flat file:
 
 ```bash

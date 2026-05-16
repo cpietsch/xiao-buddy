@@ -311,6 +311,13 @@ install the same artifact explicitly during deployment:
 make install-vector-artifact
 ```
 
+To verify an artifact-backed deployment without installing the index into the
+repo, run health with artifact verification enabled:
+
+```bash
+python scripts/health_check.py --verify-artifacts --strict-warnings
+```
+
 At query time the app embeds only the user/photo query, searches this local
 vector index, merges vector candidates with lexical/high-trust curated matches,
 reranks the evidence, and sends only the selected chunks to the final agent.
