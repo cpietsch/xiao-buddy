@@ -53,6 +53,8 @@ def main() -> None:
         ]
         if len(stream_events) < 2:
             raise SystemExit(f"Expected multiple streamed answer events, got {len(stream_events)}.")
+        if require_first_token and not _stream_events_with_first_token(stream_events):
+            raise SystemExit("Expected first-token diagnostics during streamed answer events.")
     first_token_ms = _first_token_ms(diagnostics)
     if require_first_token:
         _require_first_token_latency(first_token_ms, progress_html)
@@ -186,6 +188,26 @@ def _require_first_token_latency(first_token_ms: float | None, progress_html: st
         raise SystemExit(f"Expected final diagnostics to include positive first_token_ms, got {first_token_ms!r}.")
     if "first token" not in progress_html.lower():
         raise SystemExit("Expected final progress HTML to include first-token latency.")
+
+
+def _stream_events_with_first_token(events: list[list[object]]) -> list[list[object]]:
+    matches: list[list[object]] = []
+    for event in events:
+        if len(event) <= 3 or not isinstance(event[2], dict):
+            continue
+        diagnostics = event[2]
+        agent = diagnostics.get("agent", {})
+        agent_streaming = (
+            agent.get("streaming") if isinstance(agent, dict) else diagnostics.get("agent_streaming")
+        )
+        progress_html = str(event[3])
+        if (
+            agent_streaming
+            and _first_token_ms(diagnostics) is not None
+            and "first token" in progress_html.lower()
+        ):
+            matches.append(event)
+    return matches
 
 
 def _format_ms(value: float | None) -> str:
