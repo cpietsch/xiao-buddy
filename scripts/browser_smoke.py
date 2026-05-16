@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
 from pathlib import Path
 
@@ -12,6 +14,9 @@ from xiao_copilot.config import load_settings
 
 
 ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_QUERY = "Which XIAO should I choose for 5 GHz WiFi?"
+DEFAULT_TERMS = ("XIAO ESP32-C5", "5 GHz", "Wi-Fi 6")
+DEFAULT_EVAL_PATH = Path("data/corpus/answer_eval_queries.jsonl")
 
 
 def main() -> None:
@@ -30,6 +35,7 @@ def main() -> None:
     url = args.url or _app_url(settings)
     screenshot_dir = _resolve_output_dir(args.screenshot_dir)
     screenshot_dir.mkdir(parents=True, exist_ok=True)
+    query, terms, case_id = _load_query(args)
 
     with sync_playwright() as playwright:
         try:
@@ -48,6 +54,17 @@ def main() -> None:
                 page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
                 try:
                     results.append(_check_page(page, url, screenshot_dir, name, args.timeout_ms))
+                    if args.run_query and name == "desktop":
+                        results.append(
+                            _check_query_interaction(
+                                page,
+                                screenshot_dir,
+                                query=query,
+                                terms=terms,
+                                case_id=case_id,
+                                timeout_ms=args.timeout_ms,
+                            )
+                        )
                 except PlaywrightTimeoutError as exc:
                     raise SystemExit(f"{name} browser smoke timed out: {exc}") from exc
                 finally:
@@ -63,6 +80,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--url", default="", help="App URL. Defaults to the configured Gradio URL.")
     parser.add_argument("--screenshot-dir", default="dist/browser-smoke", help="Directory for screenshots.")
     parser.add_argument("--timeout-ms", type=int, default=30000, help="Playwright timeout in milliseconds.")
+    parser.add_argument("--run-query", action="store_true", help="Submit a real browser query on the desktop viewport.")
+    parser.add_argument("--query", default="", help="Query to use with --run-query.")
+    parser.add_argument(
+        "--must-include",
+        action="append",
+        default=[],
+        help="Required answer/body term for --run-query. May be passed more than once.",
+    )
+    parser.add_argument("--case-id", default="", help="Load query and required terms from answer eval JSONL.")
+    parser.add_argument("--eval-path", default=str(DEFAULT_EVAL_PATH), help="Answer eval JSONL path for --case-id.")
     return parser.parse_args()
 
 
@@ -121,6 +148,100 @@ def _check_page(page, url: str, screenshot_dir: Path, name: str, timeout_ms: int
     page.screenshot(path=str(screenshot_path), full_page=True)
     _assert(_is_nonblank_image(screenshot_path), f"{name}: screenshot appears blank")
     return f"OK   {name}: {screenshot_path.relative_to(ROOT)}"
+
+
+def _check_query_interaction(
+    page,
+    screenshot_dir: Path,
+    *,
+    query: str,
+    terms: tuple[str, ...],
+    case_id: str,
+    timeout_ms: int,
+) -> str:
+    page.get_by_label("Hardware question").fill(query)
+    page.get_by_role("button", name="Ask Buddy").click()
+    page.wait_for_function(
+        """
+        () => {
+          const text = document.body.innerText || "";
+          return text.includes("Preparing the request")
+            || text.includes("Retrieving relevant Seeed wiki sources")
+            || text.includes("Generating a cited answer");
+        }
+        """,
+        timeout=min(timeout_ms, 15000),
+    )
+    page.wait_for_function(
+        """
+        (terms) => {
+          const normalize = (value) => (value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+          const text = document.body.innerText || "";
+          const normalized = normalize(text);
+          return terms.every((term) => normalized.includes(normalize(term)))
+            && text.includes("Sources used")
+            && text.includes("Ready");
+        }
+        """,
+        arg=list(terms),
+        timeout=timeout_ms,
+    )
+
+    body_text = page.evaluate("() => document.body.innerText || ''")
+    _require_terms("browser answer", body_text, terms)
+    _assert("RUN PROGRESS" in body_text, "browser answer should keep progress visible")
+    _assert("FIELD ANSWER" in body_text, "browser answer should keep answer panel visible")
+    _assert("Sources used" in body_text, "browser answer should keep source trail visible")
+
+    screenshot_path = screenshot_dir / "desktop-after-query.png"
+    page.screenshot(path=str(screenshot_path), full_page=True)
+    _assert(_is_nonblank_image(screenshot_path), "desktop-after-query: screenshot appears blank")
+    case_label = case_id or "custom"
+    return f"OK   desktop query {case_label}: {screenshot_path.relative_to(ROOT)}"
+
+
+def _load_query(args: argparse.Namespace) -> tuple[str, tuple[str, ...], str]:
+    case_id = args.case_id or os.environ.get("BROWSER_SMOKE_CASE_ID", "").strip()
+    if case_id:
+        case = _load_answer_eval_case(Path(args.eval_path), case_id)
+        return (
+            str(case["query"]),
+            tuple(str(term) for term in case.get("must_include", [])),
+            case_id,
+        )
+    query = args.query or os.environ.get("BROWSER_SMOKE_QUERY", DEFAULT_QUERY)
+    terms = tuple(args.must_include) if args.must_include else _csv_env("BROWSER_SMOKE_MUST_INCLUDE", DEFAULT_TERMS)
+    return query, terms, ""
+
+
+def _load_answer_eval_case(path: Path, case_id: str) -> dict[str, object]:
+    if not path.is_absolute():
+        path = ROOT / path
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        case = json.loads(line)
+        if case.get("id") == case_id:
+            return case
+    raise SystemExit(f"Browser smoke case {case_id!r} was not found in {path}.")
+
+
+def _csv_env(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    raw = os.environ.get(name, "")
+    if not raw:
+        return default
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
+def _require_terms(label: str, text: str, terms: tuple[str, ...]) -> None:
+    normalized = _normalize(text)
+    missing = [term for term in terms if _normalize(term) not in normalized]
+    if missing:
+        raise AssertionError(f"{label} missing required terms: {', '.join(missing)}")
+
+
+def _normalize(text: str) -> str:
+    return "".join(ch for ch in text.lower() if ch.isalnum())
 
 
 def _resolve_output_dir(value: str) -> Path:

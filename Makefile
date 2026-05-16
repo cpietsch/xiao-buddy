@@ -1,4 +1,4 @@
-.PHONY: smoke ui-smoke browser-smoke health health-live app-smoke eval-gate answer-eval eval-all verify-live rerank-benchmark vector-artifact verify-vector-artifact install-vector-artifact export-local
+.PHONY: smoke ui-smoke browser-smoke browser-agent-smoke health health-live app-smoke eval-gate answer-eval eval-all verify-live rerank-benchmark vector-artifact verify-vector-artifact install-vector-artifact export-local
 
 PYTHON ?= .venv/bin/python
 
@@ -15,6 +15,9 @@ ui-smoke:
 
 browser-smoke:
 	$(PYTHON) scripts/browser_smoke.py
+
+browser-agent-smoke:
+	$(PYTHON) scripts/browser_smoke.py --run-query --timeout-ms $${BROWSER_SMOKE_TIMEOUT_MS:-120000}
 
 health:
 	$(PYTHON) scripts/health_check.py

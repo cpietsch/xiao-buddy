@@ -175,6 +175,15 @@ python -m playwright install chromium
 make browser-smoke
 ```
 
+To exercise the real hydrated browser flow against the hosted pipeline, run the
+agent-backed browser smoke. It fills the question textbox, clicks the visible
+button, waits for required answer terms to stream into the page, and saves
+`dist/browser-smoke/desktop-after-query.png`:
+
+```bash
+REQUEST_TIMEOUT_SECONDS=90 make browser-agent-smoke
+```
+
 Run the complete local and live verification sequence before a demo or handoff:
 
 ```bash
