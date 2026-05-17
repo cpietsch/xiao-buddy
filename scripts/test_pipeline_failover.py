@@ -372,7 +372,7 @@ def _assert_contextual_exact_term_repair_avoids_source_detail_noise() -> None:
     )
 
     round_display_controller = pipeline._ensure_answer_exact_terms(
-        "The display uses SPI and the touch controller uses I2C [display-source].",
+        "The display and touch controller are defined in the cited overlay [display-source].",
         "In the XIAO ESP32C3 Zephyr Round Display example, which buses are used for the display and touch controller?",
         [
             KnowledgeChunk(
@@ -384,7 +384,12 @@ def _assert_contextual_exact_term_repair_avoids_source_detail_noise() -> None:
             )
         ],
     )
-    for expected in ("`GC9A01` [display-source]", "`CHSC6X` [display-source]"):
+    for expected in (
+        "`GC9A01` [display-source]",
+        "`CHSC6X` [display-source]",
+        "`SPI` [display-source]",
+        "`I2C` [display-source]",
+    ):
         _assert(expected in round_display_controller, f"Round Display repair should preserve {expected}")
 
     oled_address = pipeline._ensure_answer_exact_terms(
@@ -403,7 +408,7 @@ def _assert_contextual_exact_term_repair_avoids_source_detail_noise() -> None:
     _assert("`0x3C`" in oled_address, "OLED address repair should normalize bare 3c to 0x3C")
 
     pdm_labels = pipeline._ensure_answer_exact_terms(
-        "The digital microphone is reserved on D11/GPIO41 and D12/GPIO42 [pdm-source].",
+        "The digital microphone is reserved on D11 and D12 [pdm-source].",
         "Which GPIOs are used for the XIAO ESP32S3 Sense digital microphone clock and data?",
         [
             KnowledgeChunk(
@@ -415,7 +420,7 @@ def _assert_contextual_exact_term_repair_avoids_source_detail_noise() -> None:
             )
         ],
     )
-    for expected in ("`Clock`", "`Data`", "[pdm-source]"):
+    for expected in ("`Clock`", "`Data`", "`GPIO41` [pdm-source]", "`GPIO42` [pdm-source]"):
         _assert(expected in pdm_labels, f"PDM microphone repair should preserve {expected}")
 
     wio_hardware = pipeline._ensure_answer_exact_terms(

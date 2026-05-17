@@ -71,6 +71,10 @@ EXACT_TERM_CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("SD card slot", ("sd card slot",)),
     ("GC9A01", ("gc9a01",)),
     ("CHSC6X", ("chsc6x",)),
+    ("SPI", ("spi",)),
+    ("I2C", ("i2c",)),
+    ("GPIO41", ("gpio41", "gpio 41")),
+    ("GPIO42", ("gpio42", "gpio 42")),
     ("ATSAMD51P19", ("atsamd51p19",)),
     ("Realtek RTL8720DN", ("realtek rtl8720dn", "rtl8720dn")),
     ("120MHz", ("120mhz", "120 mhz")),
@@ -1444,8 +1448,12 @@ def _contextual_exact_term_lines(question: str, missing: list[tuple[str, str]]) 
             "For the Round Display/Sense storage behavior, the cited source also names {terms}.",
         ),
         (
-            {"GC9A01", "CHSC6X"},
+            {"GC9A01", "CHSC6X", "SPI", "I2C"},
             "The cited Round Display device-tree details also name {terms}.",
+        ),
+        (
+            {"GPIO41", "GPIO42"},
+            "The cited microphone pin map also names {terms}.",
         ),
         (
             {"ATSAMD51P19", "Realtek RTL8720DN", "120MHz", "4MB", "192KB", "LIS3DHTR"},
@@ -1498,6 +1506,10 @@ def _exact_term_group_matches_question(term: str, question_lower: str) -> bool:
         return "round display" in question_lower and ("sd" in question_lower or "microsd" in question_lower)
     if term in {"GC9A01", "CHSC6X"}:
         return "round display" in question_lower or "display" in question_lower or "touch" in question_lower
+    if term in {"SPI", "I2C"}:
+        return "round display" in question_lower and ("bus" in question_lower or "buses" in question_lower)
+    if term in {"GPIO41", "GPIO42"}:
+        return "microphone" in question_lower and "clock" in question_lower and "data" in question_lower
     if term in {"ATSAMD51P19", "Realtek RTL8720DN", "120MHz", "4MB", "192KB", "LIS3DHTR"}:
         return "wio terminal" in question_lower and (
             "mcu" in question_lower
