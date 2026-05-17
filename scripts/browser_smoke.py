@@ -232,6 +232,7 @@ def _install_stream_observer(page) -> None:
           ];
           const snapshots = [];
           const draftSnapshots = [];
+          const heartbeatSnapshots = [];
           const answerText = () => {
             const block = document.querySelector(".block.result-box");
             return block ? (block.innerText || "").trim() : "";
@@ -250,6 +251,9 @@ def _install_stream_observer(page) -> None:
             const draftVisible = activeStep.includes("Generate answer")
               && activeStep.includes("source draft")
               && answer.includes("Source-backed draft");
+            const waitingForAgent = draftVisible
+              && activeStep.includes("waiting")
+              && activeStep.includes("first token");
             const streaming = activeStep.includes("Generate answer")
               && activeStep.includes("streaming")
               && activeStep.includes("first token");
@@ -260,6 +264,13 @@ def _install_stream_observer(page) -> None:
             };
             if (draftVisible) {
               draftSnapshots.push({
+                answerText: answer.slice(0, 500),
+                activeStep,
+                timestamp: Date.now(),
+              });
+            }
+            if (waitingForAgent) {
+              heartbeatSnapshots.push({
                 answerText: answer.slice(0, 500),
                 activeStep,
                 timestamp: Date.now(),
@@ -278,6 +289,7 @@ def _install_stream_observer(page) -> None:
           }
           window.__xiaoBuddyStreamSnapshots = snapshots;
           window.__xiaoBuddyDraftSnapshots = draftSnapshots;
+          window.__xiaoBuddyHeartbeatSnapshots = heartbeatSnapshots;
           window.__xiaoBuddyStreamObserver = new MutationObserver(record);
           window.__xiaoBuddyStreamObserver.observe(document.body, {
             childList: true,
@@ -300,6 +312,7 @@ def _assert_partial_stream_observed(page) -> None:
           return {
             snapshots: window.__xiaoBuddyStreamSnapshots || [],
             draftSnapshots: window.__xiaoBuddyDraftSnapshots || [],
+            heartbeatSnapshots: window.__xiaoBuddyHeartbeatSnapshots || [],
             lastState: window.__xiaoBuddyStreamLastState || null,
           };
         }
@@ -315,6 +328,18 @@ def _assert_partial_stream_observed(page) -> None:
         "browser answer should visibly render partial streamed text while Generate answer is active; "
         f"last observed state was {snapshots['lastState']!r}",
     )
+    draft_snapshots = snapshots["draftSnapshots"]
+    stream_snapshots = snapshots["snapshots"]
+    heartbeat_snapshots = snapshots["heartbeatSnapshots"]
+    first_draft = draft_snapshots[0] if draft_snapshots else {}
+    first_stream = stream_snapshots[0] if stream_snapshots else {}
+    wait_ms = int(first_stream.get("timestamp", 0) or 0) - int(first_draft.get("timestamp", 0) or 0)
+    if wait_ms >= 1500:
+        _assert(
+            bool(heartbeat_snapshots),
+            "browser answer should keep progress moving while waiting for the first hosted-agent token; "
+            f"waited about {wait_ms} ms, last observed state was {snapshots['lastState']!r}",
+        )
 
 
 def _load_query(args: argparse.Namespace) -> tuple[str, tuple[str, ...], tuple[str, ...], str]:
