@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import math
 import re
+from queue import Empty, Queue
 from collections.abc import Iterator
 from collections import Counter
 from dataclasses import dataclass
+from threading import Thread
 from time import perf_counter
 
-from xiao_copilot.clients import embed_query, embed_texts, rerank
+from xiao_copilot.clients import EndpointResult, embed_query, embed_texts, rerank
 from xiao_copilot.config import Settings
 from xiao_copilot.knowledge_base import KnowledgeChunk, load_knowledge_base
 from xiao_copilot.vector_index import configured_index_paths, load_vector_index, search_vector_index
@@ -21,6 +23,7 @@ INITIAL_RETRIEVAL_WEIGHT = 0.25
 SOURCE_CONTEXT_SIBLINGS = 4
 LEXICAL_RECALL_SCAN = 1000
 LEXICAL_RECALL_SLOTS = 6
+RERANK_PROGRESS_HEARTBEAT_SECONDS = 1.0
 COMMON_QUERY_TERMS = {
     "about",
     "after",
@@ -292,14 +295,36 @@ def retrieve_progressive(
     }
     timing_ms["reranker_prepare"] = _elapsed_ms(rerank_prepare_started_at)
     rerank_started_at = perf_counter()
-    rerank_result = rerank(
+    rerank_result: EndpointResult | None = None
+    for rerank_progress in _rerank_with_heartbeats(
         base_url=settings.rerank_base_url,
         model=settings.rerank_model,
         query=query,
         documents=rerank_documents,
         api_key=settings.rerank_api_key,
         timeout=settings.request_timeout_seconds,
-    )
+    ):
+        if rerank_progress is not None:
+            rerank_result = rerank_progress
+            continue
+        reranker_wait_ms = _elapsed_ms(rerank_started_at)
+        wait_timings = dict(timing_ms)
+        wait_timings["reranker_wait"] = reranker_wait_ms
+        wait_timings["total"] = _elapsed_ms(retrieval_started_at)
+        yield RetrievalStage(
+            stage="rerank_wait",
+            chunks=preview_top,
+            diagnostics={
+                **diagnostics,
+                "preliminary": True,
+                "reranker_pending": True,
+                "reranker_wait_ms": reranker_wait_ms,
+                "citations": [chunk.id for chunk in preview_top],
+                "timings_ms": wait_timings,
+            },
+        )
+    if rerank_result is None:
+        rerank_result = EndpointResult(ok=False, error="Reranker finished without returning a result.")
     reranker_ms = _elapsed_ms(rerank_started_at)
     diagnostics["reranker_ms"] = reranker_ms
     timing_ms["reranker"] = reranker_ms
@@ -339,6 +364,50 @@ def retrieve_progressive(
     timing_ms["total"] = _elapsed_ms(retrieval_started_at)
     diagnostics["timings_ms"] = timing_ms
     yield RetrievalStage(stage="final", chunks=top, diagnostics=diagnostics)
+
+
+def _rerank_with_heartbeats(
+    *,
+    base_url: str,
+    model: str,
+    query: str,
+    documents: list[str],
+    api_key: str,
+    timeout: float,
+) -> Iterator[EndpointResult | None]:
+    result_queue: Queue[tuple[str, EndpointResult | None]] = Queue()
+
+    def run_rerank() -> None:
+        try:
+            result_queue.put(
+                (
+                    "result",
+                    rerank(
+                        base_url=base_url,
+                        model=model,
+                        query=query,
+                        documents=documents,
+                        api_key=api_key,
+                        timeout=timeout,
+                    ),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - surface provider wrapper failures as diagnostics.
+            result_queue.put(("result", EndpointResult(ok=False, error=str(exc))))
+        finally:
+            result_queue.put(("done", None))
+
+    Thread(target=run_rerank, daemon=True).start()
+
+    while True:
+        try:
+            kind, result = result_queue.get(timeout=RERANK_PROGRESS_HEARTBEAT_SECONDS)
+        except Empty:
+            yield None
+            continue
+        if kind == "done":
+            return
+        yield result
 
 
 def _rerank_text(

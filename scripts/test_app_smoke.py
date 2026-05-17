@@ -10,6 +10,7 @@ from scripts.app_smoke import (
     _first_token_ms,
     _format_ms,
     _require_first_token_latency,
+    _reranker_wait_events,
     _source_draft_events,
     _stream_events_with_first_token,
 )
@@ -19,6 +20,7 @@ def main() -> None:
     _assert_first_token_helpers()
     _assert_stream_first_token_events()
     _assert_source_draft_events()
+    _assert_reranker_wait_events()
     _assert_agent_wait_heartbeat_events()
     print("PASS app smoke parser regression")
 
@@ -125,6 +127,32 @@ def _assert_agent_wait_heartbeat_events() -> None:
         _agent_wait_heartbeat_events([heartbeat_event, missing_status_event, missing_progress_event])
         == [heartbeat_event],
         "only waiting-first-token events with visible heartbeat progress should count",
+    )
+
+
+def _assert_reranker_wait_events() -> None:
+    wait_event = [
+        "Source-backed draft\n\nUse the cited source.\n\n_Refining source order with hosted reranker: 1001 ms…_",
+        "",
+        {"retrieval": {"reranker_wait_ms": 1001.0}},
+        "<small>source draft 48 chars in 500 ms; reranker running 1001 ms</small>",
+    ]
+    missing_answer_event = [
+        "Source-backed draft\n\nUse the cited source.",
+        "",
+        {"retrieval": {"reranker_wait_ms": 1001.0}},
+        "<small>source draft 48 chars in 500 ms; reranker running 1001 ms</small>",
+    ]
+    missing_progress_event = [
+        "Source-backed draft\n\nUse the cited source.\n\n_Refining source order with hosted reranker: 1001 ms…_",
+        "",
+        {"retrieval": {"reranker_wait_ms": 1001.0}},
+        "<small>source draft 48 chars in 500 ms</small>",
+    ]
+
+    _assert(
+        _reranker_wait_events([wait_event, missing_answer_event, missing_progress_event]) == [wait_event],
+        "only reranker wait events with visible answer-panel progress should count",
     )
 
 

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from time import sleep
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import xiao_copilot.retrieval as retrieval
 from xiao_copilot.knowledge_base import KnowledgeChunk
 from xiao_copilot.retrieval import (
     RERANK_METADATA_TAG_LIMIT,
@@ -23,6 +25,7 @@ def main() -> None:
     _assert_board_metadata_choice_heuristic()
     _assert_source_topic_metadata_heuristic()
     _assert_detail_scores_promote_exact_configuration_chunks()
+    _assert_rerank_heartbeats_surface_wait_progress()
     print("PASS retrieval formatting regression")
 
 
@@ -159,6 +162,37 @@ def _assert_detail_scores_promote_exact_configuration_chunks() -> None:
         >= 2.0,
         "camera-slot pin questions should promote the exact occupancy table",
     )
+
+
+def _assert_rerank_heartbeats_surface_wait_progress() -> None:
+    original_rerank = retrieval.rerank
+    original_heartbeat = retrieval.RERANK_PROGRESS_HEARTBEAT_SECONDS
+    try:
+        retrieval.RERANK_PROGRESS_HEARTBEAT_SECONDS = 0.001
+
+        def slow_rerank(**_kwargs):
+            sleep(0.01)
+            return retrieval.EndpointResult(ok=True, data=[(0, 0.9)])
+
+        retrieval.rerank = slow_rerank  # type: ignore[assignment]
+        events = list(
+            retrieval._rerank_with_heartbeats(
+                base_url="http://reranker.test",
+                model="rerank-test",
+                query="Which board?",
+                documents=["doc"],
+                api_key="",
+                timeout=1,
+            )
+        )
+        _assert(any(event is None for event in events), "slow rerank should emit wait heartbeat events")
+        _assert(
+            isinstance(events[-1], retrieval.EndpointResult) and events[-1].ok,
+            "rerank heartbeat wrapper should yield the final rerank result",
+        )
+    finally:
+        retrieval.rerank = original_rerank  # type: ignore[assignment]
+        retrieval.RERANK_PROGRESS_HEARTBEAT_SECONDS = original_heartbeat
 
 
 def _assert(condition: bool, message: str) -> None:

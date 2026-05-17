@@ -88,6 +88,7 @@ def main() -> None:
         f"sources={source_text.count('- [')} "
         f"inline_citation={require_inline_citation} "
         f"source_draft_events={len(_source_draft_events(events))} "
+        f"reranker_wait_events={len(_reranker_wait_events(events))} "
         f"heartbeat_events={len(_agent_wait_heartbeat_events(events))} "
         f"first_token_ms={_format_ms(first_token_ms)} "
         f"total_ms={diagnostics.get('timings_ms', {}).get('total', 0)}"
@@ -261,6 +262,29 @@ def _agent_wait_heartbeat_events(events: list[list[object]]) -> list[list[object
             and isinstance(wait_ms, (int, float))
             and "waiting" in progress_html
             and "first token" in progress_html
+        ):
+            matches.append(event)
+    return matches
+
+
+def _reranker_wait_events(events: list[list[object]]) -> list[list[object]]:
+    matches: list[list[object]] = []
+    for event in events:
+        if len(event) <= 3 or not isinstance(event[2], dict):
+            continue
+        diagnostics = event[2]
+        retrieval = diagnostics.get("retrieval", {})
+        reranker_wait_ms = (
+            retrieval.get("reranker_wait_ms")
+            if isinstance(retrieval, dict)
+            else diagnostics.get("reranker_wait_ms")
+        )
+        answer = str(event[0] if event else "")
+        progress_html = str(event[3]).lower()
+        if (
+            isinstance(reranker_wait_ms, (int, float))
+            and "reranker running" in progress_html
+            and "Refining source order" in answer
         ):
             matches.append(event)
     return matches

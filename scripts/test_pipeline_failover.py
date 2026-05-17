@@ -97,6 +97,20 @@ def _assert_success_stream_reports_first_token_latency() -> None:
             draft_events[0][2].get("retrieval", {}).get("preliminary") is True,
             "first source-backed draft should use preliminary pre-rerank sources",
         )
+        reranker_wait_events = [
+            event
+            for event in events
+            if event[2].get("retrieval", {}).get("reranker_wait_ms") is not None
+        ]
+        _assert(reranker_wait_events, "pipeline should surface hosted reranker wait progress")
+        _assert(
+            "Refining source order" in reranker_wait_events[0][0],
+            "reranker wait should visibly update the answer panel",
+        )
+        _assert(
+            "reranker running" in reranker_wait_events[0][3],
+            "reranker wait progress should name the active hosted reranker step",
+        )
         _assert(
             any(not event[2].get("retrieval", {}).get("preliminary") for event in draft_events[1:]),
             "pipeline should refresh the source-backed draft after rerank finishes",
@@ -413,6 +427,19 @@ def _fake_retrieve_progressive(
         },
     }
     yield RetrievalStage(stage="pre_rerank", chunks=[chunk], diagnostics=preview_diagnostics)
+    wait_diagnostics = {
+        "vector_index_backend": "lexical",
+        "image_used": bool(image_data_url),
+        "preliminary": True,
+        "reranker_pending": True,
+        "reranker_wait_ms": 1000.0,
+        "timings_ms": {
+            "query_embedding": 12.0,
+            "reranker_wait": 1000.0,
+            "total": 1016.0,
+        },
+    }
+    yield RetrievalStage(stage="rerank_wait", chunks=[chunk], diagnostics=wait_diagnostics)
     final_diagnostics = {
         "vector_index_backend": "lexical",
         "image_used": bool(image_data_url),

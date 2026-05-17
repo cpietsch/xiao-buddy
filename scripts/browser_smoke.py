@@ -232,6 +232,7 @@ def _install_stream_observer(page) -> None:
           ];
           const snapshots = [];
           const draftSnapshots = [];
+          const rerankerWaitSnapshots = [];
           const heartbeatSnapshots = [];
           const answerText = () => {
             const block = document.querySelector(".block.result-box");
@@ -256,6 +257,11 @@ def _install_stream_observer(page) -> None:
                 (activeStep.includes("waiting") && activeStep.includes("first token"))
                 || answer.includes("Waiting for hosted agent first token")
               );
+            const waitingForReranker = draftVisible
+              && (
+                activeStep.includes("reranker running")
+                || answer.includes("Refining source order with hosted reranker")
+              );
             const streaming = activeStep.includes("Generate answer")
               && activeStep.includes("streaming")
               && activeStep.includes("first token");
@@ -278,6 +284,13 @@ def _install_stream_observer(page) -> None:
                 timestamp: Date.now(),
               });
             }
+            if (waitingForReranker) {
+              rerankerWaitSnapshots.push({
+                answerText: answer.slice(0, 500),
+                activeStep,
+                timestamp: Date.now(),
+              });
+            }
             if (streaming && hasVisiblePartialAnswer(answer)) {
               snapshots.push({
                 answerText: answer.slice(0, 500),
@@ -291,6 +304,7 @@ def _install_stream_observer(page) -> None:
           }
           window.__xiaoBuddyStreamSnapshots = snapshots;
           window.__xiaoBuddyDraftSnapshots = draftSnapshots;
+          window.__xiaoBuddyRerankerWaitSnapshots = rerankerWaitSnapshots;
           window.__xiaoBuddyHeartbeatSnapshots = heartbeatSnapshots;
           window.__xiaoBuddyStreamObserver = new MutationObserver(record);
           window.__xiaoBuddyStreamObserver.observe(document.body, {
@@ -314,6 +328,7 @@ def _assert_partial_stream_observed(page) -> None:
           return {
             snapshots: window.__xiaoBuddyStreamSnapshots || [],
             draftSnapshots: window.__xiaoBuddyDraftSnapshots || [],
+            rerankerWaitSnapshots: window.__xiaoBuddyRerankerWaitSnapshots || [],
             heartbeatSnapshots: window.__xiaoBuddyHeartbeatSnapshots || [],
             lastState: window.__xiaoBuddyStreamLastState || null,
           };
@@ -332,14 +347,15 @@ def _assert_partial_stream_observed(page) -> None:
     )
     draft_snapshots = snapshots["draftSnapshots"]
     stream_snapshots = snapshots["snapshots"]
+    reranker_wait_snapshots = snapshots["rerankerWaitSnapshots"]
     heartbeat_snapshots = snapshots["heartbeatSnapshots"]
     first_draft = draft_snapshots[0] if draft_snapshots else {}
     first_stream = stream_snapshots[0] if stream_snapshots else {}
     wait_ms = int(first_stream.get("timestamp", 0) or 0) - int(first_draft.get("timestamp", 0) or 0)
     if wait_ms >= 1500:
         _assert(
-            bool(heartbeat_snapshots),
-            "browser answer should keep progress moving while waiting for the first hosted-agent token; "
+            bool(heartbeat_snapshots) or bool(reranker_wait_snapshots),
+            "browser answer should keep progress moving while waiting for rerank or the first hosted-agent token; "
             f"waited about {wait_ms} ms, last observed state was {snapshots['lastState']!r}",
         )
 

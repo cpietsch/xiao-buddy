@@ -193,6 +193,8 @@ def answer_question_stream(
     retrieval_diagnostics: dict[str, object] = {}
     draft_first_visible_ms: float | None = None
     draft_chars = 0
+    preview_draft = ""
+    preview_citations = ""
     for retrieval_stage in retrieve_progressive(question, settings, image_data_url=image_data_url):
         if retrieval_stage.stage == "pre_rerank":
             preview_chunks = retrieval_stage.chunks
@@ -207,6 +209,7 @@ def answer_question_stream(
             )
             preview_draft_started_at = perf_counter()
             preview_draft = _draft_answer(question, image_summary, preview_chunks)
+            preview_citations = _format_citations(preview_chunks)
             timings_ms["source_draft_preview"] = _elapsed_ms(preview_draft_started_at)
             timings_ms["retrieve_preview"] = _elapsed_ms(retrieve_started_at)
             if preview_draft and draft_first_visible_ms is None:
@@ -214,7 +217,7 @@ def answer_question_stream(
                 draft_chars = len(preview_draft)
                 yield (
                     preview_draft,
-                    _format_citations(preview_chunks),
+                    preview_citations,
                     _run_diagnostics(
                         status="running",
                         stage="generate",
@@ -236,6 +239,55 @@ def answer_question_stream(
                         source_count=len(preview_chunks),
                         retrieval_detail=preview_detail,
                         draft_chars=draft_chars,
+                        draft_first_visible_ms=draft_first_visible_ms,
+                    ),
+                )
+            continue
+        if retrieval_stage.stage == "rerank_wait":
+            wait_chunks = retrieval_stage.chunks
+            if not wait_chunks:
+                continue
+            wait_diagnostics = retrieval_stage.diagnostics
+            wait_backend = str(wait_diagnostics.get("vector_index_backend") or "lexical")
+            wait_detail = _retrieval_progress_detail(
+                wait_diagnostics,
+                wait_backend,
+                len(wait_chunks),
+            )
+            reranker_wait_ms = _numeric_timing(wait_diagnostics.get("reranker_wait_ms"))
+            if not preview_draft:
+                wait_draft_started_at = perf_counter()
+                preview_draft = _draft_answer(question, image_summary, wait_chunks)
+                preview_citations = _format_citations(wait_chunks)
+                timings_ms["source_draft_preview"] = _elapsed_ms(wait_draft_started_at)
+                if preview_draft and draft_first_visible_ms is None:
+                    draft_first_visible_ms = _elapsed_ms(run_started_at)
+                    draft_chars = len(preview_draft)
+            if preview_draft:
+                yield (
+                    _append_reranker_wait_note(preview_draft, reranker_wait_ms),
+                    preview_citations or _format_citations(wait_chunks),
+                    _run_diagnostics(
+                        status="running",
+                        stage="generate",
+                        intent=intent,
+                        image_summary=image_summary,
+                        agent_multimodal=bool(image_data_url),
+                        retrieval_diagnostics=wait_diagnostics,
+                        chunks=wait_chunks,
+                        timings_ms=timings_ms,
+                        run_started_at=run_started_at,
+                        agent_status="waiting",
+                        agent_streaming=False,
+                        draft_chars=draft_chars or len(preview_draft),
+                        draft_first_visible_ms=draft_first_visible_ms,
+                    ),
+                    format_progress(
+                        stage="generate",
+                        backend=wait_backend,
+                        source_count=len(wait_chunks),
+                        retrieval_detail=wait_detail,
+                        draft_chars=draft_chars or len(preview_draft),
                         draft_first_visible_ms=draft_first_visible_ms,
                     ),
                 )
@@ -666,6 +718,16 @@ def _append_agent_wait_note(answer: str, agent_wait_ms: float) -> str:
     )
 
 
+def _append_reranker_wait_note(answer: str, reranker_wait_ms: float | None) -> str:
+    clean_answer = answer.rstrip()
+    if reranker_wait_ms is None:
+        return f"{clean_answer}\n\n_Refining source order with hosted reranker…_"
+    return (
+        f"{clean_answer}\n\n"
+        f"_Refining source order with hosted reranker: {reranker_wait_ms:.0f} ms…_"
+    )
+
+
 def _retrieval_progress_detail(
     retrieval_diagnostics: dict[str, object],
     backend: str,
@@ -674,6 +736,10 @@ def _retrieval_progress_detail(
     base = f"{source_count} sources via {backend}"
     timing_parts = _retrieval_timing_parts(retrieval_diagnostics)
     timing_suffix = f"; {'; '.join(timing_parts)}" if timing_parts else ""
+    if retrieval_diagnostics.get("reranker_wait_ms") is not None:
+        wait_ms = _numeric_timing(retrieval_diagnostics.get("reranker_wait_ms"))
+        wait_detail = f" {wait_ms:.0f} ms" if wait_ms is not None else ""
+        return f"{base}; reranker running{wait_detail}{timing_suffix}"
     if retrieval_diagnostics.get("reranker_pending"):
         return f"{base}; pre-rerank preview{timing_suffix}"
     if retrieval_diagnostics.get("reranker_used"):
@@ -693,6 +759,7 @@ def _retrieval_timing_parts(retrieval_diagnostics: dict[str, object]) -> list[st
     vector_search_ms = _numeric_timing(timings.get("vector_search"))
     candidate_embedding_ms = _numeric_timing(timings.get("candidate_embeddings"))
     reranker_ms = _numeric_timing(timings.get("reranker"))
+    reranker_wait_ms = _numeric_timing(timings.get("reranker_wait"))
     if query_embedding_ms is not None:
         parts.append(f"embed {query_embedding_ms:.0f} ms")
     if vector_search_ms is not None:
@@ -701,6 +768,8 @@ def _retrieval_timing_parts(retrieval_diagnostics: dict[str, object]) -> list[st
         parts.append(f"candidate embeds {candidate_embedding_ms:.0f} ms")
     if reranker_ms is not None:
         parts.append(f"rerank {reranker_ms:.0f} ms")
+    elif reranker_wait_ms is not None:
+        parts.append(f"rerank wait {reranker_wait_ms:.0f} ms")
     return parts
 
 
