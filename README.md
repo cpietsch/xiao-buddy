@@ -50,7 +50,7 @@ RERANK_TEXT_CHARS=2800
 AGENT_BASE_URL=https://your-llm-host/v1
 AGENT_MODEL=your-agent-model-id
 AGENT_API_KEY=
-AGENT_MAX_TOKENS=350
+AGENT_MAX_TOKENS=300
 AGENT_CONTEXT_CHARS=2600
 
 TOP_K=5
@@ -434,7 +434,9 @@ This Space is a thin UI and orchestration layer. It needs an embedding endpoint
 for vector search, can use an optional reranker endpoint for better ordering, and
 can call any OpenAI-compatible chat-completions endpoint for the final answer.
 Use `AGENT_MAX_TOKENS` to cap generated answer length when a larger hosted model
-streams quickly but takes too long to finish full responses.
+streams quickly but takes too long to finish full responses. The production
+default is `300`, which keeps the full answer-quality gate passing while trimming
+long generated answers.
 Use `AGENT_CONTEXT_CHARS` to bound the source text sent to the final agent; the
 app keeps query-relevant excerpts for synthesis while retrieval and reranking use
 the richer source text. The production default is `2600`, which keeps the full
