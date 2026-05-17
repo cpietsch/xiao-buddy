@@ -353,6 +353,71 @@ def _assert_contextual_exact_term_repair_avoids_source_detail_noise() -> None:
     )
     _assert("`D2` [rs485-source]" in rs485, "RS485 repair should preserve the D2 enable-pin label")
 
+    round_display_storage = pipeline._ensure_answer_exact_terms(
+        "After cutting J3, the Round Display microSD slot is active [sd-source].",
+        "When XIAO ESP32S3 Sense is stacked with the Round Display, which microSD slot is active afterward?",
+        [
+            KnowledgeChunk(
+                id="sd-source",
+                title="Round Display storage",
+                source="https://wiki.seeedstudio.com/test/",
+                text="After cutting J3, only the SD card slot on the Round Display is active.",
+                kind="wiki",
+            )
+        ],
+    )
+    _assert(
+        "`SD card slot` [sd-source]" in round_display_storage,
+        "Round Display storage repair should preserve the exact SD card slot wording",
+    )
+
+    round_display_controller = pipeline._ensure_answer_exact_terms(
+        "The display uses SPI and the touch controller uses I2C [display-source].",
+        "In the XIAO ESP32C3 Zephyr Round Display example, which buses are used for the display and touch controller?",
+        [
+            KnowledgeChunk(
+                id="display-source",
+                title="Round Display Zephyr",
+                source="https://wiki.seeedstudio.com/test/",
+                text="The round display uses GC9A01 over SPI, and CHSC6X uses I2C for touch.",
+                kind="wiki",
+            )
+        ],
+    )
+    for expected in ("`GC9A01` [display-source]", "`CHSC6X` [display-source]"):
+        _assert(expected in round_display_controller, f"Round Display repair should preserve {expected}")
+
+    oled_address = pipeline._ensure_answer_exact_terms(
+        "The SSD1306 OLED is configured at I2C address `3c` [oled-source].",
+        "At what I2C address is the SSD1306 OLED configured for XIAO ESP32C3 with Zephyr?",
+        [
+            KnowledgeChunk(
+                id="oled-source",
+                title="OLED address",
+                source="https://wiki.seeedstudio.com/test/",
+                text="The SSD1306 OLED is configured at I2C address 0x3C.",
+                kind="wiki",
+            )
+        ],
+    )
+    _assert("`0x3C`" in oled_address, "OLED address repair should normalize bare 3c to 0x3C")
+
+    pdm_labels = pipeline._ensure_answer_exact_terms(
+        "The digital microphone is reserved on D11/GPIO41 and D12/GPIO42 [pdm-source].",
+        "Which GPIOs are used for the XIAO ESP32S3 Sense digital microphone clock and data?",
+        [
+            KnowledgeChunk(
+                id="pdm-source",
+                title="PDM microphone pins",
+                source="https://wiki.seeedstudio.com/test/",
+                text="PDM Microphone CLK uses D11/GPIO41 and PDM Microphone DATA uses D12/GPIO42.",
+                kind="wiki",
+            )
+        ],
+    )
+    for expected in ("`Clock`", "`Data`", "[pdm-source]"):
+        _assert(expected in pdm_labels, f"PDM microphone repair should preserve {expected}")
+
 
 def _assert_inline_citation_repair_reuses_sources_line() -> None:
     chunks = [
