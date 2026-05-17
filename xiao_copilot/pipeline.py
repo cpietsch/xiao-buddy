@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator
+from queue import Empty, Queue
+from threading import Thread
 from time import perf_counter
 
 from PIL import Image
 
 from xiao_copilot.clients import EndpointResult, chat_completion, chat_completion_stream
-from xiao_copilot.config import load_settings
+from xiao_copilot.config import Settings, load_settings
 from xiao_copilot.image_utils import image_to_data_url, summarize_image
 from xiao_copilot.knowledge_base import KnowledgeChunk
 from xiao_copilot.retrieval import retrieve_progressive
@@ -71,6 +73,7 @@ EXACT_TERM_CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
 MARKED_EXACT_TERM_RE = re.compile(r"`([^`\n]{2,48})`|\*\*([^*\n]{2,48})\*\*")
 AGENT_CONTEXT_MIN_CHARS_PER_SOURCE = 360
 AGENT_CONTEXT_WINDOW_CHARS = 760
+AGENT_PROGRESS_HEARTBEAT_SECONDS = 1.0
 AGENT_CONTEXT_STOPWORDS = frozenset(
     {
         "about",
@@ -322,7 +325,7 @@ def answer_question_stream(
             ),
         )
 
-    for result in _generate_with_agent_stream(
+    for result in _generate_with_agent_stream_with_heartbeats(
         question=question,
         image_summary=image_summary,
         image_data_url=image_data_url,
@@ -330,6 +333,50 @@ def answer_question_stream(
         chunks=chunks,
         settings=settings,
     ):
+        if result is None:
+            agent_wait_ms = _elapsed_ms(generate_started_at)
+            timings_ms["generate"] = agent_wait_ms
+            visible_answer = _repair_generated_text("".join(answer_parts)).strip() or draft_answer
+            yield (
+                visible_answer or "Generating a cited answer with the agent...",
+                citations,
+                _run_diagnostics(
+                    status="running",
+                    stage="generate",
+                    intent=intent,
+                    image_summary=image_summary,
+                    agent_multimodal=bool(image_data_url),
+                    retrieval_diagnostics=retrieval_diagnostics,
+                    chunks=chunks,
+                    timings_ms=timings_ms,
+                    run_started_at=run_started_at,
+                    agent_status="streaming" if agent_first_token_ms is not None else "waiting_first_token",
+                    agent_streaming=True,
+                    agent_streamed=agent_first_token_ms is not None,
+                    agent_chunks=agent_chunks,
+                    agent_chars=len(visible_answer) if agent_first_token_ms is not None else 0,
+                    agent_first_token_ms=agent_first_token_ms,
+                    agent_first_visible_ms=agent_first_visible_ms,
+                    agent_wait_ms=agent_wait_ms,
+                    agent_context_chars=settings.agent_context_chars,
+                    agent_prompt_chars=agent_prompt_chars,
+                    draft_chars=draft_chars,
+                    draft_first_visible_ms=draft_first_visible_ms,
+                ),
+                format_progress(
+                    stage="generate",
+                    backend=backend,
+                    source_count=len(chunks),
+                    retrieval_detail=retrieval_detail,
+                    agent_chunks=agent_chunks,
+                    stream_chars=len(visible_answer) if agent_first_token_ms is not None else 0,
+                    draft_chars=draft_chars,
+                    draft_first_visible_ms=draft_first_visible_ms,
+                    first_token_ms=agent_first_token_ms,
+                    agent_wait_ms=agent_wait_ms,
+                ),
+            )
+            continue
         if not result.ok:
             agent_error = result.error
             break
@@ -450,6 +497,7 @@ def format_progress(
     draft_chars: int = 0,
     draft_first_visible_ms: float | None = None,
     first_token_ms: float | None = None,
+    agent_wait_ms: float | None = None,
     elapsed_ms: float | None = None,
     retrieval_detail: str = "",
 ) -> str:
@@ -479,6 +527,7 @@ def format_progress(
                 draft_chars,
                 draft_first_visible_ms,
                 first_token_ms,
+                agent_wait_ms,
                 elapsed_ms,
                 retrieval_detail,
             )
@@ -495,6 +544,7 @@ def format_progress(
                 draft_chars,
                 draft_first_visible_ms,
                 first_token_ms,
+                agent_wait_ms,
                 elapsed_ms,
                 retrieval_detail,
             )
@@ -525,6 +575,7 @@ def _progress_detail(
     draft_chars: int,
     draft_first_visible_ms: float | None,
     first_token_ms: float | None,
+    agent_wait_ms: float | None,
     elapsed_ms: float | None,
     retrieval_detail: str,
 ) -> str:
@@ -543,9 +594,16 @@ def _progress_detail(
         if draft_chars:
             prefix = retrieval_detail or f"{source_count} sources via {backend}"
             draft_ms = f" in {draft_first_visible_ms:.0f} ms" if draft_first_visible_ms is not None else ""
-            return f"{prefix}; source draft {draft_chars} chars{draft_ms}; preparing agent"
+            wait_detail = (
+                f"; waiting {agent_wait_ms:.0f} ms for first token"
+                if agent_wait_ms is not None
+                else "; preparing agent"
+            )
+            return f"{prefix}; source draft {draft_chars} chars{draft_ms}{wait_detail}"
         if source_count:
             prefix = retrieval_detail or f"{source_count} sources via {backend}"
+            if agent_wait_ms is not None:
+                return f"{prefix}; waiting {agent_wait_ms:.0f} ms for first token"
             return f"{prefix}; agent running"
         return "Agent running"
     if stage == "done":
@@ -610,6 +668,46 @@ def _elapsed_ms(started_at: float) -> float:
     return round((perf_counter() - started_at) * 1000, 1)
 
 
+def _generate_with_agent_stream_with_heartbeats(
+    *,
+    question: str,
+    image_summary: dict[str, object],
+    image_data_url: str | None,
+    intent: str,
+    chunks: list[KnowledgeChunk],
+    settings: Settings,
+) -> Iterator[EndpointResult | None]:
+    stream_queue: Queue[tuple[str, EndpointResult | None]] = Queue()
+
+    def run_stream() -> None:
+        try:
+            for result in _generate_with_agent_stream(
+                question=question,
+                image_summary=image_summary,
+                image_data_url=image_data_url,
+                intent=intent,
+                chunks=chunks,
+                settings=settings,
+            ):
+                stream_queue.put(("result", result))
+        except Exception as exc:  # noqa: BLE001 - keep UI responsive if a provider wrapper fails.
+            stream_queue.put(("result", EndpointResult(ok=False, error=str(exc))))
+        finally:
+            stream_queue.put(("done", None))
+
+    Thread(target=run_stream, daemon=True).start()
+
+    while True:
+        try:
+            kind, result = stream_queue.get(timeout=AGENT_PROGRESS_HEARTBEAT_SECONDS)
+        except Empty:
+            yield None
+            continue
+        if kind == "done":
+            return
+        yield result
+
+
 def _run_diagnostics(
     *,
     status: str,
@@ -629,6 +727,7 @@ def _run_diagnostics(
     agent_chars: int = 0,
     agent_first_token_ms: float | None = None,
     agent_first_visible_ms: float | None = None,
+    agent_wait_ms: float | None = None,
     agent_error: str = "",
     agent_context_chars: int | None = None,
     agent_prompt_chars: int | None = None,
@@ -675,6 +774,9 @@ def _run_diagnostics(
     if agent_first_visible_ms is not None:
         agent["first_visible_ms"] = agent_first_visible_ms
         diagnostics["agent_first_visible_ms"] = agent_first_visible_ms
+    if agent_wait_ms is not None:
+        agent["wait_ms"] = agent_wait_ms
+        diagnostics["agent_wait_ms"] = agent_wait_ms
     if agent_used is not None:
         agent["used"] = agent_used
         diagnostics["agent_used"] = agent_used

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from time import sleep
 from typing import Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -21,6 +22,7 @@ def main() -> None:
     _assert_contextual_exact_term_repair_avoids_source_detail_noise()
     _assert_inline_citation_repair_reuses_sources_line()
     _assert_agent_context_budget_keeps_relevant_excerpt()
+    _assert_agent_wait_heartbeat_keeps_draft_visible()
     _assert_success_stream_reports_first_token_latency()
 
     original_load_settings = pipeline.load_settings
@@ -122,6 +124,39 @@ def _assert_success_stream_reports_first_token_latency() -> None:
         pipeline.retrieve_progressive = original_retrieve_progressive  # type: ignore[assignment]
         pipeline._generate_with_agent_stream = original_generate_stream  # type: ignore[assignment]
         pipeline.perf_counter = original_perf_counter  # type: ignore[assignment]
+
+
+def _assert_agent_wait_heartbeat_keeps_draft_visible() -> None:
+    original_load_settings = pipeline.load_settings
+    original_retrieve_progressive = pipeline.retrieve_progressive
+    original_generate_stream = pipeline._generate_with_agent_stream
+    original_heartbeat = pipeline.AGENT_PROGRESS_HEARTBEAT_SECONDS
+    try:
+        pipeline.load_settings = _fake_settings  # type: ignore[assignment]
+        pipeline.retrieve_progressive = _fake_retrieve_progressive  # type: ignore[assignment]
+        pipeline._generate_with_agent_stream = _slow_agent_stream  # type: ignore[assignment]
+        pipeline.AGENT_PROGRESS_HEARTBEAT_SECONDS = 0.001
+
+        events = list(pipeline.answer_question_stream(None, "Which pin should I check?"))
+        waiting_events = [
+            event
+            for event in events
+            if event[2].get("agent", {}).get("status") == "waiting_first_token"
+        ]
+        _assert(waiting_events, "pipeline should yield progress heartbeats while waiting for the first token")
+        answer, _citations, diagnostics, progress_html = waiting_events[0]
+        _assert("Source-backed draft" in answer, "heartbeat should keep the source-backed draft visible")
+        _assert("waiting" in progress_html, "heartbeat progress should expose active waiting")
+        _assert("first token" in progress_html, "heartbeat progress should name the first-token wait")
+        _assert(
+            isinstance(diagnostics.get("agent_wait_ms"), float),
+            "heartbeat diagnostics should expose agent wait latency",
+        )
+    finally:
+        pipeline.load_settings = original_load_settings  # type: ignore[assignment]
+        pipeline.retrieve_progressive = original_retrieve_progressive  # type: ignore[assignment]
+        pipeline._generate_with_agent_stream = original_generate_stream  # type: ignore[assignment]
+        pipeline.AGENT_PROGRESS_HEARTBEAT_SECONDS = original_heartbeat
 
 
 def _assert_system_prompt_preserves_acronyms() -> None:
@@ -397,6 +432,11 @@ def _broken_agent_stream(*_args, **_kwargs) -> Iterator[EndpointResult]:
 def _good_agent_stream(*_args, **_kwargs) -> Iterator[EndpointResult]:
     yield EndpointResult(ok=True, data="Use the cited source ")
     yield EndpointResult(ok=True, data="for the pin check [test-source].")
+
+
+def _slow_agent_stream(*_args, **_kwargs) -> Iterator[EndpointResult]:
+    sleep(0.02)
+    yield from _good_agent_stream()
 
 
 def _assert(condition: bool, message: str) -> None:
