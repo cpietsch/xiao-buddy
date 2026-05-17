@@ -7,6 +7,7 @@ from time import sleep
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import xiao_copilot.retrieval as retrieval
+from xiao_copilot.config import Settings
 from xiao_copilot.knowledge_base import KnowledgeChunk
 from xiao_copilot.retrieval import (
     RERANK_METADATA_TAG_LIMIT,
@@ -26,6 +27,8 @@ def main() -> None:
     _assert_source_topic_metadata_heuristic()
     _assert_detail_scores_promote_exact_configuration_chunks()
     _assert_rerank_heartbeats_surface_wait_progress()
+    _assert_rerank_result_cache_is_keyed_to_exact_inputs()
+    _assert_retrieve_progressive_reuses_cached_rerank_result()
     print("PASS retrieval formatting regression")
 
 
@@ -193,6 +196,119 @@ def _assert_rerank_heartbeats_surface_wait_progress() -> None:
     finally:
         retrieval.rerank = original_rerank  # type: ignore[assignment]
         retrieval.RERANK_PROGRESS_HEARTBEAT_SECONDS = original_heartbeat
+
+
+def _assert_rerank_result_cache_is_keyed_to_exact_inputs() -> None:
+    retrieval._clear_rerank_result_cache()
+    chunk = KnowledgeChunk(
+        id="chunk-cache",
+        title="Cacheable Rerank Chunk",
+        source="https://example.test/cache",
+        text="LoRa setup details",
+    )
+    key = retrieval._rerank_cache_key(
+        base_url="https://reranker.test/v1/",
+        model="rerank-test",
+        query=" Which   board supports LoRa? ",
+        chunks=[chunk],
+        documents=["LoRa setup details"],
+        rerank_text_chars=2800,
+        include_board_metadata=False,
+        include_source_topic_metadata=False,
+    )
+    equivalent_key = retrieval._rerank_cache_key(
+        base_url="https://reranker.test/v1",
+        model="rerank-test",
+        query="which board supports lora?",
+        chunks=[chunk],
+        documents=["LoRa setup details"],
+        rerank_text_chars=2800,
+        include_board_metadata=False,
+        include_source_topic_metadata=False,
+    )
+    changed_key = retrieval._rerank_cache_key(
+        base_url="https://reranker.test/v1",
+        model="rerank-test",
+        query="which board supports lora?",
+        chunks=[chunk],
+        documents=["Different setup details"],
+        rerank_text_chars=2800,
+        include_board_metadata=False,
+        include_source_topic_metadata=False,
+    )
+    _assert(key == equivalent_key, "reranker cache key should normalize endpoint slash and query whitespace")
+    _assert(key != changed_key, "reranker cache key should change when rerank text changes")
+
+    result = retrieval.EndpointResult(ok=True, data=[(0, 0.9)], meta={"mode": "native"})
+    retrieval._store_cached_rerank_result(key, result)
+    cached = retrieval._get_cached_rerank_result(equivalent_key)
+    _assert(cached is not None and cached.ok, "stored reranker result should be reusable")
+    _assert(cached is not result, "cached reranker result should be cloned before reuse")
+    _assert(cached.data == [(0, 0.9)], "cached reranker scores changed")
+    _assert((cached.meta or {}).get("cached") is True, "cache hits should be marked in result metadata")
+    _assert(result.meta == {"mode": "native"}, "cache hit metadata should not mutate the original result")
+    _assert(retrieval._get_cached_rerank_result(changed_key) is None, "changed rerank text should miss the cache")
+    retrieval._clear_rerank_result_cache()
+
+
+def _assert_retrieve_progressive_reuses_cached_rerank_result() -> None:
+    original_load_knowledge_base = retrieval.load_knowledge_base
+    original_rerank_with_heartbeats = retrieval._rerank_with_heartbeats
+    retrieval._clear_rerank_result_cache()
+    calls: list[dict[str, object]] = []
+    chunks = [
+        KnowledgeChunk(
+            id="lora",
+            title="XIAO LoRa setup",
+            source="https://example.test/lora",
+            text="The LoRa expansion supports long-range radio projects.",
+        ),
+        KnowledgeChunk(
+            id="wifi",
+            title="XIAO Wi-Fi setup",
+            source="https://example.test/wifi",
+            text="Wi-Fi setup details for a wireless sensor project.",
+        ),
+    ]
+    settings = Settings(
+        embedding_base_url="",
+        rerank_base_url="https://reranker.test/v1",
+        rerank_model="rerank-test",
+        request_timeout_seconds=1,
+        top_k=1,
+        candidate_k=2,
+        vector_candidate_k=2,
+    )
+
+    def fake_load_knowledge_base() -> list[KnowledgeChunk]:
+        return chunks
+
+    def fake_rerank_with_heartbeats(**kwargs):
+        calls.append(kwargs)
+        yield retrieval.EndpointResult(ok=True, data=[(0, 0.9), (1, 0.1)], meta={"mode": "native"})
+
+    try:
+        retrieval.load_knowledge_base = fake_load_knowledge_base  # type: ignore[assignment]
+        retrieval._rerank_with_heartbeats = fake_rerank_with_heartbeats  # type: ignore[assignment]
+        first_stages = list(retrieval.retrieve_progressive("Which XIAO board supports LoRa?", settings))
+        first_final = first_stages[-1]
+        second_stages = list(retrieval.retrieve_progressive("Which XIAO board supports LoRa?", settings))
+        second_final = second_stages[-1]
+        _assert(len(calls) == 1, "second identical retrieval should reuse cached rerank scores")
+        _assert(first_final.diagnostics["reranker_cache_hit"] is False, "first retrieval should miss rerank cache")
+        _assert(second_final.diagnostics["reranker_cache_hit"] is True, "second retrieval should hit rerank cache")
+        _assert(
+            not any(stage.stage == "rerank_wait" for stage in second_stages),
+            "cached rerank should not emit hosted reranker wait events",
+        )
+        _assert(
+            first_final.diagnostics["citations"] == second_final.diagnostics["citations"],
+            "cached rerank should preserve final citation ordering",
+        )
+    finally:
+        retrieval.load_knowledge_base = original_load_knowledge_base  # type: ignore[assignment]
+        retrieval._rerank_with_heartbeats = original_rerank_with_heartbeats  # type: ignore[assignment]
+        retrieval._clear_rerank_result_cache()
 
 
 def _assert(condition: bool, message: str) -> None:

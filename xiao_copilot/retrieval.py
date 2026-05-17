@@ -4,9 +4,10 @@ import math
 import re
 from queue import Empty, Queue
 from collections.abc import Iterator
-from collections import Counter
+from collections import Counter, OrderedDict
 from dataclasses import dataclass
-from threading import Thread
+from hashlib import sha256
+from threading import Lock, Thread
 from time import perf_counter
 
 from xiao_copilot.clients import EndpointResult, embed_query, embed_texts, rerank
@@ -24,6 +25,7 @@ SOURCE_CONTEXT_SIBLINGS = 4
 LEXICAL_RECALL_SCAN = 1000
 LEXICAL_RECALL_SLOTS = 6
 RERANK_PROGRESS_HEARTBEAT_SECONDS = 1.0
+RERANK_RESULT_CACHE_LIMIT = 128
 COMMON_QUERY_TERMS = {
     "about",
     "after",
@@ -105,6 +107,8 @@ _CHUNK_SEARCH_LOWER_CACHE: dict[tuple[object, ...], str] = {}
 _CHUNK_TEXT_LOWER_CACHE: dict[tuple[object, ...], str] = {}
 _CHUNK_TOKEN_COUNTS_CACHE: dict[tuple[object, ...], Counter[str]] = {}
 _CHUNK_TOKEN_SET_CACHE: dict[tuple[object, ...], frozenset[str]] = {}
+_RERANK_RESULT_CACHE: OrderedDict[tuple[object, ...], EndpointResult] = OrderedDict()
+_RERANK_RESULT_CACHE_LOCK = Lock()
 
 
 def warm_retrieval_caches(settings: Settings | None = None) -> dict[str, object]:
@@ -295,34 +299,48 @@ def retrieve_progressive(
     }
     timing_ms["reranker_prepare"] = _elapsed_ms(rerank_prepare_started_at)
     rerank_started_at = perf_counter()
-    rerank_result: EndpointResult | None = None
-    for rerank_progress in _rerank_with_heartbeats(
+    rerank_cache_key = _rerank_cache_key(
         base_url=settings.rerank_base_url,
         model=settings.rerank_model,
         query=query,
+        chunks=top,
         documents=rerank_documents,
-        api_key=settings.rerank_api_key,
-        timeout=settings.request_timeout_seconds,
-    ):
-        if rerank_progress is not None:
-            rerank_result = rerank_progress
-            continue
-        reranker_wait_ms = _elapsed_ms(rerank_started_at)
-        wait_timings = dict(timing_ms)
-        wait_timings["reranker_wait"] = reranker_wait_ms
-        wait_timings["total"] = _elapsed_ms(retrieval_started_at)
-        yield RetrievalStage(
-            stage="rerank_wait",
-            chunks=preview_top,
-            diagnostics={
-                **diagnostics,
-                "preliminary": True,
-                "reranker_pending": True,
-                "reranker_wait_ms": reranker_wait_ms,
-                "citations": [chunk.id for chunk in preview_top],
-                "timings_ms": wait_timings,
-            },
-        )
+        rerank_text_chars=rerank_text_chars,
+        include_board_metadata=include_board_metadata,
+        include_source_topic_metadata=include_source_topic_metadata,
+    )
+    rerank_result: EndpointResult | None = _get_cached_rerank_result(rerank_cache_key)
+    diagnostics["reranker_cache_hit"] = rerank_result is not None
+    if rerank_result is None:
+        for rerank_progress in _rerank_with_heartbeats(
+            base_url=settings.rerank_base_url,
+            model=settings.rerank_model,
+            query=query,
+            documents=rerank_documents,
+            api_key=settings.rerank_api_key,
+            timeout=settings.request_timeout_seconds,
+        ):
+            if rerank_progress is not None:
+                rerank_result = rerank_progress
+                continue
+            reranker_wait_ms = _elapsed_ms(rerank_started_at)
+            wait_timings = dict(timing_ms)
+            wait_timings["reranker_wait"] = reranker_wait_ms
+            wait_timings["total"] = _elapsed_ms(retrieval_started_at)
+            yield RetrievalStage(
+                stage="rerank_wait",
+                chunks=preview_top,
+                diagnostics={
+                    **diagnostics,
+                    "preliminary": True,
+                    "reranker_pending": True,
+                    "reranker_wait_ms": reranker_wait_ms,
+                    "citations": [chunk.id for chunk in preview_top],
+                    "timings_ms": wait_timings,
+                },
+            )
+        if rerank_result is not None:
+            _store_cached_rerank_result(rerank_cache_key, rerank_result)
     if rerank_result is None:
         rerank_result = EndpointResult(ok=False, error="Reranker finished without returning a result.")
     reranker_ms = _elapsed_ms(rerank_started_at)
@@ -408,6 +426,74 @@ def _rerank_with_heartbeats(
         if kind == "done":
             return
         yield result
+
+
+def _rerank_cache_key(
+    *,
+    base_url: str,
+    model: str,
+    query: str,
+    chunks: list[KnowledgeChunk],
+    documents: list[str],
+    rerank_text_chars: int,
+    include_board_metadata: bool,
+    include_source_topic_metadata: bool,
+) -> tuple[object, ...]:
+    return (
+        base_url.rstrip("/"),
+        model,
+        _normalize_rerank_query(query),
+        int(rerank_text_chars),
+        bool(include_board_metadata),
+        bool(include_source_topic_metadata),
+        tuple(
+            (
+                chunk.id,
+                chunk.source,
+                len(document),
+                sha256(document.encode("utf-8")).hexdigest(),
+            )
+            for chunk, document in zip(chunks, documents, strict=True)
+        ),
+    )
+
+
+def _normalize_rerank_query(query: str) -> str:
+    return re.sub(r"\s+", " ", query.strip().lower())
+
+
+def _get_cached_rerank_result(cache_key: tuple[object, ...]) -> EndpointResult | None:
+    with _RERANK_RESULT_CACHE_LOCK:
+        cached = _RERANK_RESULT_CACHE.get(cache_key)
+        if cached is None:
+            return None
+        _RERANK_RESULT_CACHE.move_to_end(cache_key)
+    result = _clone_endpoint_result(cached)
+    meta = dict(result.meta or {})
+    meta["cached"] = True
+    result.meta = meta
+    return result
+
+
+def _store_cached_rerank_result(cache_key: tuple[object, ...], result: EndpointResult) -> None:
+    if not result.ok or not result.data:
+        return
+    with _RERANK_RESULT_CACHE_LOCK:
+        _RERANK_RESULT_CACHE[cache_key] = _clone_endpoint_result(result)
+        _RERANK_RESULT_CACHE.move_to_end(cache_key)
+        while len(_RERANK_RESULT_CACHE) > RERANK_RESULT_CACHE_LIMIT:
+            _RERANK_RESULT_CACHE.popitem(last=False)
+
+
+def _clear_rerank_result_cache() -> None:
+    with _RERANK_RESULT_CACHE_LOCK:
+        _RERANK_RESULT_CACHE.clear()
+
+
+def _clone_endpoint_result(result: EndpointResult) -> EndpointResult:
+    data = list(result.data) if isinstance(result.data, list) else result.data
+    meta = dict(result.meta) if result.meta else None
+    return EndpointResult(ok=result.ok, data=data, error=result.error, meta=meta)
 
 
 def _rerank_text(
