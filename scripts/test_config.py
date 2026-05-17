@@ -16,6 +16,7 @@ def main() -> None:
         AGENT_MODEL="dynamic-agent-a",
         AGENT_MAX_TOKENS="321",
         AGENT_CONTEXT_CHARS="4321",
+        AGENT_STARTUP_WARMUP_SECONDS="6.5",
         REQUEST_TIMEOUT_SECONDS="12.5",
         TOP_K="3",
         GRADIO_SERVER_PORT="8877",
@@ -24,6 +25,7 @@ def main() -> None:
         _assert(settings.agent_model == "dynamic-agent-a", "agent model should be read at load time")
         _assert(settings.agent_max_tokens == 321, "agent max tokens should be read at load time")
         _assert(settings.agent_context_chars == 4321, "agent context budget should be read at load time")
+        _assert(settings.agent_startup_warmup_seconds == 6.5, "agent warmup timeout should be read at load time")
         _assert(settings.request_timeout_seconds == 12.5, "request timeout should be read at load time")
         _assert(settings.top_k == 3, "top_k should be read at load time")
         _assert(settings.gradio_server_port == 8877, "Gradio port should be read at load time")

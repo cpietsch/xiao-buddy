@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import gradio as gr
+from time import perf_counter
 
+from xiao_copilot.clients import chat_completion_stream
 from xiao_copilot.config import load_settings
 from xiao_copilot.pipeline import answer_question_stream, format_progress
 from xiao_copilot.retrieval import warm_retrieval_caches
@@ -550,6 +552,51 @@ def _reset_outputs() -> tuple[str, str, dict[str, object], str]:
     return INITIAL_ANSWER, "", {}, format_progress()
 
 
+def warm_agent_endpoint(settings) -> dict[str, object]:
+    if not settings.agent_base_url:
+        return {"enabled": False, "reason": "agent endpoint is not configured"}
+    if settings.agent_startup_warmup_seconds <= 0:
+        return {"enabled": False, "reason": "AGENT_STARTUP_WARMUP_SECONDS <= 0"}
+
+    started_at = perf_counter()
+    chunks = 0
+    chars = 0
+    first_token_ms: float | None = None
+    messages = [
+        {"role": "system", "content": "Reply with exactly one word: ok."},
+        {"role": "user", "content": "Warm the endpoint."},
+    ]
+    for result in chat_completion_stream(
+        base_url=settings.agent_base_url,
+        model=settings.agent_model,
+        messages=messages,
+        api_key=settings.agent_api_key,
+        timeout=settings.agent_startup_warmup_seconds,
+        max_tokens=2,
+    ):
+        if not result.ok:
+            return {
+                "enabled": True,
+                "ok": False,
+                "error": result.error,
+                "total_ms": round((perf_counter() - started_at) * 1000, 1),
+            }
+        if first_token_ms is None:
+            first_token_ms = round((perf_counter() - started_at) * 1000, 1)
+        text = str(result.data or "")
+        chunks += 1
+        chars += len(text)
+
+    return {
+        "enabled": True,
+        "ok": chunks > 0,
+        "chunks": chunks,
+        "chars": chars,
+        "first_token_ms": first_token_ms,
+        "total_ms": round((perf_counter() - started_at) * 1000, 1),
+    }
+
+
 demo = build_demo()
 
 
@@ -557,6 +604,8 @@ if __name__ == "__main__":
     settings = load_settings()
     warm_diagnostics = warm_retrieval_caches(settings)
     print(f"warmed retrieval caches: {warm_diagnostics}", flush=True)
+    agent_warm_diagnostics = warm_agent_endpoint(settings)
+    print(f"warmed agent endpoint: {agent_warm_diagnostics}", flush=True)
     demo.launch(
         server_name=settings.gradio_server_name,
         server_port=settings.gradio_server_port,

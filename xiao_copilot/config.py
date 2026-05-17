@@ -53,6 +53,7 @@ class Settings:
     agent_api_key: str = _env_field("AGENT_API_KEY")
     agent_max_tokens: int = _typed_env_field(int, "AGENT_MAX_TOKENS", "260")
     agent_context_chars: int = _typed_env_field(int, "AGENT_CONTEXT_CHARS", "2000")
+    agent_startup_warmup_seconds: float = _typed_env_field(float, "AGENT_STARTUP_WARMUP_SECONDS", "8")
 
     request_timeout_seconds: float = _typed_env_field(float, "REQUEST_TIMEOUT_SECONDS", "20")
     top_k: int = _typed_env_field(int, "TOP_K", "5")

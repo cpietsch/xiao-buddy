@@ -52,6 +52,7 @@ AGENT_MODEL=your-agent-model-id
 AGENT_API_KEY=
 AGENT_MAX_TOKENS=260
 AGENT_CONTEXT_CHARS=2000
+AGENT_STARTUP_WARMUP_SECONDS=8
 
 TOP_K=5
 CANDIDATE_K=12
@@ -138,10 +139,12 @@ the ANN-backed HNSW index so query time does not scale with every chunk.
 python scripts/build_wiki_vector_index.py --backend hnsw --batch-size 32
 ```
 
-At app startup, `app.py` warms the knowledge-base lexical caches and loads the
-configured vector index. That moves the expensive first-query tokenization/index
-load out of the first user request; answer reports still expose cold and warm
-retrieval stage timings for verification.
+At app startup, `app.py` warms the knowledge-base lexical caches, loads the
+configured vector index, and sends one bounded streamed warmup request to the
+agent endpoint. That moves the expensive first-query tokenization/index load and
+some hosted-model idle-start cost out of the first user request; answer reports
+still expose cold and warm retrieval stage timings for verification. Set
+`AGENT_STARTUP_WARMUP_SECONDS=0` to skip the hosted-agent warmup.
 
 ## Retrieval Gate
 
