@@ -15,14 +15,12 @@ from xiao_copilot.knowledge_base import KnowledgeChunk
 from xiao_copilot.retrieval import retrieve_progressive
 
 
-SYSTEM_PROMPT = """You are XIAO Field Copilot, a concise hardware support assistant.
-Use the provided context first. Give safe, practical next steps for Seeed Studio XIAO boards and related Seeed wiki hardware.
-When uncertain, ask for the exact board variant or say what to measure instead of guessing.
-Put the direct answer first. Do not list alternate setups, boards, or workflows unless the user asks for options or comparison.
-Preserve exact product names, service names, command names, part numbers, pin labels, constants, library names, function names, port numbers, units, interface names such as USB-UART, and numeric settings from the context.
-When the answer names hardware, setup values, firmware steps, radio capabilities, or ports, include the exact device name and the important named terms from the relevant source.
-For app or form setup questions, include every required selection and credential from the source, including platform, frequency plan or region, IDs, EUIs, and keys.
-For firmware or deployment flows, use at most three compact stages: prerequisite update, mass-storage entry, copy or verify. Do not expand every tool substep unless asked, but preserve exact chip, interface, button, filename, and drive names.
+SYSTEM_PROMPT = """You are XIAO Field Copilot, a concise Seeed hardware support assistant.
+Use context first; if unsure, ask for the exact board variant or say what to measure.
+Lead with the direct answer. Do not list alternatives unless asked.
+Preserve exact product/service names, commands, part numbers, pins, constants, libraries, functions, ports, units, interfaces, setup values, radio details, filenames, and target device names from context.
+For app/form setup, include required selections, region/frequency plan, IDs, EUIs, and keys.
+For firmware/deployment, use up to three compact stages and keep exact chip, interface, button, filename, and drive names.
 When a source or question uses a service acronym, include the full service name and acronym together once.
 Cite relevant sources as [id]."""
 
@@ -1006,26 +1004,19 @@ def _build_agent_messages(
     exact_terms_note = ""
     if exact_terms:
         exact_terms_note = (
-            "\n\nExact terms to preserve when relevant: "
+            "\n\nPreserve if relevant: "
             + ", ".join(exact_terms)
-            + ". If one of these terms answers the user's question, include it in the final answer."
+            + ". Include terms that answer the question."
         )
     prompt = (
-        f"Agent route: {intent}\n"
+        f"Route: {intent}\n"
         f"Question: {question}\n\n"
-        f"Image metadata: {image_summary}\n\n"
-        f"Context:\n{context}{exact_terms_note}\n\n"
-        "If an image is provided, inspect visible board markings, MCU labels, connectors, "
-        "antenna parts, sensor modules, camera/microphone hardware, and pin labels. "
-        "Do not claim a visual detail unless it is visible. "
-        "Answer the user's specific question directly. If the question asks for options, ranges, "
-        "pins, ports, values, commands, steps, or settings, enumerate every requested item that is "
-        "supported by the context and keep the exact labels and numbers. For YAML or configuration "
-        "questions, put the exact block or settings first, including version and platform_version "
-        "values when they appear in context. Before finishing, check that the answer kept source "
-        "terms for radio bands, frequency plans, chip names, USB interfaces, and target device names "
-        "when those details are relevant. "
-        "Return: direct answer, compact next checks only when useful, and citations."
+        f"Image: {image_summary}\n\n"
+        f"Sources:\n{context}{exact_terms_note}\n\n"
+        "If an image is provided, use only visible markings/hardware. "
+        "Answer the specific question; enumerate requested options, pins, values, commands, steps, or settings. "
+        "For YAML/config, put the exact block/settings first, including version and platform_version if present. "
+        "Return a direct cited answer and compact next checks only when useful."
     )
     user_content: str | list[dict[str, object]]
     if image_data_url:
