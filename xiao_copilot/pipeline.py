@@ -324,6 +324,42 @@ def answer_question_stream(
                 draft_first_visible_ms=draft_first_visible_ms,
             ),
         )
+        agent_wait_ms = _elapsed_ms(generate_started_at)
+        timings_ms["generate"] = agent_wait_ms
+        yield (
+            _append_agent_wait_note(draft_answer, agent_wait_ms),
+            citations,
+            _run_diagnostics(
+                status="running",
+                stage="generate",
+                intent=intent,
+                image_summary=image_summary,
+                agent_multimodal=bool(image_data_url),
+                retrieval_diagnostics=retrieval_diagnostics,
+                chunks=chunks,
+                timings_ms=timings_ms,
+                run_started_at=run_started_at,
+                agent_status="waiting_first_token",
+                agent_streaming=True,
+                agent_streamed=False,
+                agent_chunks=0,
+                agent_chars=0,
+                agent_wait_ms=agent_wait_ms,
+                agent_context_chars=settings.agent_context_chars,
+                agent_prompt_chars=agent_prompt_chars,
+                draft_chars=draft_chars,
+                draft_first_visible_ms=draft_first_visible_ms,
+            ),
+            format_progress(
+                stage="generate",
+                backend=backend,
+                source_count=len(chunks),
+                retrieval_detail=retrieval_detail,
+                draft_chars=draft_chars,
+                draft_first_visible_ms=draft_first_visible_ms,
+                agent_wait_ms=agent_wait_ms,
+            ),
+        )
 
     for result in _generate_with_agent_stream_with_heartbeats(
         question=question,
@@ -337,6 +373,8 @@ def answer_question_stream(
             agent_wait_ms = _elapsed_ms(generate_started_at)
             timings_ms["generate"] = agent_wait_ms
             visible_answer = _repair_generated_text("".join(answer_parts)).strip() or draft_answer
+            if agent_first_token_ms is None and visible_answer:
+                visible_answer = _append_agent_wait_note(visible_answer, agent_wait_ms)
             yield (
                 visible_answer or "Generating a cited answer with the agent...",
                 citations,
@@ -618,6 +656,14 @@ def _progress_detail(
             return f"{source_count} sources via {backend}; {mode} answer{suffix}{first_token_detail}"
         return f"{mode} answer{suffix}{first_token_detail}"
     return ""
+
+
+def _append_agent_wait_note(answer: str, agent_wait_ms: float) -> str:
+    clean_answer = answer.rstrip()
+    return (
+        f"{clean_answer}\n\n"
+        f"_Waiting for hosted agent first token: {agent_wait_ms:.0f} ms…_"
+    )
 
 
 def _retrieval_progress_detail(

@@ -146,6 +146,10 @@ def _assert_agent_wait_heartbeat_keeps_draft_visible() -> None:
         _assert(waiting_events, "pipeline should yield progress heartbeats while waiting for the first token")
         answer, _citations, diagnostics, progress_html = waiting_events[0]
         _assert("Source-backed draft" in answer, "heartbeat should keep the source-backed draft visible")
+        _assert(
+            "Waiting for hosted agent first token" in answer,
+            "heartbeat should visibly update the answer panel while the hosted agent is quiet",
+        )
         _assert("waiting" in progress_html, "heartbeat progress should expose active waiting")
         _assert("first token" in progress_html, "heartbeat progress should name the first-token wait")
         _assert(

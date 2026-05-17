@@ -252,8 +252,10 @@ def _install_stream_observer(page) -> None:
               && activeStep.includes("source draft")
               && answer.includes("Source-backed draft");
             const waitingForAgent = draftVisible
-              && activeStep.includes("waiting")
-              && activeStep.includes("first token");
+              && (
+                (activeStep.includes("waiting") && activeStep.includes("first token"))
+                || answer.includes("Waiting for hosted agent first token")
+              );
             const streaming = activeStep.includes("Generate answer")
               && activeStep.includes("streaming")
               && activeStep.includes("first token");
