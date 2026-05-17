@@ -1075,8 +1075,7 @@ def _ensure_answer_exact_terms(answer: str, question: str, chunks: list[Knowledg
     if contextual_repair:
         return contextual_repair
 
-    details = " ".join(f"`{term}` [{source_id}]" for term, source_id in missing[:5])
-    return f"{answer.rstrip()}\n\nRelevant exact source terms: {details}."
+    return answer
 
 
 def _normalize_contextual_exact_terms(answer: str, question: str) -> str:
@@ -1130,7 +1129,88 @@ def _contextual_exact_term_repair(
             f"call `measureHighPrecision()` to read temperature and humidity [{source_id}]."
         )
 
+    repair_lines = _contextual_exact_term_lines(question, missing)
+    if repair_lines:
+        return f"{answer.rstrip()}\n\n" + " ".join(repair_lines)
+
     return ""
+
+
+def _contextual_exact_term_lines(question: str, missing: list[tuple[str, str]]) -> list[str]:
+    q = question.lower()
+    groups: list[tuple[set[str], str]] = [
+        (
+            {"SGM40567", "TPS22916CYFPR", "SX1801CCR", "470 kΩ", "BAT_ADC_EN", "BAT_ADC_READ", "53 μA"},
+            "The cited battery circuit details also name {terms}.",
+        ),
+        (
+            {"2.4G"},
+            "For WiFi, the cited setup specifies {terms}.",
+        ),
+        (
+            {"The Things Network", "frequency plan", "device EUI", "App EUI", "APP key"},
+            "From the LoRaWAN app setup, record {terms}.",
+        ),
+        (
+            {"AWS", "TTN", "ChirpStack", "Packet Forwarder", "Basics Station"},
+            "Supported network-server options include {terms}.",
+        ),
+        (
+            {"BL702", "USB-UART", "Edge Impulse firmware", "firmware.uf2", "GROVEAI"},
+            "The firmware deployment flow also uses {terms}.",
+        ),
+        (
+            {"reachy_bpm_dancer", "reachy_fleet_control"},
+            "The service names in the guide are {terms}.",
+        ),
+        (
+            {"agent planning", "task orchestration"},
+            "The OpenClaw role wording includes {terms}.",
+        ),
+    ]
+    lines: list[str] = []
+    used: set[str] = set()
+    for terms, template in groups:
+        selected = [
+            (term, source_id)
+            for term, source_id in missing
+            if term in terms and _exact_term_group_matches_question(term, q)
+        ]
+        if selected:
+            lines.append(template.format(terms=_format_cited_exact_terms(selected)))
+            used.update(term for term, _source_id in selected)
+
+    direct_matches = [
+        (term, source_id)
+        for term, source_id in missing
+        if term not in used and term.lower() in q
+    ]
+    if direct_matches:
+        lines.append(f"The cited source also names {_format_cited_exact_terms(direct_matches)}.")
+    return lines
+
+
+def _exact_term_group_matches_question(term: str, question_lower: str) -> bool:
+    battery_terms = {"SGM40567", "TPS22916CYFPR", "SX1801CCR", "470 kΩ", "BAT_ADC_EN", "BAT_ADC_READ", "53 μA"}
+    if term in battery_terms:
+        return "battery" in question_lower or "low-power" in question_lower or "low power" in question_lower
+    if term == "2.4G":
+        return "wifi" in question_lower or "mqtt" in question_lower
+    if term in {"The Things Network", "frequency plan", "device EUI", "App EUI", "APP key"}:
+        return "ttn" in question_lower or "app" in question_lower or "lorawan" in question_lower
+    if term in {"AWS", "TTN", "ChirpStack", "Packet Forwarder", "Basics Station"}:
+        return "network-server" in question_lower or "network server" in question_lower or "lorawan gateway" in question_lower
+    if term in {"BL702", "USB-UART", "Edge Impulse firmware", "firmware.uf2", "GROVEAI"}:
+        return "firmware" in question_lower or "edge impulse" in question_lower or "mass-storage" in question_lower
+    if term in {"reachy_bpm_dancer", "reachy_fleet_control"}:
+        return "reachy" in question_lower or "fleet" in question_lower
+    if term in {"agent planning", "task orchestration"}:
+        return "openclaw" in question_lower or "so-arm" in question_lower
+    return False
+
+
+def _format_cited_exact_terms(terms: list[tuple[str, str]]) -> str:
+    return ", ".join(f"`{term}` [{source_id}]" for term, source_id in terms[:6])
 
 
 def _looks_like_exact_term(value: str) -> bool:

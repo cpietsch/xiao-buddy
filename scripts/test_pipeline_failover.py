@@ -168,6 +168,28 @@ def _assert_exact_term_append_cites_missing_terms() -> None:
     )
     _assert("`2.4G` [wifi-source]" in answer, "missing exact terms should be appended with citations")
     _assert("Source detail:" not in answer, "generic exact-term repair should avoid mechanical source-detail label")
+    _assert(
+        "Relevant exact source terms:" not in answer,
+        "generic exact-term repair should avoid a catch-all exact-term appendix",
+    )
+
+    unrelated = pipeline._ensure_answer_exact_terms(
+        "The OLED address is `0x3C` [oled-source].",
+        "At what I2C address is the SSD1306 OLED configured?",
+        [
+            KnowledgeChunk(
+                id="oled-source",
+                title="OLED sample",
+                source="https://wiki.seeedstudio.com/test/",
+                text="The same page also reads temperature and humidity in another sample.",
+                kind="wiki",
+            )
+        ],
+    )
+    _assert(
+        "temperature" not in unrelated and "humidity" not in unrelated,
+        "irrelevant forced exact terms should not be appended to a complete answer",
+    )
 
 
 def _assert_contextual_exact_term_repair_avoids_source_detail_noise() -> None:
