@@ -18,6 +18,7 @@ def main() -> None:
     _assert_failure_diagnostic_includes_actionable_context()
     _assert_summary_reports_latency_and_rates()
     _assert_main_prints_failure_detail_on_miss()
+    _assert_main_fails_on_format_issue()
     print("PASS answer eval quality regression")
 
 
@@ -57,6 +58,21 @@ def _assert_matching_helpers_are_normalized_and_source_specific() -> None:
         ),
         "inline citation should fail when the answer cites only a non-required source",
     )
+    _assert(
+        answer_eval._answer_format_issues("Answer.\n\nSources: [a]\n\nSources: [b]")
+        == ["duplicate_sources_section"],
+        "format lint should catch duplicate source sections",
+    )
+    _assert(
+        answer_eval._answer_format_issues("Answer.\n\nSource detail: `GPIO6` [a].")
+        == ["legacy_source_detail_appendix"],
+        "format lint should catch legacy source-detail appendices",
+    )
+    _assert(
+        answer_eval._answer_format_issues("Answer.\n\nRelevant exact source terms: `GPIO6` [a].")
+        == ["generic_exact_terms_appendix"],
+        "format lint should catch generic exact-term appendices",
+    )
 
 
 def _assert_failure_diagnostic_includes_actionable_context() -> None:
@@ -66,6 +82,7 @@ def _assert_failure_diagnostic_includes_actionable_context() -> None:
             "query": "Which XIAO board supports Zigbee, Thread, and Matter over 802.15.4?",
         },
         missing_terms=["802.15.4", "Matter native"],
+        format_issues=["duplicate_sources_section"],
         required_citations=["https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/"],
         answer="This answer cites a different source [grove-sensor].\n\nIt omits the radio detail.",
         citations_text="\n".join(
@@ -80,6 +97,7 @@ def _assert_failure_diagnostic_includes_actionable_context() -> None:
         "failure detail:",
         "query: Which XIAO board supports Zigbee, Thread, and Matter over 802.15.4?",
         "missing_terms: 802.15.4, Matter native",
+        "format_issues: duplicate_sources_section",
         "required_citations: https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/",
         "required_source_ids: esp32c6-guide",
         "all_source_ids: grove-sensor, esp32c6-guide",
@@ -100,6 +118,7 @@ def _assert_summary_reports_latency_and_rates() -> None:
                 "inline_citation_ok": True,
                 "agent_ok": True,
                 "stream_ok": True,
+                "format_ok": True,
                 "draft_visible_ms": 2.0,
                 "source_draft_build_ms": 0.2,
                 "retrieve_preview_ms": 1.5,
@@ -123,6 +142,7 @@ def _assert_summary_reports_latency_and_rates() -> None:
                 "inline_citation_ok": False,
                 "agent_ok": True,
                 "stream_ok": True,
+                "format_ok": False,
                 "draft_visible_ms": 6.0,
                 "source_draft_build_ms": 0.6,
                 "retrieve_preview_ms": 5.5,
@@ -148,6 +168,7 @@ def _assert_summary_reports_latency_and_rates() -> None:
     _assert(summary["inline_citation_rate"] == 0.5, "summary should compute inline citation rate")
     _assert(summary["agent_rate"] == 1.0, "summary should compute agent hit rate")
     _assert(summary["stream_rate"] == 1.0, "summary should compute stream hit rate")
+    _assert(summary["format_rate"] == 0.5, "summary should compute format hit rate")
     _assert(summary["p50_draft_visible_ms"] == 4.0, "summary should compute p50 draft latency")
     _assert(abs(float(summary["p95_draft_visible_ms"]) - 5.8) < 0.0001, "summary should compute p95 draft latency")
     _assert(summary["max_draft_visible_ms"] == 6.0, "summary should compute max draft latency")
@@ -193,6 +214,7 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
         "ANSWER_EVAL_LIMIT",
         "ANSWER_EVAL_REQUIRE_AGENT",
         "ANSWER_EVAL_REQUIRE_STREAM",
+        "ANSWER_EVAL_REQUIRE_FORMAT",
         "ANSWER_EVAL_JSON_OUTPUT",
     ]
     original_env = {key: os.environ.get(key) for key in env_keys}
@@ -251,6 +273,7 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
             os.environ["ANSWER_EVAL_LIMIT"] = "0"
             os.environ["ANSWER_EVAL_REQUIRE_AGENT"] = "1"
             os.environ["ANSWER_EVAL_REQUIRE_STREAM"] = "1"
+            os.environ["ANSWER_EVAL_REQUIRE_FORMAT"] = "1"
             os.environ["ANSWER_EVAL_JSON_OUTPUT"] = str(report_path)
 
             output = io.StringIO()
@@ -275,9 +298,11 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
     for expected in [
         "MISS synthetic-miss",
         "missing=802.15.4",
+        "format=ok",
         "failure detail:",
         "query: Which protocol detail is required?",
         "missing_terms: 802.15.4",
+        "format_issues: <none>",
         "required_citations: https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/",
         "required_source_ids: esp32c6-guide",
         "answer_excerpt: Use XIAO ESP32C6 for Thread and Zigbee [esp32c6-guide].",
@@ -288,6 +313,7 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
         "answer first-token latency: p50_ms=3.5 p95_ms=3.5 max_ms=3.5",
         "answer agent-visible latency: p50_ms=6.0 p95_ms=6.0 max_ms=6.0",
         "answer agent prompt chars: p50=1234 p95=1234 max=1234",
+        "answer format-hit rate: 1/1 = 100%",
         "answer latency: p50_ms=7.0 p95_ms=7.0 max_ms=7.0",
         "answer retrieval stage latency:",
         "query_embedding: p50_ms=1.2 p95_ms=1.2 max_ms=1.2",
@@ -301,10 +327,13 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
     _assert(isinstance(metadata, dict), "JSON report should include metadata object")
     _assert(metadata["report_type"] == "answer_quality", "JSON report should identify answer quality report type")
     _assert(metadata["selected_case_ids"] == ["synthetic-miss"], "JSON report metadata should include selected case ids")
+    _assert(metadata["require_format"] is True, "JSON report metadata should include format requirement")
     _assert(isinstance(summary, dict), "JSON report should include summary object")
     _assert(isinstance(results, list) and len(results) == 1, "JSON report should include one result")
     _assert(summary["failures"] == ["synthetic-miss"], "JSON report should include failing case id")
     _assert(results[0]["missing_terms"] == ["802.15.4"], "JSON report should include missing terms")
+    _assert(results[0]["format_ok"] is True, "JSON report should include format pass flag")
+    _assert(results[0]["format_issues"] == [], "JSON report should include format issues")
     _assert(results[0]["required_source_ids"] == ["esp32c6-guide"], "JSON report should include required source ids")
     _assert(results[0]["stream_chunks"] == 1, "JSON report should include stream chunk count")
     _assert(results[0]["draft_visible_ms"] == 2.5, "JSON report should include draft-visible latency")
@@ -320,6 +349,94 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
     _assert(
         results[0]["retrieval_timings_ms"]["query_embedding"] == 1.2,
         "JSON report should include retrieval stage timing",
+    )
+
+
+def _assert_main_fails_on_format_issue() -> None:
+    original_answer_question = answer_eval.answer_question
+    env_keys = [
+        "ANSWER_EVAL_PATH",
+        "ANSWER_EVAL_CASE_IDS",
+        "ANSWER_EVAL_LIMIT",
+        "ANSWER_EVAL_REQUIRE_AGENT",
+        "ANSWER_EVAL_REQUIRE_STREAM",
+        "ANSWER_EVAL_REQUIRE_FORMAT",
+        "ANSWER_EVAL_JSON_OUTPUT",
+    ]
+    original_env = {key: os.environ.get(key) for key in env_keys}
+    with tempfile.TemporaryDirectory() as tmp:
+        eval_path = Path(tmp) / "answer_eval.jsonl"
+        report_path = Path(tmp) / "answer-quality.json"
+        eval_path.write_text(
+            json.dumps(
+                {
+                    "id": "synthetic-format-miss",
+                    "query": "Which protocol detail is required?",
+                    "must_include": ["802.15.4"],
+                    "must_cite": ["https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        def fake_answer_question(_image: object, _query: str) -> tuple[str, str, dict[str, object]]:
+            answer = (
+                "Use XIAO ESP32C6 for 802.15.4 Thread and Zigbee [esp32c6-guide].\n\n"
+                "Sources: [esp32c6-guide]\n"
+                "Sources: [esp32c6-guide]"
+            )
+            citations = (
+                "- [esp32c6-guide] XIAO ESP32C6 Getting Started "
+                "https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/"
+            )
+            return answer, citations, {
+                "agent_used": True,
+                "agent_streamed": True,
+                "agent": {"stream_chunks": 1, "stream_chars": len(answer), "first_token_ms": 3.5},
+                "agent_first_visible_ms": 6.0,
+                "timings_ms": {"total": 7},
+            }
+
+        try:
+            answer_eval.answer_question = fake_answer_question
+            os.environ["ANSWER_EVAL_PATH"] = str(eval_path)
+            os.environ["ANSWER_EVAL_CASE_IDS"] = ""
+            os.environ["ANSWER_EVAL_LIMIT"] = "0"
+            os.environ["ANSWER_EVAL_REQUIRE_AGENT"] = "1"
+            os.environ["ANSWER_EVAL_REQUIRE_STREAM"] = "1"
+            os.environ["ANSWER_EVAL_REQUIRE_FORMAT"] = "1"
+            os.environ["ANSWER_EVAL_JSON_OUTPUT"] = str(report_path)
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                try:
+                    answer_eval.main()
+                except SystemExit as exc:
+                    _assert(exc.code == 1, "answer eval should exit non-zero on a format miss")
+                else:
+                    raise AssertionError("answer eval should fail for duplicate source sections")
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        finally:
+            answer_eval.answer_question = original_answer_question
+            for key, value in original_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    captured = output.getvalue()
+    _assert("format=miss" in captured, "format miss output should identify format failure")
+    _assert(
+        "format_issues=duplicate_sources_section" in captured,
+        "format miss output should include format issue names",
+    )
+    result = report["results"][0]
+    _assert(result["fact_ok"] is True, "format miss fixture should satisfy facts")
+    _assert(result["format_ok"] is False, "JSON report should include failed format flag")
+    _assert(
+        result["format_issues"] == ["duplicate_sources_section"],
+        "JSON report should include duplicate source format issue",
     )
 
 

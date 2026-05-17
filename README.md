@@ -301,13 +301,13 @@ make answer-eval
 
 This calls the full RAG pipeline and checks that final answers include required
 facts, required source URLs, matching inline `[source-id]` citations, live agent
-output, source-backed draft visibility, and streamed token updates for the cases in
-`data/corpus/answer_eval_queries.jsonl`. It also writes a compact structured
-report to `dist/answer-quality/all.json`, including per-case pass flags, source
-IDs, stream counts, source-draft latency, hosted-agent first-token latency,
-agent-visible-from-request latency, pre-rerank preview latency, source-draft
-build time, agent prompt size, nested retrieval stage timings, and total latency
-percentiles.
+output, source-backed draft visibility, streamed token updates, and clean source
+appendix formatting for the cases in `data/corpus/answer_eval_queries.jsonl`. It
+also writes a compact structured report to `dist/answer-quality/all.json`,
+including per-case pass flags, source IDs, stream counts, source-draft latency,
+hosted-agent first-token latency, agent-visible-from-request latency, pre-rerank
+preview latency, source-draft build time, agent prompt size, answer-format issues,
+nested retrieval stage timings, and total latency percentiles.
 
 Run one generated-answer case while debugging a prompt or endpoint:
 

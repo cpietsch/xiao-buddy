@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -16,6 +17,7 @@ def main() -> None:
     json_output = Path(output) if (output := os.environ.get("ANSWER_EVAL_JSON_OUTPUT", "").strip()) else None
     require_agent = os.environ.get("ANSWER_EVAL_REQUIRE_AGENT", "1") == "1"
     require_stream = os.environ.get("ANSWER_EVAL_REQUIRE_STREAM", "1") == "1"
+    require_format = os.environ.get("ANSWER_EVAL_REQUIRE_FORMAT", "1") == "1"
     limit = int(os.environ.get("ANSWER_EVAL_LIMIT", "0"))
     case_ids = {
         case_id.strip()
@@ -37,6 +39,7 @@ def main() -> None:
     inline_citation_hits = 0
     agent_hits = 0
     stream_hits = 0
+    format_hits = 0
     failures: list[str] = []
     results: list[dict[str, object]] = []
 
@@ -54,7 +57,16 @@ def main() -> None:
         stream_ok = not require_stream or bool(
             diagnostics.get("agent_streamed") or diagnostics.get("agent", {}).get("streamed")
         )
-        ok = fact_ok and citation_ok and inline_citation_ok and agent_ok and stream_ok
+        format_issues = _answer_format_issues(answer)
+        format_ok = not format_issues
+        ok = (
+            fact_ok
+            and citation_ok
+            and inline_citation_ok
+            and agent_ok
+            and stream_ok
+            and (format_ok or not require_format)
+        )
 
         total += 1
         fact_hits += int(fact_ok)
@@ -62,6 +74,7 @@ def main() -> None:
         inline_citation_hits += int(inline_citation_ok)
         agent_hits += int(agent_ok)
         stream_hits += int(stream_ok)
+        format_hits += int(format_ok)
         if not ok:
             failures.append(case["id"])
 
@@ -85,6 +98,8 @@ def main() -> None:
             "inline_citation_ok": inline_citation_ok,
             "agent_ok": agent_ok,
             "stream_ok": stream_ok,
+            "format_ok": format_ok,
+            "format_issues": format_issues,
             "missing_terms": missing_terms,
             "required_citations": required_citations,
             "required_source_ids": required_source_ids,
@@ -110,16 +125,18 @@ def main() -> None:
             f"inline_cite={'ok' if inline_citation_ok else 'miss'} "
             f"agent={'ok' if agent_ok else 'miss'} "
             f"stream={'ok' if stream_ok else 'miss'} "
+            f"format={'ok' if format_ok else 'miss'} "
             f"chunks={agent.get('stream_chunks', 0)} "
             f"chars={agent.get('stream_chars', len(answer))} "
             f"first_token_ms={_format_ms(first_token_ms)} "
             f"total_ms={timings.get('total', 0)}"
-            f"{' missing=' + ', '.join(missing_terms) if missing_terms else ''}",
+            f"{' missing=' + ', '.join(missing_terms) if missing_terms else ''}"
+            f"{' format_issues=' + ', '.join(format_issues) if format_issues else ''}",
             flush=True,
         )
         if not ok:
             print(
-                _format_failure_detail(case, answer, citations, missing_terms, required_citations),
+                _format_failure_detail(case, answer, citations, missing_terms, required_citations, format_issues),
                 flush=True,
             )
 
@@ -133,6 +150,7 @@ def main() -> None:
     )
     print(f"answer agent-hit rate: {agent_hits}/{total} = {summary['agent_rate']:.0%}", flush=True)
     print(f"answer stream-hit rate: {stream_hits}/{total} = {summary['stream_rate']:.0%}", flush=True)
+    print(f"answer format-hit rate: {format_hits}/{total} = {summary['format_rate']:.0%}", flush=True)
     print(
         f"answer source-draft latency: p50_ms={summary['p50_draft_visible_ms']:.1f} "
         f"p95_ms={summary['p95_draft_visible_ms']:.1f} max_ms={summary['max_draft_visible_ms']:.1f}",
@@ -194,6 +212,7 @@ def main() -> None:
             extra={
                 "require_agent": require_agent,
                 "require_stream": require_stream,
+                "require_format": require_format,
                 "case_filter": sorted(case_ids),
                 "limit": limit,
             },
@@ -249,6 +268,7 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         "inline_citation_rate": _rate(results, "inline_citation_ok"),
         "agent_rate": _rate(results, "agent_ok"),
         "stream_rate": _rate(results, "stream_ok"),
+        "format_rate": _rate(results, "format_ok"),
         "p50_draft_visible_ms": _percentile(draft_visible_ms, 50),
         "p95_draft_visible_ms": _percentile(draft_visible_ms, 95),
         "max_draft_visible_ms": max(draft_visible_ms) if draft_visible_ms else 0.0,
@@ -409,6 +429,7 @@ def _format_failure_detail(
     citations_text: str,
     missing_terms: list[str],
     required_citations: list[str],
+    format_issues: list[str] | None = None,
 ) -> str:
     required_source_ids = _source_ids_for_required_citations(citations_text, required_citations)
     all_source_ids = _source_ids_from_citations(citations_text)
@@ -420,6 +441,7 @@ def _format_failure_detail(
         "  failure detail:",
         f"    query: {query_excerpt}",
         f"    missing_terms: {_format_list(missing_terms)}",
+        f"    format_issues: {_format_list(format_issues or [])}",
         f"    required_citations: {_format_list(required_citations)}",
         f"    required_source_ids: {_format_list(required_source_ids)}",
         f"    all_source_ids: {_format_list(all_source_ids)}",
@@ -427,6 +449,18 @@ def _format_failure_detail(
         f"    citation_excerpt: {citation_excerpt}",
     ]
     return "\n".join(detail)
+
+
+def _answer_format_issues(answer: str) -> list[str]:
+    issues: list[str] = []
+    source_lines = re.findall(r"(?im)^\s*Sources:\s*", answer)
+    if len(source_lines) > 1:
+        issues.append("duplicate_sources_section")
+    if re.search(r"(?i)\bSource detail\s*:", answer):
+        issues.append("legacy_source_detail_appendix")
+    if re.search(r"(?i)\bRelevant exact source terms\s*:", answer):
+        issues.append("generic_exact_terms_appendix")
+    return issues
 
 
 def _missing_terms(text: str, terms: list[str]) -> list[str]:
