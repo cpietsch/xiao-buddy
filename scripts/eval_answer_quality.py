@@ -186,6 +186,12 @@ def main() -> None:
         flush=True,
     )
     print(
+        f"answer output chars: p50={summary['p50_answer_chars']:.0f} "
+        f"p95={summary['p95_answer_chars']:.0f} "
+        f"max={summary['max_answer_chars']:.0f}",
+        flush=True,
+    )
+    print(
         f"answer latency: p50_ms={summary['p50_ms']:.1f} "
         f"p95_ms={summary['p95_ms']:.1f} max_ms={summary['max_ms']:.1f}",
         flush=True,
@@ -259,6 +265,11 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         for result in results
         if isinstance(value := result.get("retrieve_preview_ms"), (int, float))
     ]
+    answer_chars = [
+        float(value)
+        for result in results
+        if isinstance(value := result.get("answer_chars"), (int, float))
+    ]
     return {
         "cases": total,
         "passes": sum(1 for result in results if bool(result["ok"])),
@@ -287,6 +298,9 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         "p50_agent_prompt_chars": _percentile(agent_prompt_chars, 50),
         "p95_agent_prompt_chars": _percentile(agent_prompt_chars, 95),
         "max_agent_prompt_chars": max(agent_prompt_chars) if agent_prompt_chars else 0.0,
+        "p50_answer_chars": _percentile(answer_chars, 50),
+        "p95_answer_chars": _percentile(answer_chars, 95),
+        "max_answer_chars": max(answer_chars) if answer_chars else 0.0,
         "p50_ms": _percentile(totals_ms, 50),
         "p95_ms": _percentile(totals_ms, 95),
         "max_ms": max(totals_ms) if totals_ms else 0.0,

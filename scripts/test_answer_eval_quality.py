@@ -132,6 +132,7 @@ def _assert_summary_reports_latency_and_rates() -> None:
                     "reranker": 3.0,
                     "total": 7.0,
                 },
+                "answer_chars": 500,
                 "total_ms": 10.0,
             },
             {
@@ -156,6 +157,7 @@ def _assert_summary_reports_latency_and_rates() -> None:
                     "reranker": 9.0,
                     "total": 21.0,
                 },
+                "answer_chars": 1500,
                 "total_ms": 30.0,
             },
         ]
@@ -196,6 +198,9 @@ def _assert_summary_reports_latency_and_rates() -> None:
     _assert(summary["p50_agent_prompt_chars"] == 2000.0, "summary should compute p50 prompt chars")
     _assert(summary["p95_agent_prompt_chars"] == 2900.0, "summary should compute p95 prompt chars")
     _assert(summary["max_agent_prompt_chars"] == 3000.0, "summary should compute max prompt chars")
+    _assert(summary["p50_answer_chars"] == 1000.0, "summary should compute p50 answer chars")
+    _assert(summary["p95_answer_chars"] == 1450.0, "summary should compute p95 answer chars")
+    _assert(summary["max_answer_chars"] == 1500.0, "summary should compute max answer chars")
     _assert(summary["p50_ms"] == 20.0, "summary should compute p50 latency")
     _assert(summary["p95_ms"] == 29.0, "summary should compute p95 latency")
     _assert(summary["max_ms"] == 30.0, "summary should compute max latency")
@@ -313,6 +318,7 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
         "answer first-token latency: p50_ms=3.5 p95_ms=3.5 max_ms=3.5",
         "answer agent-visible latency: p50_ms=6.0 p95_ms=6.0 max_ms=6.0",
         "answer agent prompt chars: p50=1234 p95=1234 max=1234",
+        "answer output chars: p50=55 p95=55 max=55",
         "answer format-hit rate: 1/1 = 100%",
         "answer latency: p50_ms=7.0 p95_ms=7.0 max_ms=7.0",
         "answer retrieval stage latency:",
@@ -346,6 +352,7 @@ def _assert_main_prints_failure_detail_on_miss() -> None:
     _assert(results[0]["first_token_ms"] == 3.5, "JSON report should include first-token latency")
     _assert(results[0]["agent_first_visible_ms"] == 6.0, "JSON report should include agent-visible latency")
     _assert(results[0]["agent_prompt_chars"] == 1234.0, "JSON report should include prompt character count")
+    _assert(summary["p50_answer_chars"] == 55.0, "JSON report should summarize answer character count")
     _assert(
         results[0]["retrieval_timings_ms"]["query_embedding"] == 1.2,
         "JSON report should include retrieval stage timing",
