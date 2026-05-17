@@ -46,7 +46,7 @@ class Settings:
     rerank_base_url: str = _env_field("RERANK_BASE_URL")
     rerank_model: str = _env_field("RERANK_MODEL", "qwen3-vl-reranker-2b")
     rerank_api_key: str = _env_field("RERANK_API_KEY")
-    rerank_text_chars: int = _typed_env_field(int, "RERANK_TEXT_CHARS", "3200")
+    rerank_text_chars: int = _typed_env_field(int, "RERANK_TEXT_CHARS", "2800")
 
     agent_base_url: str = _env_field("AGENT_BASE_URL")
     agent_model: str = _env_field("AGENT_MODEL", "openai-compatible-agent")

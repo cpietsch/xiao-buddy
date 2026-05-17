@@ -45,7 +45,7 @@ EMBEDDING_API_KEY=
 RERANK_BASE_URL=https://your-rerank-host/v1
 RERANK_MODEL=qwen3-vl-reranker-2b
 RERANK_API_KEY=
-RERANK_TEXT_CHARS=3200
+RERANK_TEXT_CHARS=2800
 
 AGENT_BASE_URL=https://your-llm-host/v1
 AGENT_MODEL=your-agent-model-id
@@ -322,10 +322,11 @@ retrieval eval set:
 make rerank-benchmark
 ```
 
-The production defaults are `CANDIDATE_K=12` and `RERANK_TEXT_CHARS=3200`, which
+The production defaults are `CANDIDATE_K=12` and `RERANK_TEXT_CHARS=2800`, which
 keep richer evidence available to the reranker while bounding reranker latency.
 `CANDIDATE_K=8` is faster but currently fails the full answer quality gate on an
-MG24 deep-sleep recovery case.
+MG24 deep-sleep recovery case, and a `RERANK_TEXT_CHARS=900` window is faster but
+fails the strict reranker quality audit on close wiki cases.
 
 To verify the live reranker is helping on representative Seeed wiki topics, run
 the focused reranker quality gate:
