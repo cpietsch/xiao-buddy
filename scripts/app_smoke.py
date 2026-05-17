@@ -17,6 +17,7 @@ DEFAULT_QUERY = "Which XIAO should I choose for 5 GHz WiFi?"
 DEFAULT_TERMS = ("XIAO ESP32-C5", "5 GHz", "Wi-Fi 6")
 DEFAULT_CITATIONS = ("https://wiki.seeedstudio.com/xiao_esp32c5_wifi_usage/",)
 DEFAULT_EVAL_PATH = Path("data/corpus/answer_eval_queries.jsonl")
+DEFAULT_HEARTBEAT_THRESHOLD_MS = 1500.0
 
 
 def main() -> None:
@@ -26,6 +27,9 @@ def main() -> None:
     timeout = float(os.environ.get("APP_SMOKE_TIMEOUT_SECONDS", settings.request_timeout_seconds or 90))
     require_stream = os.environ.get("APP_SMOKE_REQUIRE_STREAM", "1") == "1"
     require_first_token = os.environ.get("APP_SMOKE_REQUIRE_FIRST_TOKEN", "1" if require_stream else "0") == "1"
+    require_source_draft = os.environ.get("APP_SMOKE_REQUIRE_SOURCE_DRAFT", "1" if require_stream else "0") == "1"
+    require_heartbeat = os.environ.get("APP_SMOKE_REQUIRE_AGENT_HEARTBEAT", "1" if require_stream else "0") == "1"
+    heartbeat_threshold_ms = float(os.environ.get("APP_SMOKE_HEARTBEAT_THRESHOLD_MS", DEFAULT_HEARTBEAT_THRESHOLD_MS))
     require_inline_citation = os.environ.get("APP_SMOKE_REQUIRE_INLINE_CITATION", "1") == "1"
 
     event_id = _start_call(base_url, query, timeout=timeout)
@@ -44,6 +48,9 @@ def main() -> None:
     if require_inline_citation:
         _require_inline_citation(answer, source_text, citations)
     if require_stream:
+        draft_events = _source_draft_events(events)
+        if require_source_draft and not draft_events:
+            raise SystemExit("Expected a visible source-backed draft event before the hosted agent stream.")
         stream_events = [
             event
             for event in events
@@ -55,6 +62,14 @@ def main() -> None:
             raise SystemExit(f"Expected multiple streamed answer events, got {len(stream_events)}.")
         if require_first_token and not _stream_events_with_first_token(stream_events):
             raise SystemExit("Expected first-token diagnostics during streamed answer events.")
+        if require_heartbeat:
+            heartbeat_events = _agent_wait_heartbeat_events(events)
+            if first_token := _first_token_ms(final[2] if len(final) > 2 and isinstance(final[2], dict) else {}):
+                if first_token >= heartbeat_threshold_ms and not heartbeat_events:
+                    raise SystemExit(
+                        "Expected progress heartbeat events while waiting for the hosted agent first token; "
+                        f"first_token_ms={_format_ms(first_token)} threshold_ms={heartbeat_threshold_ms:.0f}."
+                    )
     first_token_ms = _first_token_ms(diagnostics)
     if require_first_token:
         _require_first_token_latency(first_token_ms, progress_html)
@@ -72,6 +87,8 @@ def main() -> None:
         f"chars={len(answer)} "
         f"sources={source_text.count('- [')} "
         f"inline_citation={require_inline_citation} "
+        f"source_draft_events={len(_source_draft_events(events))} "
+        f"heartbeat_events={len(_agent_wait_heartbeat_events(events))} "
         f"first_token_ms={_format_ms(first_token_ms)} "
         f"total_ms={diagnostics.get('timings_ms', {}).get('total', 0)}"
     )
@@ -205,6 +222,45 @@ def _stream_events_with_first_token(events: list[list[object]]) -> list[list[obj
             agent_streaming
             and _first_token_ms(diagnostics) is not None
             and "first token" in progress_html.lower()
+        ):
+            matches.append(event)
+    return matches
+
+
+def _source_draft_events(events: list[list[object]]) -> list[list[object]]:
+    matches: list[list[object]] = []
+    for event in events:
+        if len(event) <= 3 or not isinstance(event[2], dict):
+            continue
+        diagnostics = event[2]
+        draft = diagnostics.get("draft", {})
+        progress_html = str(event[3])
+        answer = str(event[0] if event else "")
+        if (
+            isinstance(draft, dict)
+            and draft.get("visible")
+            and "source draft" in progress_html.lower()
+            and "Source-backed draft" in answer
+        ):
+            matches.append(event)
+    return matches
+
+
+def _agent_wait_heartbeat_events(events: list[list[object]]) -> list[list[object]]:
+    matches: list[list[object]] = []
+    for event in events:
+        if len(event) <= 3 or not isinstance(event[2], dict):
+            continue
+        diagnostics = event[2]
+        agent = diagnostics.get("agent", {})
+        status = agent.get("status") if isinstance(agent, dict) else diagnostics.get("agent_status")
+        wait_ms = agent.get("wait_ms") if isinstance(agent, dict) else diagnostics.get("agent_wait_ms")
+        progress_html = str(event[3]).lower()
+        if (
+            status == "waiting_first_token"
+            and isinstance(wait_ms, (int, float))
+            and "waiting" in progress_html
+            and "first token" in progress_html
         ):
             matches.append(event)
     return matches

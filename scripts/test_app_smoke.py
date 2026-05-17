@@ -6,9 +6,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.app_smoke import (
+    _agent_wait_heartbeat_events,
     _first_token_ms,
     _format_ms,
     _require_first_token_latency,
+    _source_draft_events,
     _stream_events_with_first_token,
 )
 
@@ -16,6 +18,8 @@ from scripts.app_smoke import (
 def main() -> None:
     _assert_first_token_helpers()
     _assert_stream_first_token_events()
+    _assert_source_draft_events()
+    _assert_agent_wait_heartbeat_events()
     print("PASS app smoke parser regression")
 
 
@@ -68,6 +72,59 @@ def _assert_stream_first_token_events() -> None:
     _assert(
         _stream_events_with_first_token([final_only_event, missing_progress_event]) == [],
         "final-only first-token evidence should not satisfy streamed-progress evidence",
+    )
+
+
+def _assert_source_draft_events() -> None:
+    draft_event = [
+        "Source-backed draft\n\nUse the cited source.",
+        "",
+        {"draft": {"visible": True, "chars": 48}},
+        "<small>source draft 48 chars in 500 ms; preparing agent</small>",
+    ]
+    missing_answer_event = [
+        "Generating a cited answer with the agent...",
+        "",
+        {"draft": {"visible": True, "chars": 48}},
+        "<small>source draft 48 chars in 500 ms; preparing agent</small>",
+    ]
+    missing_progress_event = [
+        "Source-backed draft\n\nUse the cited source.",
+        "",
+        {"draft": {"visible": True, "chars": 48}},
+        "<small>preparing agent</small>",
+    ]
+
+    _assert(
+        _source_draft_events([draft_event, missing_answer_event, missing_progress_event]) == [draft_event],
+        "only visible source-backed draft events with matching progress should count",
+    )
+
+
+def _assert_agent_wait_heartbeat_events() -> None:
+    heartbeat_event = [
+        "Source-backed draft\n\nUse the cited source.",
+        "",
+        {"agent": {"status": "waiting_first_token", "wait_ms": 1001.0}},
+        "<small>source draft 48 chars in 500 ms; waiting 1001 ms for first token</small>",
+    ]
+    missing_status_event = [
+        "Source-backed draft\n\nUse the cited source.",
+        "",
+        {"agent": {"status": "streaming", "wait_ms": 1001.0}},
+        "<small>source draft 48 chars in 500 ms; waiting 1001 ms for first token</small>",
+    ]
+    missing_progress_event = [
+        "Source-backed draft\n\nUse the cited source.",
+        "",
+        {"agent": {"status": "waiting_first_token", "wait_ms": 1001.0}},
+        "<small>source draft 48 chars in 500 ms; preparing agent</small>",
+    ]
+
+    _assert(
+        _agent_wait_heartbeat_events([heartbeat_event, missing_status_event, missing_progress_event])
+        == [heartbeat_event],
+        "only waiting-first-token events with visible heartbeat progress should count",
     )
 
 
