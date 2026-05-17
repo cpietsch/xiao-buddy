@@ -71,6 +71,12 @@ EXACT_TERM_CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("SD card slot", ("sd card slot",)),
     ("GC9A01", ("gc9a01",)),
     ("CHSC6X", ("chsc6x",)),
+    ("ATSAMD51P19", ("atsamd51p19",)),
+    ("Realtek RTL8720DN", ("realtek rtl8720dn", "rtl8720dn")),
+    ("120MHz", ("120mhz", "120 mhz")),
+    ("4MB", ("4mb", "4 mb")),
+    ("192KB", ("192kb", "192 kb")),
+    ("LIS3DHTR", ("lis3dhtr",)),
 )
 
 MARKED_EXACT_TERM_RE = re.compile(r"`([^`\n]{2,48})`|\*\*([^*\n]{2,48})\*\*")
@@ -1441,6 +1447,10 @@ def _contextual_exact_term_lines(question: str, missing: list[tuple[str, str]]) 
             {"GC9A01", "CHSC6X"},
             "The cited Round Display device-tree details also name {terms}.",
         ),
+        (
+            {"ATSAMD51P19", "Realtek RTL8720DN", "120MHz", "4MB", "192KB", "LIS3DHTR"},
+            "The cited Wio Terminal hardware summary also names {terms}.",
+        ),
     ]
     lines: list[str] = []
     used: set[str] = set()
@@ -1488,6 +1498,15 @@ def _exact_term_group_matches_question(term: str, question_lower: str) -> bool:
         return "round display" in question_lower and ("sd" in question_lower or "microsd" in question_lower)
     if term in {"GC9A01", "CHSC6X"}:
         return "round display" in question_lower or "display" in question_lower or "touch" in question_lower
+    if term in {"ATSAMD51P19", "Realtek RTL8720DN", "120MHz", "4MB", "192KB", "LIS3DHTR"}:
+        return "wio terminal" in question_lower and (
+            "mcu" in question_lower
+            or "wireless" in question_lower
+            or "memory" in question_lower
+            or "features" in question_lower
+            or "hardware" in question_lower
+            or "include" in question_lower
+        )
     return False
 
 

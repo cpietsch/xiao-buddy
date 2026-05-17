@@ -418,6 +418,32 @@ def _assert_contextual_exact_term_repair_avoids_source_detail_noise() -> None:
     for expected in ("`Clock`", "`Data`", "[pdm-source]"):
         _assert(expected in pdm_labels, f"PDM microphone repair should preserve {expected}")
 
+    wio_hardware = pipeline._ensure_answer_exact_terms(
+        "Wio Terminal uses a SAMD51 MCU, Realtek WiFi/BLE, 4 MB flash, and 192 KB RAM [wio-source].",
+        "What MCU, wireless chip, memory, and onboard features does Wio Terminal include?",
+        [
+            KnowledgeChunk(
+                id="wio-source",
+                title="Wio Terminal hardware",
+                source="https://wiki.seeedstudio.com/test/",
+                text=(
+                    "Wio Terminal includes an ATSAMD51P19 running at 120MHz, "
+                    "a Realtek RTL8720DN wireless chip, 4MB flash, 192KB RAM, "
+                    "and an onboard LIS3DHTR accelerometer."
+                ),
+                kind="wiki",
+            )
+        ],
+    )
+    for expected in (
+        "`ATSAMD51P19` [wio-source]",
+        "`Realtek RTL8720DN` [wio-source]",
+        "`120MHz` [wio-source]",
+        "`LIS3DHTR` [wio-source]",
+    ):
+        _assert(expected in wio_hardware, f"Wio Terminal hardware repair should preserve {expected}")
+    _assert("Source detail:" not in wio_hardware, "Wio Terminal repair should use a natural sentence")
+
 
 def _assert_inline_citation_repair_reuses_sources_line() -> None:
     chunks = [

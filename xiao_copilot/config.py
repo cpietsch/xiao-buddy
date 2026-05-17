@@ -51,7 +51,7 @@ class Settings:
     agent_base_url: str = _env_field("AGENT_BASE_URL")
     agent_model: str = _env_field("AGENT_MODEL", "openai-compatible-agent")
     agent_api_key: str = _env_field("AGENT_API_KEY")
-    agent_max_tokens: int = _typed_env_field(int, "AGENT_MAX_TOKENS", "300")
+    agent_max_tokens: int = _typed_env_field(int, "AGENT_MAX_TOKENS", "260")
     agent_context_chars: int = _typed_env_field(int, "AGENT_CONTEXT_CHARS", "2000")
 
     request_timeout_seconds: float = _typed_env_field(float, "REQUEST_TIMEOUT_SECONDS", "20")
