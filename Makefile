@@ -1,4 +1,4 @@
-.PHONY: smoke ui-smoke corpus-scope browser-smoke browser-agent-smoke health health-live health-functional app-smoke eval-gate answer-eval eval-all verify-live verify-demo verify-handoff import-wiki-xiao import-wiki-all build-hnsw build-faiss-pq rerank-benchmark rerank-quality rerank-quality-all vector-artifact verify-vector-artifact verify-vector-artifact-restore install-vector-artifact export-local verify-local-export
+.PHONY: smoke ui-smoke corpus-scope browser-smoke browser-agent-smoke health health-live health-functional app-smoke app-cache-smoke eval-gate answer-eval eval-all verify-live verify-demo verify-handoff import-wiki-xiao import-wiki-all build-hnsw build-faiss-pq rerank-benchmark rerank-quality rerank-quality-all vector-artifact verify-vector-artifact verify-vector-artifact-restore install-vector-artifact export-local verify-local-export
 
 PYTHON ?= .venv/bin/python
 
@@ -46,6 +46,10 @@ health-functional:
 
 app-smoke:
 	$(PYTHON) scripts/app_smoke.py
+
+app-cache-smoke:
+	$(PYTHON) scripts/app_smoke.py
+	APP_SMOKE_REQUIRE_RERANK_CACHE=1 APP_SMOKE_REQUIRE_NO_RERANK_WAIT=1 $(PYTHON) scripts/app_smoke.py
 
 eval-gate:
 	./scripts/eval_gate.sh

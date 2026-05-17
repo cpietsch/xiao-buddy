@@ -31,6 +31,8 @@ def main() -> None:
     require_heartbeat = os.environ.get("APP_SMOKE_REQUIRE_AGENT_HEARTBEAT", "1" if require_stream else "0") == "1"
     heartbeat_threshold_ms = float(os.environ.get("APP_SMOKE_HEARTBEAT_THRESHOLD_MS", DEFAULT_HEARTBEAT_THRESHOLD_MS))
     require_inline_citation = os.environ.get("APP_SMOKE_REQUIRE_INLINE_CITATION", "1") == "1"
+    require_reranker_cache = os.environ.get("APP_SMOKE_REQUIRE_RERANK_CACHE", "0") == "1"
+    require_no_reranker_wait = os.environ.get("APP_SMOKE_REQUIRE_NO_RERANK_WAIT", "0") == "1"
 
     event_id = _start_call(base_url, query, timeout=timeout)
     events = list(_stream_call(base_url, event_id, timeout=timeout))
@@ -79,6 +81,14 @@ def main() -> None:
         raise SystemExit("Expected final diagnostics to report agent_used=true.")
     if "Ready" not in progress_html:
         raise SystemExit("Expected final progress HTML to include Ready.")
+    reranker_wait_events = _reranker_wait_events(events)
+    reranker_cache_events = _reranker_cache_hit_events(events)
+    _require_reranker_cache_behavior(
+        reranker_wait_events=reranker_wait_events,
+        reranker_cache_events=reranker_cache_events,
+        require_cache=require_reranker_cache,
+        require_no_wait=require_no_reranker_wait,
+    )
 
     print(
         "PASS app smoke: "
@@ -88,8 +98,8 @@ def main() -> None:
         f"sources={source_text.count('- [')} "
         f"inline_citation={require_inline_citation} "
         f"source_draft_events={len(_source_draft_events(events))} "
-        f"reranker_wait_events={len(_reranker_wait_events(events))} "
-        f"reranker_cache_events={len(_reranker_cache_hit_events(events))} "
+        f"reranker_wait_events={len(reranker_wait_events)} "
+        f"reranker_cache_events={len(reranker_cache_events)} "
         f"heartbeat_events={len(_agent_wait_heartbeat_events(events))} "
         f"first_token_ms={_format_ms(first_token_ms)} "
         f"total_ms={diagnostics.get('timings_ms', {}).get('total', 0)}"
@@ -307,6 +317,22 @@ def _reranker_cache_hit_events(events: list[list[object]]) -> list[list[object]]
         if cache_hit is True and "cached" in progress_html and "rerank" in progress_html:
             matches.append(event)
     return matches
+
+
+def _require_reranker_cache_behavior(
+    *,
+    reranker_wait_events: list[list[object]],
+    reranker_cache_events: list[list[object]],
+    require_cache: bool,
+    require_no_wait: bool,
+) -> None:
+    if require_cache and not reranker_cache_events:
+        raise SystemExit("Expected visible reranker cache-hit progress events on the repeated app-smoke request.")
+    if require_no_wait and reranker_wait_events:
+        raise SystemExit(
+            "Expected repeated app-smoke request to skip hosted reranker wait events, "
+            f"got {len(reranker_wait_events)}."
+        )
 
 
 def _format_ms(value: float | None) -> str:

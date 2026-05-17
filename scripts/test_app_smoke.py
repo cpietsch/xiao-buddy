@@ -10,6 +10,7 @@ from scripts.app_smoke import (
     _first_token_ms,
     _format_ms,
     _require_first_token_latency,
+    _require_reranker_cache_behavior,
     _reranker_cache_hit_events,
     _reranker_wait_events,
     _source_draft_events,
@@ -23,6 +24,7 @@ def main() -> None:
     _assert_source_draft_events()
     _assert_reranker_wait_events()
     _assert_reranker_cache_hit_events()
+    _assert_reranker_cache_requirements()
     _assert_agent_wait_heartbeat_events()
     print("PASS app smoke parser regression")
 
@@ -182,6 +184,46 @@ def _assert_reranker_cache_hit_events() -> None:
         _reranker_cache_hit_events([cache_event, missing_progress_event, missing_diagnostics_event])
         == [cache_event],
         "only reranker cache hits with visible cached-rerank progress should count",
+    )
+
+
+def _assert_reranker_cache_requirements() -> None:
+    wait_event = [
+        "Source-backed draft\n\nUse the cited source.\n\n_Refining source order with hosted reranker: 1001 ms…_",
+        "",
+        {"retrieval": {"reranker_wait_ms": 1001.0}},
+        "<small>source draft 48 chars in 500 ms; reranker running 1001 ms</small>",
+    ]
+    cache_event = [
+        "Source-backed draft\n\nUse the cited source.",
+        "",
+        {"retrieval": {"reranker_cache_hit": True}},
+        "<small>5 sources via hnsw; cached native rerank; rerank cache 0 ms</small>",
+    ]
+
+    _require_reranker_cache_behavior(
+        reranker_wait_events=[],
+        reranker_cache_events=[cache_event],
+        require_cache=True,
+        require_no_wait=True,
+    )
+    _assert_raises_system_exit(
+        lambda: _require_reranker_cache_behavior(
+            reranker_wait_events=[],
+            reranker_cache_events=[],
+            require_cache=True,
+            require_no_wait=False,
+        ),
+        "missing visible cache-hit progress should fail cache-required app smoke",
+    )
+    _assert_raises_system_exit(
+        lambda: _require_reranker_cache_behavior(
+            reranker_wait_events=[wait_event],
+            reranker_cache_events=[cache_event],
+            require_cache=False,
+            require_no_wait=True,
+        ),
+        "reranker wait progress should fail no-wait app smoke",
     )
 
 

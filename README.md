@@ -191,6 +191,15 @@ make app-smoke
 Override `APP_SMOKE_URL`, `APP_SMOKE_QUERY`, `APP_SMOKE_MUST_INCLUDE`, and
 `APP_SMOKE_MUST_CITE` to target another app URL or scenario. Set
 `APP_SMOKE_REQUIRE_INLINE_CITATION=0` only when testing a non-grounded fallback.
+To prove repeated live questions visibly use the reranker result cache, run:
+
+```bash
+make app-cache-smoke
+```
+
+That sends the same `/ask` query twice. The second pass requires visible
+`cached ... rerank` progress and fails if hosted reranker wait events are still
+present.
 To reuse a generated-answer eval case directly:
 
 ```bash
