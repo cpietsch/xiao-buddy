@@ -55,6 +55,10 @@ EXACT_TERM_CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("ChirpStack", ("chirpstack",)),
     ("Packet Forwarder", ("packet forwarder",)),
     ("Basics Station", ("basics station", "basics™ station")),
+    ("Built-in LoRaWAN Network Server", ("built-in lorawan network server", "built in lorawan network server")),
+    ("2.5km", ("2.5km", "2.5 km")),
+    ("LoRaWAN Node", ("lorawan node",)),
+    ("D2", ("d2",)),
     ("seeed_xiao_esp32c3", ("seeed_xiao_esp32c3",)),
     ("platform_version", ("platform_version",)),
     ("2.0.5", ("2.0.5",)),
@@ -1152,8 +1156,16 @@ def _contextual_exact_term_lines(question: str, missing: list[tuple[str, str]]) 
             "From the LoRaWAN app setup, record {terms}.",
         ),
         (
-            {"AWS", "TTN", "ChirpStack", "Packet Forwarder", "Basics Station"},
+            {"AWS", "TTN", "ChirpStack", "Packet Forwarder", "Basics Station", "Built-in LoRaWAN Network Server"},
             "Supported network-server options include {terms}.",
+        ),
+        (
+            {"2.5km", "LoRaWAN Node"},
+            "The cited kit application list also includes {terms}.",
+        ),
+        (
+            {"D2"},
+            "The cited RS485 example identifies the enable pin as {terms}.",
         ),
         (
             {"BL702", "USB-UART", "Edge Impulse firmware", "firmware.uf2", "GROVEAI"},
@@ -1198,8 +1210,12 @@ def _exact_term_group_matches_question(term: str, question_lower: str) -> bool:
         return "wifi" in question_lower or "mqtt" in question_lower
     if term in {"The Things Network", "frequency plan", "device EUI", "App EUI", "APP key"}:
         return "ttn" in question_lower or "app" in question_lower or "lorawan" in question_lower
-    if term in {"AWS", "TTN", "ChirpStack", "Packet Forwarder", "Basics Station"}:
+    if term in {"AWS", "TTN", "ChirpStack", "Packet Forwarder", "Basics Station", "Built-in LoRaWAN Network Server"}:
         return "network-server" in question_lower or "network server" in question_lower or "lorawan gateway" in question_lower
+    if term in {"2.5km", "LoRaWAN Node"}:
+        return "wio-sx1262" in question_lower or "3d case" in question_lower or "used for" in question_lower
+    if term == "D2":
+        return "rs485" in question_lower and "enable" in question_lower
     if term in {"BL702", "USB-UART", "Edge Impulse firmware", "firmware.uf2", "GROVEAI"}:
         return "firmware" in question_lower or "edge impulse" in question_lower or "mass-storage" in question_lower
     if term in {"reachy_bpm_dancer", "reachy_fleet_control"}:

@@ -51,7 +51,7 @@ AGENT_BASE_URL=https://your-llm-host/v1
 AGENT_MODEL=your-agent-model-id
 AGENT_API_KEY=
 AGENT_MAX_TOKENS=350
-AGENT_CONTEXT_CHARS=3500
+AGENT_CONTEXT_CHARS=2600
 
 TOP_K=5
 CANDIDATE_K=12
@@ -436,7 +436,8 @@ Use `AGENT_MAX_TOKENS` to cap generated answer length when a larger hosted model
 streams quickly but takes too long to finish full responses.
 Use `AGENT_CONTEXT_CHARS` to bound the source text sent to the final agent; the
 app keeps query-relevant excerpts for synthesis while retrieval and reranking use
-the richer source text.
+the richer source text. The production default is `2600`, which keeps the full
+answer-quality gate passing while reducing hosted-agent prompt latency.
 
 One tested all-vLLM setup self-hosts the Qwen services on a single AMD Instinct
 MI300X GPU:

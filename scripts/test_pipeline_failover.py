@@ -251,6 +251,55 @@ def _assert_contextual_exact_term_repair_avoids_source_detail_noise() -> None:
         _assert(expected in sht40, f"SHT40 contextual repair should include {expected}")
     _assert("Source detail:" not in sht40, "SHT40 repair should use a natural sentence")
 
+    sensecap = pipeline._ensure_answer_exact_terms(
+        "The gateway supports AWS, TTN, ChirpStack, Packet Forwarder, and Basics Station [lns-source].",
+        "What network-server options and range does SenseCAP M2 Multi-Platform LoRaWAN Gateway support?",
+        [
+            KnowledgeChunk(
+                id="lns-source",
+                title="SenseCAP network servers",
+                source="https://wiki.seeedstudio.com/test/",
+                text="It supports AWS, TTN, ChirpStack, Packet Forwarder, Basics Station, and Built-in LoRaWAN Network Server.",
+                kind="wiki",
+            )
+        ],
+    )
+    _assert(
+        "`Built-in LoRaWAN Network Server` [lns-source]" in sensecap,
+        "SenseCAP network-server repair should preserve the built-in server option",
+    )
+
+    sx1262 = pipeline._ensure_answer_exact_terms(
+        "The kit can be used as a single channel LoRaWAN gateway and for Meshtastic [kit-source].",
+        "What can the XIAO ESP32S3 & Wio-SX1262 kit with 3D case be used for?",
+        [
+            KnowledgeChunk(
+                id="kit-source",
+                title="Kit applications",
+                source="https://wiki.seeedstudio.com/test/",
+                text="Applications include a 2.5km single channel LoRaWAN gateway, Meshtastic, and a LoRaWAN Node.",
+                kind="wiki",
+            )
+        ],
+    )
+    for expected in ("`2.5km` [kit-source]", "`LoRaWAN Node` [kit-source]"):
+        _assert(expected in sx1262, f"kit application repair should include {expected}")
+
+    rs485 = pipeline._ensure_answer_exact_terms(
+        "RS485 RX is D4, TX is D5, and the enable pin is GPIO4 [rs485-source].",
+        "Which pins are used for RS485 UART RX/TX and which pin controls enable?",
+        [
+            KnowledgeChunk(
+                id="rs485-source",
+                title="RS485 pins",
+                source="https://wiki.seeedstudio.com/test/",
+                text="Receiver code uses D4 for RX, D5 for TX, and D2 as the RS485 enable pin.",
+                kind="wiki",
+            )
+        ],
+    )
+    _assert("`D2` [rs485-source]" in rs485, "RS485 repair should preserve the D2 enable-pin label")
+
 
 def _assert_inline_citation_repair_reuses_sources_line() -> None:
     chunks = [
