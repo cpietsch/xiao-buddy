@@ -10,6 +10,7 @@ from scripts.app_smoke import (
     _first_token_ms,
     _format_ms,
     _require_first_token_latency,
+    _reranker_cache_hit_events,
     _reranker_wait_events,
     _source_draft_events,
     _stream_events_with_first_token,
@@ -21,6 +22,7 @@ def main() -> None:
     _assert_stream_first_token_events()
     _assert_source_draft_events()
     _assert_reranker_wait_events()
+    _assert_reranker_cache_hit_events()
     _assert_agent_wait_heartbeat_events()
     print("PASS app smoke parser regression")
 
@@ -153,6 +155,33 @@ def _assert_reranker_wait_events() -> None:
     _assert(
         _reranker_wait_events([wait_event, missing_answer_event, missing_progress_event]) == [wait_event],
         "only reranker wait events with visible answer-panel progress should count",
+    )
+
+
+def _assert_reranker_cache_hit_events() -> None:
+    cache_event = [
+        "Source-backed draft\n\nUse the cited source.",
+        "",
+        {"retrieval": {"reranker_cache_hit": True}},
+        "<small>5 sources via hnsw; cached native rerank; embed 141 ms; hnsw 2 ms; rerank cache 0 ms</small>",
+    ]
+    missing_progress_event = [
+        "Source-backed draft\n\nUse the cited source.",
+        "",
+        {"retrieval": {"reranker_cache_hit": True}},
+        "<small>5 sources via hnsw; native rerank; embed 141 ms; hnsw 2 ms; rerank 0 ms</small>",
+    ]
+    missing_diagnostics_event = [
+        "Source-backed draft\n\nUse the cited source.",
+        "",
+        {"retrieval": {"reranker_cache_hit": False}},
+        "<small>5 sources via hnsw; cached native rerank; embed 141 ms; hnsw 2 ms; rerank cache 0 ms</small>",
+    ]
+
+    _assert(
+        _reranker_cache_hit_events([cache_event, missing_progress_event, missing_diagnostics_event])
+        == [cache_event],
+        "only reranker cache hits with visible cached-rerank progress should count",
     )
 
 

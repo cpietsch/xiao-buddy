@@ -24,6 +24,7 @@ def main() -> None:
     _assert_agent_context_budget_keeps_relevant_excerpt()
     _assert_agent_wait_heartbeat_keeps_draft_visible()
     _assert_success_stream_reports_first_token_latency()
+    _assert_reranker_cache_hit_progress_is_visible()
 
     original_load_settings = pipeline.load_settings
     original_retrieve_progressive = pipeline.retrieve_progressive
@@ -138,6 +139,25 @@ def _assert_success_stream_reports_first_token_latency() -> None:
         pipeline.retrieve_progressive = original_retrieve_progressive  # type: ignore[assignment]
         pipeline._generate_with_agent_stream = original_generate_stream  # type: ignore[assignment]
         pipeline.perf_counter = original_perf_counter  # type: ignore[assignment]
+
+
+def _assert_reranker_cache_hit_progress_is_visible() -> None:
+    detail = pipeline._retrieval_progress_detail(
+        {
+            "reranker_used": True,
+            "reranker_mode": "native",
+            "reranker_cache_hit": True,
+            "timings_ms": {
+                "query_embedding": 141.0,
+                "vector_search": 2.0,
+                "reranker": 0.2,
+            },
+        },
+        "hnsw",
+        5,
+    )
+    _assert("cached native rerank" in detail, "retrieval progress should expose cached reranker hits")
+    _assert("rerank cache 0 ms" in detail, "retrieval timings should label cached rerank latency")
 
 
 def _assert_agent_wait_heartbeat_keeps_draft_visible() -> None:

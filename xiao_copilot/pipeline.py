@@ -755,6 +755,8 @@ def _retrieval_progress_detail(
         return f"{base}; pre-rerank preview{timing_suffix}"
     if retrieval_diagnostics.get("reranker_used"):
         mode = str(retrieval_diagnostics.get("reranker_mode") or "rerank")
+        if retrieval_diagnostics.get("reranker_cache_hit"):
+            return f"{base}; cached {mode} rerank{timing_suffix}"
         return f"{base}; {mode} rerank{timing_suffix}"
     if retrieval_diagnostics.get("reranker_error"):
         return f"{base}; rerank skipped{timing_suffix}"
@@ -778,7 +780,10 @@ def _retrieval_timing_parts(retrieval_diagnostics: dict[str, object]) -> list[st
     elif candidate_embedding_ms is not None:
         parts.append(f"candidate embeds {candidate_embedding_ms:.0f} ms")
     if reranker_ms is not None:
-        parts.append(f"rerank {reranker_ms:.0f} ms")
+        if retrieval_diagnostics.get("reranker_cache_hit"):
+            parts.append(f"rerank cache {reranker_ms:.0f} ms")
+        else:
+            parts.append(f"rerank {reranker_ms:.0f} ms")
     elif reranker_wait_ms is not None:
         parts.append(f"rerank wait {reranker_wait_ms:.0f} ms")
     return parts

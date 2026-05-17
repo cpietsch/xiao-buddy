@@ -89,6 +89,7 @@ def main() -> None:
         f"inline_citation={require_inline_citation} "
         f"source_draft_events={len(_source_draft_events(events))} "
         f"reranker_wait_events={len(_reranker_wait_events(events))} "
+        f"reranker_cache_events={len(_reranker_cache_hit_events(events))} "
         f"heartbeat_events={len(_agent_wait_heartbeat_events(events))} "
         f"first_token_ms={_format_ms(first_token_ms)} "
         f"total_ms={diagnostics.get('timings_ms', {}).get('total', 0)}"
@@ -286,6 +287,24 @@ def _reranker_wait_events(events: list[list[object]]) -> list[list[object]]:
             and "reranker running" in progress_html
             and "Refining source order" in answer
         ):
+            matches.append(event)
+    return matches
+
+
+def _reranker_cache_hit_events(events: list[list[object]]) -> list[list[object]]:
+    matches: list[list[object]] = []
+    for event in events:
+        if len(event) <= 3 or not isinstance(event[2], dict):
+            continue
+        diagnostics = event[2]
+        retrieval = diagnostics.get("retrieval", {})
+        cache_hit = (
+            retrieval.get("reranker_cache_hit")
+            if isinstance(retrieval, dict)
+            else diagnostics.get("reranker_cache_hit")
+        )
+        progress_html = str(event[3]).lower()
+        if cache_hit is True and "cached" in progress_html and "rerank" in progress_html:
             matches.append(event)
     return matches
 
