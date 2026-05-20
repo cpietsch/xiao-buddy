@@ -1,0 +1,93 @@
+name: Smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run endpoint-free smoke checks
+        run: make smoke PYTHON=python
+
+      - name: Run repository health checks
+        run: make health PYTHON=python
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install browser smoke dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Start Gradio app
+        env:
+          GRADIO_SERVER_NAME: 127.0.0.1
+          GRADIO_SERVER_PORT: 7860
+        run: |
+          python -u app.py > /tmp/xiao-buddy-gradio.log 2>&1 &
+          echo $! > /tmp/xiao-buddy-gradio.pid
+          python - <<'PY'
+          import time
+          import requests
+
+          url = "http://127.0.0.1:7860/"
+          deadline = time.monotonic() + 60
+          last_error = ""
+          while time.monotonic() < deadline:
+              try:
+                  response = requests.get(url, timeout=2)
+                  if 200 <= response.status_code < 400:
+                      raise SystemExit(0)
+                  last_error = f"HTTP {response.status_code}"
+              except Exception as exc:
+                  last_error = str(exc)
+              time.sleep(1)
+          raise SystemExit(f"Timed out waiting for {url}: {last_error}")
+          PY
+
+      - name: Run rendered browser smoke
+        run: make browser-smoke PYTHON=python
+
+      - name: Show Gradio log on failure
+        if: failure()
+        run: cat /tmp/xiao-buddy-gradio.log
+
+      - name: Upload browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke-screenshots
+          path: dist/browser-smoke/
+          if-no-files-found: ignore

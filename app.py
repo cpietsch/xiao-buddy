@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import gradio as gr
+from time import perf_counter
 
+from xiao_copilot.clients import chat_completion_stream
 from xiao_copilot.config import load_settings
-from xiao_copilot.pipeline import answer_question
+from xiao_copilot.pipeline import answer_question_stream, format_progress
+from xiao_copilot.retrieval import warm_retrieval_caches
 
 
 EXAMPLES = [
@@ -59,7 +62,39 @@ EXAMPLES = [
         None,
         "What visible markings should I photograph so you can identify a XIAO board?",
     ],
+    [
+        None,
+        "What are the key radio specs and MCU interface for the Wio-SX1262 module?",
+    ],
+    [
+        None,
+        "What trigger actions can Grove Vision AI V2 perform from SenseCraft AI model output settings?",
+    ],
+    [
+        None,
+        "Which Arduino libraries and function are used to read Grove SHT40 data on Wio Terminal?",
+    ],
+    [
+        None,
+        "In the XIAO RS485 Expansion Board ESP32C3 example, which pins are used for RS485 UART RX/TX and enable?",
+    ],
+    [
+        None,
+        "What voltage, MCU, ADC, Grove ports, bus, and I2C address does Grove Base Hat for Raspberry Pi Zero use?",
+    ],
+    [
+        None,
+        "For the Reachy Mini fleet dance demo, which Jetson-side and laptop-side services run, and what ports are used?",
+    ],
+    [
+        None,
+        "In the Jetson Thor OpenClaw SO-Arm guide, what roles do OpenClaw and LeRobot play?",
+    ],
 ]
+
+INITIAL_ANSWER = (
+    "Ask about a XIAO board, Seeed sensor, robotics kit, LoRa module, pinout, upload issue, or power symptom."
+)
 
 
 THEME = gr.themes.Soft(
@@ -79,9 +114,30 @@ CSS = """
 .gradio-container {
     max-width: 1220px !important;
     background: linear-gradient(180deg, #f8fafc 0%, #eefdf6 42%, #f8fafc 100%);
+    padding-left: max(1rem, env(safe-area-inset-left)) !important;
+    padding-right: max(1rem, env(safe-area-inset-right)) !important;
 }
 .dark .gradio-container {
     background: linear-gradient(180deg, #020617 0%, #052e16 42%, #020617 100%);
+}
+.skip-link {
+    background: #0f8f6b;
+    border-radius: 8px;
+    color: #ffffff;
+    font-weight: 720;
+    left: max(0.5rem, env(safe-area-inset-left));
+    padding: 0.65rem 0.85rem;
+    position: fixed;
+    top: max(0.5rem, env(safe-area-inset-top));
+    transition: none !important;
+    transform: translateY(-240%);
+    z-index: 20;
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+    outline: 3px solid #34d399 !important;
+    outline-offset: 2px !important;
+    transform: translateY(0) !important;
 }
 .hero {
     padding: 1.5rem 0 0.65rem;
@@ -183,25 +239,150 @@ CSS = """
 .dark .panel-copy {
     color: #94a3b8;
 }
-.result-box {
+.progress-box {
+    margin-bottom: 0.75rem;
+}
+.progress-panel {
+    background: #ffffff;
+    border: 1px solid #dbe7e1;
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+}
+.dark .progress-panel {
+    background: #0f172a;
+    border-color: #334155;
+}
+.progress-title {
+    color: #0f513f;
+    font-size: 0.76rem;
+    font-weight: 760;
+    letter-spacing: 0.08em;
+    margin: 0 0 0.65rem;
+    text-transform: uppercase;
+}
+.dark .progress-title {
+    color: #10b981;
+}
+.progress-list {
+    display: grid;
+    gap: 0.45rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.progress-step {
+    align-items: center;
+    color: #64748b;
+    display: grid;
+    gap: 0.6rem;
+    grid-template-columns: 1.6rem minmax(0, 1fr);
+    min-height: 2.3rem;
+}
+.progress-number {
+    align-items: center;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    display: inline-flex;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 760;
+    height: 1.6rem;
+    justify-content: center;
+    width: 1.6rem;
+}
+.progress-step strong {
+    color: #334155;
+    display: block;
+    font-size: 0.9rem;
+    line-height: 1.15;
+}
+.progress-step small {
+    color: #64748b;
+    display: block;
+    font-size: 0.78rem;
+    line-height: 1.2;
+    margin-top: 0.12rem;
+    overflow-wrap: anywhere;
+}
+.progress-step-active .progress-number {
+    background: #0f8f6b;
+    border-color: #0f8f6b;
+    color: #ffffff;
+}
+.progress-step-active strong {
+    color: #0f513f;
+}
+.progress-step-done .progress-number {
+    background: #ecfdf5;
+    border-color: #34d399;
+    color: #0f513f;
+}
+.progress-step-done strong {
+    color: #0f172a;
+}
+.dark .progress-step {
+    color: #94a3b8;
+}
+.dark .progress-number {
+    border-color: #475569;
+}
+.dark .progress-step strong {
+    color: #cbd5e1;
+}
+.dark .progress-step small {
+    color: #94a3b8;
+}
+.dark .progress-step-active .progress-number {
+    background: #10b981;
+    border-color: #10b981;
+    color: #052e16;
+}
+.dark .progress-step-active strong {
+    color: #34d399;
+}
+.dark .progress-step-done .progress-number {
+    background: #052e16;
+    border-color: #10b981;
+    color: #86efac;
+}
+.dark .progress-step-done strong {
+    color: #f8fafc;
+}
+.block.result-box {
     background-color: #ffffff;
     border: 1px solid #dbe7e1;
     border-radius: 8px;
-    min-height: 360px;
+    min-height: 260px;
     padding: 1rem 1.1rem;
 }
-.dark .result-box {
+.block.result-box .prose.result-box {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    min-height: 0;
+    padding: 0;
+}
+.dark .block.result-box {
     background-color: #0f172a;
     border-color: #334155;
     color: #e2e8f0;
 }
-.sources-box {
+.block.sources-box {
     background-color: #ffffff;
     border: 1px solid #dbe7e1;
     border-radius: 8px;
     padding: 0.85rem 1rem;
 }
-.dark .sources-box {
+.block.sources-box:has(.md:empty) {
+    display: none;
+}
+.block.sources-box .prose.sources-box {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+}
+.dark .block.sources-box {
     background-color: #0f172a;
     border-color: #334155;
     color: #e2e8f0;
@@ -235,9 +416,25 @@ CSS = """
 }
 button {
     border-radius: 8px !important;
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+    touch-action: manipulation;
 }
 .gr-button-primary {
     font-weight: 720 !important;
+}
+textarea,
+input,
+select {
+    font-size: 16px !important;
+}
+button:focus-visible,
+textarea:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+    outline: 3px solid #34d399 !important;
+    outline-offset: 2px !important;
 }
 @media (max-width: 760px) {
     .hero h1 {
@@ -257,18 +454,21 @@ def build_demo() -> gr.Blocks:
     with gr.Blocks(title="XIAO Buddy") as demo:
         gr.HTML(
             """
+<a class="skip-link" href="#support-bench">Skip to support bench</a>
 <section class="hero">
   <h1>XIAO Buddy</h1>
-  <p>Photo-aware support for Seeed XIAO boards, pinouts, wireless bring-up, power checks, and field recovery.</p>
+  <p>Photo-aware support for Seeed XIAO boards plus connected sensors, robotics kits, LoRa modules, SenseCraft workflows, and field recovery.</p>
   <div class="chips">
     <span class="chip">ESP32S3 Sense</span>
     <span class="chip">ESP32C6</span>
     <span class="chip">ESP32C5</span>
     <span class="chip">nRF54L15</span>
-    <span class="chip">MG24</span>
-    <span class="chip">RA4M1</span>
-    <span class="chip">RP2350</span>
-    <span class="chip">W5500 adapter</span>
+    <span class="chip">Wio-SX1262</span>
+    <span class="chip">Grove Vision AI V2</span>
+    <span class="chip">Raspberry Pi HATs</span>
+    <span class="chip">Jetson robotics</span>
+    <span class="chip">RS485 expansion</span>
+    <span class="chip">SenseCraft AI</span>
   </div>
 </section>
 """,
@@ -276,16 +476,16 @@ def build_demo() -> gr.Blocks:
         gr.HTML(
             """
 <section class="bench-strip">
-  <div class="bench-card"><strong>Corpus</strong>Curated Seeed XIAO board notes, pinouts, boot modes, power limits, and accessories.</div>
-  <div class="bench-card"><strong>Routes</strong>Identify, troubleshoot, compare, or answer wiring questions with cited source chunks.</div>
-  <div class="bench-card"><strong>Runtime</strong>Hosted Qwen embedding, reranking, and agent calls served from an AMD MI300X stack.</div>
+  <div class="bench-card"><strong>Corpus</strong>Curated XIAO facts plus full Seeed wiki chunks for sensors, robotics, LoRa, and AI workflows.</div>
+  <div class="bench-card"><strong>Routes</strong>Identify, troubleshoot, compare, or answer wiring, sensor, and robotics questions with cited source chunks.</div>
+  <div class="bench-card"><strong>Runtime</strong>Hosted embedding, reranking, and OpenAI-compatible agent endpoints with live progress feedback.</div>
 </section>
 """,
         )
 
         with gr.Row(equal_height=False):
             with gr.Column(scale=5, min_width=330):
-                gr.HTML('<p class="bench-label">Support bench</p>')
+                gr.HTML('<p class="bench-label" id="support-bench">Support bench</p>')
                 image = gr.Image(
                     label="Board or wiring photo",
                     type="pil",
@@ -294,18 +494,22 @@ def build_demo() -> gr.Blocks:
                 )
                 question = gr.Textbox(
                     label="Hardware question",
-                    placeholder="Example: My XIAO RP2350 will not enter BOOT mode. What should I check?",
+                    placeholder="Example: Which pins does the XIAO RS485 Expansion Board use for UART and enable? …",
                     lines=4,
                     max_lines=8,
                 )
                 with gr.Row():
-                    submit = gr.Button("Diagnose XIAO", variant="primary")
+                    submit = gr.Button("Ask Buddy", variant="primary")
                     clear = gr.ClearButton([image, question], value="Reset")
 
             with gr.Column(scale=7, min_width=360):
                 gr.HTML('<p class="bench-label">Field answer</p>')
+                progress = gr.HTML(
+                    value=format_progress(),
+                    elem_classes=["progress-box"],
+                )
                 answer = gr.Markdown(
-                    value="Ask about a XIAO board, accessory, pinout, upload issue, power symptom, or wireless requirement.",
+                    value=INITIAL_ANSWER,
                     label="Answer",
                     elem_classes=["result-box"],
                 )
@@ -320,19 +524,77 @@ def build_demo() -> gr.Blocks:
         )
 
         submit.click(
-            fn=answer_question,
+            fn=answer_question_stream,
             inputs=[image, question],
-            outputs=[answer, citations, diagnostics],
+            outputs=[answer, citations, diagnostics, progress],
             api_name="ask",
         )
         question.submit(
-            fn=answer_question,
+            fn=answer_question_stream,
             inputs=[image, question],
-            outputs=[answer, citations, diagnostics],
-            api_name=False,
+            outputs=[answer, citations, diagnostics, progress],
+            api_name=None,
+            api_visibility="private",
+        )
+        clear.click(
+            fn=_reset_outputs,
+            outputs=[answer, citations, diagnostics, progress],
+            api_name=None,
+            api_visibility="private",
+            queue=False,
+            show_progress="hidden",
         )
 
-    return demo
+    return demo.queue()
+
+
+def _reset_outputs() -> tuple[str, str, dict[str, object], str]:
+    return INITIAL_ANSWER, "", {}, format_progress()
+
+
+def warm_agent_endpoint(settings) -> dict[str, object]:
+    if not settings.agent_base_url:
+        return {"enabled": False, "reason": "agent endpoint is not configured"}
+    if settings.agent_startup_warmup_seconds <= 0:
+        return {"enabled": False, "reason": "AGENT_STARTUP_WARMUP_SECONDS <= 0"}
+
+    started_at = perf_counter()
+    chunks = 0
+    chars = 0
+    first_token_ms: float | None = None
+    messages = [
+        {"role": "system", "content": "Reply with exactly one word: ok."},
+        {"role": "user", "content": "Warm the endpoint."},
+    ]
+    for result in chat_completion_stream(
+        base_url=settings.agent_base_url,
+        model=settings.agent_model,
+        messages=messages,
+        api_key=settings.agent_api_key,
+        timeout=settings.agent_startup_warmup_seconds,
+        max_tokens=2,
+    ):
+        if not result.ok:
+            return {
+                "enabled": True,
+                "ok": False,
+                "error": result.error,
+                "total_ms": round((perf_counter() - started_at) * 1000, 1),
+            }
+        if first_token_ms is None:
+            first_token_ms = round((perf_counter() - started_at) * 1000, 1)
+        text = str(result.data or "")
+        chunks += 1
+        chars += len(text)
+
+    return {
+        "enabled": True,
+        "ok": chunks > 0,
+        "chunks": chunks,
+        "chars": chars,
+        "first_token_ms": first_token_ms,
+        "total_ms": round((perf_counter() - started_at) * 1000, 1),
+    }
 
 
 demo = build_demo()
@@ -340,6 +602,10 @@ demo = build_demo()
 
 if __name__ == "__main__":
     settings = load_settings()
+    warm_diagnostics = warm_retrieval_caches(settings)
+    print(f"warmed retrieval caches: {warm_diagnostics}", flush=True)
+    agent_warm_diagnostics = warm_agent_endpoint(settings)
+    print(f"warmed agent endpoint: {agent_warm_diagnostics}", flush=True)
     demo.launch(
         server_name=settings.gradio_server_name,
         server_port=settings.gradio_server_port,
