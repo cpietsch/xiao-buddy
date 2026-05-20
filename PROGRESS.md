@@ -2,16 +2,17 @@
 
 ## Current State
 
-- Branch: `main`, ahead of `origin/main`.
-- Latest implementation commit: `b9efd8e` (`Gate repeated reranker cache smoke`).
+- Branch: `codex/xiao-buddy-ux-polish-20260520`.
+- Latest implementation commit: `b9efd8e` (`Gate repeated reranker cache smoke`), with UX polish work in progress on this branch.
 - Latest fully exported commit: `6929264abff460d18c4c46a1228e229e0a84f277` (`Show reranker cache hits in progress`).
 - Current export bundle: `dist/local-export/xiao-buddy-6929264.bundle`.
 - Current export manifest: `dist/local-export/manifest.json`.
 - Tailscale app URL: http://100.103.106.102:7861/.
-- App process: detached `app.py` server is responding on the Tailscale URL after startup cache warming; current PID is `1832272`.
+- App process: detached `app.py` server is responding on the Tailscale URL after startup cache warming; current PID is `2119061`.
 
 ## Completed Verification Hardening
 
+- UX polish branch adds a calmer neutral page background, colored domain chips, a sticky desktop answer column, stronger progress-step affordances, improved source/answer markdown readability, reduced-motion handling, and browser-smoke tolerance for very fast cached answers.
 - Reranker quality reports include metadata.
 - Answer quality reports include metadata.
 - Local export verification rejects missing, partial, failing, or stale quality reports.
@@ -41,6 +42,12 @@
 ## Live Endpoint / Report Status
 
 - Live app endpoint is available at http://100.103.106.102:7861/.
+- Current UX branch startup warmup log shows retrieval warmup total `8887.7 ms` and agent warmup first token `342.4 ms`, total `389.0 ms`.
+- Current UX branch verification passed:
+  - `make smoke`.
+  - `make browser-smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 BROWSER_SMOKE_TIMEOUT_MS=90000 make browser-agent-smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 APP_SMOKE_TIMEOUT_SECONDS=180 make app-cache-smoke`.
 - Endpoint functional smoke passed:
   - embedding functional: `dim=2048`, `189 ms`.
   - reranker functional: native scores, `236 ms`.
@@ -119,6 +126,7 @@
 - Browser smoke now verifies both the source-backed draft and visible partial hosted-agent stream.
 - Browser smoke now records the first-token wait heartbeat and fails if a long draft-to-stream gap has no progress heartbeat.
 - Browser smoke now also accepts the answer-panel hosted-agent wait note as visible progress, after it caught a roughly `3.9 s` browser-side quiet gap between the source draft and first rendered streamed token.
+- UX branch browser smoke now also accepts a final answer that appears before the smoke test observes intermediate progress text, which happens on repeated cached-rerank queries.
 - App smoke now records source-draft, reranker-wait, and first-token heartbeat events, and fails if a long hosted-agent first-token wait has no heartbeat.
 - Current bottleneck: the hosted reranker still costs about `3.4 s` p50 inside full answer evaluation, but it no longer blocks first useful source text.
 - Current interpretation: local ANN, source draft construction, and candidate selection are not the main problem; final perceived latency now mostly comes from hosted rerank plus hosted agent prefill/generation.
@@ -159,7 +167,7 @@
 - Consider reranker request batching or service-side tuning if it can improve the full RAG p95 without reducing the current `62/62` reranker gate.
 - Consider a faster or smaller hosted agent model for first-pass synthesis, while keeping the current agent as a high-quality final path.
 - Harden close-margin reranker eval cases where positive and negative pages are near duplicates or similar-board pages.
-- For `b9efd8e`, regenerate answer quality and local export before the next handoff bundle; those artifacts are still current for `6929264`.
+- For this UX branch, regenerate answer quality and local export before the next handoff bundle; those artifacts are still current for `6929264` and were not regenerated for the layout-only polish.
 
 ## Key Commands / Artifacts
 

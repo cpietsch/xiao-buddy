@@ -111,14 +111,18 @@ THEME = gr.themes.Soft(
 )
 
 CSS = """
+html {
+    color-scheme: light dark;
+}
 .gradio-container {
     max-width: 1220px !important;
-    background: linear-gradient(180deg, #f8fafc 0%, #eefdf6 42%, #f8fafc 100%);
+    background:
+        linear-gradient(180deg, #f8fafc 0%, #f5f9fb 48%, #f8fafc 100%);
     padding-left: max(1rem, env(safe-area-inset-left)) !important;
     padding-right: max(1rem, env(safe-area-inset-right)) !important;
 }
 .dark .gradio-container {
-    background: linear-gradient(180deg, #020617 0%, #052e16 42%, #020617 100%);
+    background: linear-gradient(180deg, #020617 0%, #07111f 52%, #020617 100%);
 }
 .skip-link {
     background: #0f8f6b;
@@ -140,7 +144,7 @@ CSS = """
     transform: translateY(0) !important;
 }
 .hero {
-    padding: 1.5rem 0 0.65rem;
+    padding: 1.35rem 0 0.7rem;
     border-bottom: 1px solid #dbe7e1;
     margin-bottom: 1rem;
 }
@@ -149,11 +153,12 @@ CSS = """
 }
 .hero h1 {
     color: #0f172a;
-    font-size: 2.55rem;
+    font-size: 2.45rem;
     line-height: 1.1;
     margin: 0 0 0.35rem;
     font-weight: 760;
     letter-spacing: 0;
+    text-wrap: balance;
 }
 .dark .hero h1 {
     color: #f8fafc;
@@ -163,6 +168,7 @@ CSS = """
     font-size: 1.02rem;
     margin: 0;
     max-width: 780px;
+    text-wrap: balance;
 }
 .dark .hero p {
     color: #cbd5e1;
@@ -183,11 +189,52 @@ CSS = """
     font-weight: 650;
     line-height: 1;
     padding: 0.42rem 0.62rem;
+    white-space: nowrap;
 }
 .dark .chip {
     background: #0f172a;
     border: 1px solid #334155;
     color: #34d399;
+}
+.chip-board {
+    border-color: #b7dccd;
+    color: #0f513f;
+}
+.chip-radio {
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+}
+.chip-vision {
+    border-color: #ddd6fe;
+    color: #6d28d9;
+}
+.chip-platform {
+    border-color: #fed7aa;
+    color: #9a3412;
+}
+.chip-robotics {
+    border-color: #fecdd3;
+    color: #be123c;
+}
+.dark .chip-board {
+    border-color: #14532d;
+    color: #86efac;
+}
+.dark .chip-radio {
+    border-color: #1e3a8a;
+    color: #93c5fd;
+}
+.dark .chip-vision {
+    border-color: #4c1d95;
+    color: #c4b5fd;
+}
+.dark .chip-platform {
+    border-color: #7c2d12;
+    color: #fdba74;
+}
+.dark .chip-robotics {
+    border-color: #881337;
+    color: #fda4af;
 }
 .bench-strip {
     display: grid;
@@ -203,6 +250,7 @@ CSS = """
     font-size: 0.9rem;
     min-height: 74px;
     padding: 0.75rem 0.85rem;
+    overflow-wrap: anywhere;
 }
 .dark .bench-card {
     background: #0f172a;
@@ -272,11 +320,14 @@ CSS = """
 }
 .progress-step {
     align-items: center;
+    border-left: 3px solid transparent;
+    border-radius: 6px;
     color: #64748b;
     display: grid;
     gap: 0.6rem;
     grid-template-columns: 1.6rem minmax(0, 1fr);
     min-height: 2.3rem;
+    padding: 0.1rem 0 0.1rem 0.35rem;
 }
 .progress-number {
     align-items: center;
@@ -304,6 +355,10 @@ CSS = """
     margin-top: 0.12rem;
     overflow-wrap: anywhere;
 }
+.progress-step-active {
+    background: #f0fdfa;
+    border-left-color: #0f8f6b;
+}
 .progress-step-active .progress-number {
     background: #0f8f6b;
     border-color: #0f8f6b;
@@ -322,6 +377,10 @@ CSS = """
 }
 .dark .progress-step {
     color: #94a3b8;
+}
+.dark .progress-step-active {
+    background: #042f2e;
+    border-left-color: #10b981;
 }
 .dark .progress-number {
     border-color: #475569;
@@ -362,6 +421,26 @@ CSS = """
     min-height: 0;
     padding: 0;
 }
+.block.result-box .md,
+.block.sources-box .md {
+    overflow-wrap: anywhere;
+}
+.block.result-box .md p,
+.block.result-box .md li {
+    line-height: 1.55;
+}
+.block.result-box .md ul,
+.block.result-box .md ol {
+    padding-left: 1.15rem;
+}
+.block.result-box .md code,
+.block.sources-box .md code {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    color: #0f172a;
+    padding: 0.08rem 0.24rem;
+}
 .dark .block.result-box {
     background-color: #0f172a;
     border-color: #334155;
@@ -381,6 +460,29 @@ CSS = """
     border: 0;
     border-radius: 0;
     padding: 0;
+}
+.block.sources-box .md > p:first-child {
+    color: #0f513f;
+    font-size: 0.76rem;
+    font-weight: 760;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.45rem;
+}
+.block.sources-box .md ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.block.sources-box .md li {
+    border-top: 1px solid #e2e8f0;
+    line-height: 1.35;
+    padding: 0.55rem 0;
+}
+.block.sources-box .md li:first-child {
+    border-top: 0;
+}
+.block.sources-box .md a {
+    font-weight: 650;
 }
 .dark .block.sources-box {
     background-color: #0f172a;
@@ -414,6 +516,12 @@ CSS = """
     background: #020617 !important;
     color: #f8fafc !important;
 }
+.dark .block.sources-box .md > p:first-child {
+    color: #34d399;
+}
+.dark .block.sources-box .md li {
+    border-top-color: #1e293b;
+}
 button {
     border-radius: 8px !important;
     min-height: 2.75rem;
@@ -436,12 +544,48 @@ a:focus-visible {
     outline: 3px solid #34d399 !important;
     outline-offset: 2px !important;
 }
+@media (min-width: 980px) {
+    .workspace-row {
+        align-items: flex-start !important;
+    }
+    .answer-column {
+        position: sticky;
+        top: max(1rem, env(safe-area-inset-top));
+        align-self: flex-start;
+    }
+    .progress-list {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.55rem;
+    }
+    .progress-step {
+        align-items: flex-start;
+        grid-template-columns: 1.6rem minmax(0, 1fr);
+        min-height: 4.35rem;
+        padding: 0.55rem 0.55rem 0.55rem 0.45rem;
+    }
+}
 @media (max-width: 760px) {
     .hero h1 {
         font-size: 2rem;
     }
     .bench-strip {
         grid-template-columns: 1fr;
+    }
+    .chip {
+        white-space: normal;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
+    .skip-link {
+        transition: none !important;
     }
 }
 footer {
@@ -459,16 +603,16 @@ def build_demo() -> gr.Blocks:
   <h1>XIAO Buddy</h1>
   <p>Photo-aware support for Seeed XIAO boards plus connected sensors, robotics kits, LoRa modules, SenseCraft workflows, and field recovery.</p>
   <div class="chips">
-    <span class="chip">ESP32S3 Sense</span>
-    <span class="chip">ESP32C6</span>
-    <span class="chip">ESP32C5</span>
-    <span class="chip">nRF54L15</span>
-    <span class="chip">Wio-SX1262</span>
-    <span class="chip">Grove Vision AI V2</span>
-    <span class="chip">Raspberry Pi HATs</span>
-    <span class="chip">Jetson robotics</span>
-    <span class="chip">RS485 expansion</span>
-    <span class="chip">SenseCraft AI</span>
+    <span class="chip chip-board">ESP32S3 Sense</span>
+    <span class="chip chip-board">ESP32C6</span>
+    <span class="chip chip-board">ESP32C5</span>
+    <span class="chip chip-board">nRF54L15</span>
+    <span class="chip chip-radio">Wio-SX1262</span>
+    <span class="chip chip-vision">Grove Vision AI V2</span>
+    <span class="chip chip-platform">Raspberry Pi HATs</span>
+    <span class="chip chip-robotics">Jetson robotics</span>
+    <span class="chip chip-platform">RS485 expansion</span>
+    <span class="chip chip-vision">SenseCraft AI</span>
   </div>
 </section>
 """,
@@ -483,8 +627,8 @@ def build_demo() -> gr.Blocks:
 """,
         )
 
-        with gr.Row(equal_height=False):
-            with gr.Column(scale=5, min_width=330):
+        with gr.Row(equal_height=False, elem_classes=["workspace-row"]):
+            with gr.Column(scale=5, min_width=330, elem_classes=["input-column"]):
                 gr.HTML('<p class="bench-label" id="support-bench">Support bench</p>')
                 image = gr.Image(
                     label="Board or wiring photo",
@@ -502,7 +646,7 @@ def build_demo() -> gr.Blocks:
                     submit = gr.Button("Ask Buddy", variant="primary")
                     clear = gr.ClearButton([image, question], value="Reset")
 
-            with gr.Column(scale=7, min_width=360):
+            with gr.Column(scale=7, min_width=360, elem_classes=["answer-column"]):
                 gr.HTML('<p class="bench-label">Field answer</p>')
                 progress = gr.HTML(
                     value=format_progress(),

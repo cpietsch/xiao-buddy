@@ -177,7 +177,12 @@ def _check_query_interaction(
           const text = document.body.innerText || "";
           return text.includes("Preparing the request")
             || text.includes("Retrieving relevant Seeed wiki sources")
-            || text.includes("Generating a cited answer");
+            || text.includes("Generating a cited answer")
+            || (
+              text.includes("agent answer")
+              && text.includes("Sources used")
+              && text.includes("first token")
+            );
         }
         """,
         timeout=timeout_ms,

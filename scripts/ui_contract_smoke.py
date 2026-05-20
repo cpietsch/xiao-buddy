@@ -83,6 +83,12 @@ def _check_accessibility_contract() -> None:
         "env(safe-area-inset-right)",
         "font-size: 16px",
         "font-variant-numeric: tabular-nums",
+        "color-scheme",
+        "prefers-reduced-motion",
+        ".workspace-row",
+        ".answer-column",
+        ".chip-radio",
+        ".chip-vision",
     ]
     for token in required_css:
         _assert(token in css, f"CSS accessibility hook missing: {token}")
