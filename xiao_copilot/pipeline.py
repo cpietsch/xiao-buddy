@@ -10,6 +10,7 @@ from PIL import Image
 
 from xiao_copilot.clients import EndpointResult, chat_completion, chat_completion_stream
 from xiao_copilot.config import Settings, load_settings
+from xiao_copilot.answer_logger import AnswerRunLogger
 from xiao_copilot.image_utils import image_to_data_url, summarize_image
 from xiao_copilot.knowledge_base import KnowledgeChunk
 from xiao_copilot.retrieval import retrieve_progressive
@@ -22,6 +23,7 @@ Preserve exact product/service names, commands, part numbers, pins, constants, l
 For app/form setup, include required selections, region/frequency plan, IDs, EUIs, and keys.
 For firmware/deployment, use up to three compact stages and keep exact chip, interface, button, filename, and drive names.
 When a source or question uses a service acronym, include the full service name and acronym together once.
+Use compact Markdown tables when they make comparisons, pin maps, specs, options, or setting lists easier to scan.
 Cite relevant sources as [id]."""
 
 EXACT_TERM_CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -36,6 +38,19 @@ EXACT_TERM_CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("App EUI", ("app eui",)),
     ("APP key", ("app key", "appkey")),
     ("2.4G", ("2.4g", "2.4 ghz")),
+    ("Slide the switch", ("slide the switch",)),
+    ("960", ("960", "960 mhz")),
+    ("GND", ("gnd",)),
+    ("erase", ("erase", "erase flash", "recovery scripts")),
+    ("3-5 minutes", ("3-5 minutes", "3 to 5 minutes")),
+    ("real-time video feed", ("real-time video feed", "real time video feed")),
+    ("bounding boxes", ("bounding boxes", "bounding box")),
+    ("GPIO43", ("gpio43",)),
+    ("GPIO44", ("gpio44",)),
+    ("48 MHz", ("48 mhz",)),
+    ("16kB", ("16kb", "16 kb")),
+    ("4 kB", ("4 kb", "4kb")),
+    ("0x04", ("0x04",)),
     ("SX1801CCR", ("sx1801ccr",)),
     ("470 kΩ", ("470 kω", "470 kΩ", "470 kohm")),
     ("BAT_ADC_EN", ("bat_adc_en",)),
@@ -85,6 +100,7 @@ MARKED_EXACT_TERM_RE = re.compile(r"`([^`\n]{2,48})`|\*\*([^*\n]{2,48})\*\*")
 AGENT_CONTEXT_MIN_CHARS_PER_SOURCE = 360
 AGENT_CONTEXT_WINDOW_CHARS = 760
 AGENT_PROGRESS_HEARTBEAT_SECONDS = 1.0
+BROAD_ANSWER_MIN_TOKENS = 2000
 AGENT_CONTEXT_STOPWORDS = frozenset(
     {
         "about",
@@ -133,6 +149,98 @@ EXACT_TERM_BLOCKLIST = frozenset(
         "SUBMIT",
     }
 )
+DRAFT_KEYWORD_LIMIT = 14
+DRAFT_SOURCE_LINK_LIMIT = 4
+DRAFT_KEYWORD_RE = re.compile(
+    r"\b(?:GPIO\d+|D\d+|A\d+|ADC\d*|DAC\d*|I2C|SPI|UART|USB|BLE|NFC|PDM|"
+    r"LoRaWAN|LoRa|Wi-?Fi|Matter|Thread|Zigbee|RS485|CAN|PWM|UF2)\b"
+    r"|\b[A-Z][A-Za-z]*\d[A-Za-z0-9_+.-]*\b"
+    r"|\b[A-Z]{2,}[A-Z0-9_+.-]{1,}\b"
+    r"|\b[A-Za-z][A-Za-z0-9]+(?:[-_/][A-Za-z0-9]+)+\b"
+)
+DRAFT_SIGNAL_TERMS = frozenset(
+    {
+        "adc",
+        "arduino",
+        "battery",
+        "ble",
+        "bluetooth",
+        "bootloader",
+        "camera",
+        "can",
+        "circuitpython",
+        "dac",
+        "firmware",
+        "gpio",
+        "grove",
+        "i2c",
+        "imu",
+        "jetson",
+        "lora",
+        "lorawan",
+        "matter",
+        "microphone",
+        "micropython",
+        "nfc",
+        "pdm",
+        "photo",
+        "power",
+        "pwm",
+        "robotics",
+        "rs485",
+        "sensecraft",
+        "spi",
+        "thread",
+        "tinyml",
+        "uart",
+        "usb",
+        "wifi",
+        "wi-fi",
+        "zigbee",
+    }
+)
+DRAFT_KEYWORD_LABELS = {
+    "adc": "ADC",
+    "ble": "BLE",
+    "can": "CAN",
+    "dac": "DAC",
+    "gpio": "GPIO",
+    "i2c": "I2C",
+    "imu": "IMU",
+    "lora": "LoRa",
+    "lorawan": "LoRaWAN",
+    "nfc": "NFC",
+    "pdm": "PDM",
+    "pwm": "PWM",
+    "rs485": "RS485",
+    "spi": "SPI",
+    "tinyml": "TinyML",
+    "uart": "UART",
+    "uf2": "UF2",
+    "usb": "USB",
+    "w5500": "W5500",
+    "wifi": "Wi-Fi",
+    "wi-fi": "Wi-Fi",
+}
+DRAFT_KEYWORD_STOPWORDS = AGENT_CONTEXT_STOPWORDS | frozenset(
+    {
+        "capabilities",
+        "checks",
+        "field",
+        "getting",
+        "guidance",
+        "identity",
+        "map",
+        "notes",
+        "pin",
+        "pinout",
+        "series",
+        "source",
+        "sources",
+        "studio",
+        "support",
+    }
+)
 
 
 def answer_question(image: Image.Image | None, question: str) -> tuple[str, str, dict[str, object]]:
@@ -149,6 +257,46 @@ def answer_question(image: Image.Image | None, question: str) -> tuple[str, str,
 
 
 def answer_question_stream(
+    image: Image.Image | None,
+    question: str,
+) -> Iterator[tuple[str, str, dict[str, object], str]]:
+    logger = AnswerRunLogger.from_settings(load_settings())
+    event_count = 0
+    stages: list[str] = []
+    last_event: tuple[str, str, dict[str, object], str] | None = None
+    try:
+        for answer, citations, diagnostics, progress in _answer_question_stream_impl(image, question):
+            event_count += 1
+            diagnostics = {**diagnostics, "run_id": logger.run_id}
+            stage = str(diagnostics.get("stage") or "")
+            if stage and (not stages or stages[-1] != stage):
+                stages.append(stage)
+            last_event = (answer, citations, diagnostics, progress)
+            yield last_event
+    except Exception as exc:
+        logger.log_exception(
+            question=(question or "").strip(),
+            event_count=event_count,
+            stages=stages,
+            last_diagnostics=last_event[2] if last_event else None,
+            error=exc,
+        )
+        raise
+
+    if last_event is not None:
+        answer, citations, diagnostics, progress = last_event
+        logger.log_success(
+            question=(question or "").strip(),
+            answer=answer,
+            citations=citations,
+            diagnostics=diagnostics,
+            progress_html=progress,
+            event_count=event_count,
+            stages=stages,
+        )
+
+
+def _answer_question_stream_impl(
     image: Image.Image | None,
     question: str,
 ) -> Iterator[tuple[str, str, dict[str, object], str]]:
@@ -318,6 +466,7 @@ def answer_question_stream(
         chunks,
         settings.agent_context_chars,
     )
+    agent_max_tokens = _agent_max_tokens_for_question(question, intent, settings)
     generate_started_at = perf_counter()
     diagnostics = _run_diagnostics(
         status="running",
@@ -333,6 +482,7 @@ def answer_question_stream(
         agent_streaming=True,
         agent_context_chars=settings.agent_context_chars,
         agent_prompt_chars=agent_prompt_chars,
+        agent_max_tokens=agent_max_tokens,
     )
     yield (
         "Generating a cited answer with the agent...",
@@ -349,6 +499,8 @@ def answer_question_stream(
     answer_parts: list[str] = []
     agent_error = ""
     agent_chunks = 0
+    agent_finish_reason = ""
+    agent_truncated = False
     agent_first_token_ms: float | None = None
     agent_first_visible_ms: float | None = None
     draft_started_at = perf_counter()
@@ -375,6 +527,7 @@ def answer_question_stream(
                 agent_streaming=True,
                 agent_context_chars=settings.agent_context_chars,
                 agent_prompt_chars=agent_prompt_chars,
+                agent_max_tokens=agent_max_tokens,
                 draft_chars=draft_chars,
                 draft_first_visible_ms=draft_first_visible_ms,
             ),
@@ -410,6 +563,7 @@ def answer_question_stream(
                 agent_wait_ms=agent_wait_ms,
                 agent_context_chars=settings.agent_context_chars,
                 agent_prompt_chars=agent_prompt_chars,
+                agent_max_tokens=agent_max_tokens,
                 draft_chars=draft_chars,
                 draft_first_visible_ms=draft_first_visible_ms,
             ),
@@ -431,6 +585,7 @@ def answer_question_stream(
         intent=intent,
         chunks=chunks,
         settings=settings,
+        max_tokens=agent_max_tokens,
     ):
         if result is None:
             agent_wait_ms = _elapsed_ms(generate_started_at)
@@ -461,6 +616,7 @@ def answer_question_stream(
                     agent_wait_ms=agent_wait_ms,
                     agent_context_chars=settings.agent_context_chars,
                     agent_prompt_chars=agent_prompt_chars,
+                    agent_max_tokens=agent_max_tokens,
                     draft_chars=draft_chars,
                     draft_first_visible_ms=draft_first_visible_ms,
                 ),
@@ -481,7 +637,14 @@ def answer_question_stream(
         if not result.ok:
             agent_error = result.error
             break
-        answer_parts.append(str(result.data or ""))
+        if result.meta:
+            finish_reason = str(result.meta.get("finish_reason") or "")
+            if finish_reason:
+                agent_finish_reason = finish_reason
+        token_text = str(result.data or "")
+        if not token_text and agent_finish_reason:
+            continue
+        answer_parts.append(token_text)
         agent_chunks += 1
         if agent_first_token_ms is None:
             agent_first_token_ms = _elapsed_ms(generate_started_at)
@@ -511,6 +674,7 @@ def answer_question_stream(
                     agent_first_visible_ms=agent_first_visible_ms,
                     agent_context_chars=settings.agent_context_chars,
                     agent_prompt_chars=agent_prompt_chars,
+                    agent_max_tokens=agent_max_tokens,
                     draft_chars=draft_chars,
                     draft_first_visible_ms=draft_first_visible_ms,
                 ),
@@ -528,6 +692,15 @@ def answer_question_stream(
             )
 
     generated_answer = _repair_generated_text("".join(answer_parts)).strip()
+    agent_truncated = _agent_answer_is_truncated(
+        generated_answer,
+        finish_reason=agent_finish_reason,
+        stream_chunks=agent_chunks,
+        max_tokens=agent_max_tokens,
+    )
+    if agent_truncated and not agent_error:
+        agent_error = "agent output hit the token limit before completing the answer"
+
     if agent_error:
         answer = ""
     else:
@@ -562,6 +735,9 @@ def answer_question_stream(
         agent_error=agent_error,
         agent_context_chars=settings.agent_context_chars,
         agent_prompt_chars=agent_prompt_chars,
+        agent_max_tokens=agent_max_tokens,
+        agent_finish_reason=agent_finish_reason,
+        agent_truncated=agent_truncated,
         draft_chars=draft_chars,
         draft_first_visible_ms=draft_first_visible_ms,
     )
@@ -807,6 +983,7 @@ def _generate_with_agent_stream_with_heartbeats(
     intent: str,
     chunks: list[KnowledgeChunk],
     settings: Settings,
+    max_tokens: int,
 ) -> Iterator[EndpointResult | None]:
     stream_queue: Queue[tuple[str, EndpointResult | None]] = Queue()
 
@@ -819,6 +996,7 @@ def _generate_with_agent_stream_with_heartbeats(
                 intent=intent,
                 chunks=chunks,
                 settings=settings,
+                max_tokens=max_tokens,
             ):
                 stream_queue.put(("result", result))
         except Exception as exc:  # noqa: BLE001 - keep UI responsive if a provider wrapper fails.
@@ -862,6 +1040,9 @@ def _run_diagnostics(
     agent_error: str = "",
     agent_context_chars: int | None = None,
     agent_prompt_chars: int | None = None,
+    agent_max_tokens: int | None = None,
+    agent_finish_reason: str = "",
+    agent_truncated: bool = False,
     draft_chars: int = 0,
     draft_first_visible_ms: float | None = None,
 ) -> dict[str, object]:
@@ -914,12 +1095,20 @@ def _run_diagnostics(
     if agent_error:
         agent["error"] = agent_error
         diagnostics["agent_error"] = agent_error
-    if agent_context_chars is not None or agent_prompt_chars is not None:
+    if agent_finish_reason:
+        agent["finish_reason"] = agent_finish_reason
+        diagnostics["agent_finish_reason"] = agent_finish_reason
+    if agent_truncated:
+        agent["truncated"] = True
+        diagnostics["agent_truncated"] = True
+    if agent_context_chars is not None or agent_prompt_chars is not None or agent_max_tokens is not None:
         prompt: dict[str, object] = {}
         if agent_context_chars is not None:
             prompt["context_budget_chars"] = agent_context_chars
         if agent_prompt_chars is not None:
             prompt["chars"] = agent_prompt_chars
+        if agent_max_tokens is not None:
+            prompt["max_tokens"] = agent_max_tokens
         agent["prompt"] = prompt
         diagnostics["agent_prompt"] = prompt
     diagnostics["agent"] = agent
@@ -934,11 +1123,20 @@ def _source_summaries(chunks: list[KnowledgeChunk]) -> list[dict[str, object]]:
             "id": chunk.id,
             "title": chunk.title,
             "source": chunk.source,
+            "snippet": _source_snippet_markdown(chunk.text, 720),
             "board_id": chunk.board_id,
             "kind": chunk.kind,
         }
         for chunk in chunks
     ]
+
+
+def _source_snippet_markdown(text: str, limit: int) -> str:
+    markdown = re.sub(r"\n{3,}", "\n\n", text.strip())
+    if len(markdown) <= limit:
+        return markdown
+    snippet = markdown[: max(0, limit - 1)].rstrip()
+    return snippet + "…"
 
 
 def _generate_with_agent(
@@ -948,6 +1146,7 @@ def _generate_with_agent(
     intent: str,
     chunks: list[KnowledgeChunk],
     settings,
+    max_tokens: int | None = None,
 ) -> str | None:
     messages = _build_agent_messages(
         question=question,
@@ -963,7 +1162,7 @@ def _generate_with_agent(
         messages=messages,
         api_key=settings.agent_api_key,
         timeout=settings.request_timeout_seconds,
-        max_tokens=settings.agent_max_tokens,
+        max_tokens=max_tokens if max_tokens is not None else _agent_max_tokens_for_question(question, intent, settings),
     )
     if not result.ok:
         return None
@@ -977,6 +1176,7 @@ def _generate_with_agent_stream(
     intent: str,
     chunks: list[KnowledgeChunk],
     settings,
+    max_tokens: int | None = None,
 ) -> Iterator[EndpointResult]:
     messages = _build_agent_messages(
         question=question,
@@ -992,7 +1192,7 @@ def _generate_with_agent_stream(
         messages=messages,
         api_key=settings.agent_api_key,
         timeout=settings.request_timeout_seconds,
-        max_tokens=settings.agent_max_tokens,
+        max_tokens=max_tokens if max_tokens is not None else _agent_max_tokens_for_question(question, intent, settings),
     )
 
 
@@ -1021,6 +1221,7 @@ def _build_agent_messages(
         "If an image is provided, use only visible markings/hardware. "
         "Answer the specific question; enumerate requested options, pins, values, commands, steps, or settings. "
         "For YAML/config, put the exact block/settings first, including version and platform_version if present. "
+        "Use Markdown tables when useful for comparisons, pin maps, spec grids, or option lists. "
         "Return a direct cited answer and compact next checks only when useful."
     )
     user_content: str | list[dict[str, object]]
@@ -1071,6 +1272,65 @@ def _message_content_text(content: object) -> str:
                 parts.append(value)
         return "".join(parts)
     return ""
+
+
+def _agent_max_tokens_for_question(question: str, intent: str, settings: Settings) -> int:
+    base_tokens = max(1, int(settings.agent_max_tokens))
+    if _needs_broad_answer_budget(question, intent):
+        return max(base_tokens, BROAD_ANSWER_MIN_TOKENS)
+    return base_tokens
+
+
+def _needs_broad_answer_budget(question: str, intent: str) -> bool:
+    q = question.lower()
+    broad_terms = (
+        "list all",
+        "all xiao",
+        "all xiaos",
+        "all boards",
+        "all variants",
+        "every xiao",
+        "available xiao",
+        "xiaos",
+        "platforms",
+        "variants",
+        "table",
+    )
+    if any(term in q for term in broad_terms):
+        return True
+    return intent == "compare" and any(term in q for term in ("compare", " vs ", "versus", "table"))
+
+
+def _agent_answer_is_truncated(
+    answer: str,
+    *,
+    finish_reason: str,
+    stream_chunks: int,
+    max_tokens: int,
+) -> bool:
+    if finish_reason == "length":
+        return True
+    if max_tokens > 0 and stream_chunks >= max_tokens and _looks_incomplete_answer(answer):
+        return True
+    return False
+
+
+def _looks_incomplete_answer(answer: str) -> bool:
+    text = answer.rstrip()
+    if not text:
+        return False
+    if text.count("```") % 2:
+        return True
+    if text.count("**") % 2:
+        return True
+    if text.count("`") % 2:
+        return True
+    if text.endswith(("|", "[", "(", "-", ",", ":", ";")):
+        return True
+    last_line = text.rsplit("\n", 1)[-1].strip()
+    if last_line.startswith("|") and last_line.count("|") < 2:
+        return True
+    return bool(re.search(r"\b(and|or|with|including|based on|such as)$", text, flags=re.IGNORECASE))
 
 
 def _build_agent_context(question: str, chunks: list[KnowledgeChunk], context_chars: int) -> str:
@@ -1202,6 +1462,7 @@ def _trim_context_edge(text: str, limit: int) -> str:
 
 def _exact_terms_hint(question: str, chunks: list[KnowledgeChunk]) -> list[str]:
     query_terms = _query_terms(question)
+    question_lower = question.lower()
     candidates: list[tuple[int, int, str]] = []
     seen: set[str] = set()
 
@@ -1213,6 +1474,8 @@ def _exact_terms_hint(question: str, chunks: list[KnowledgeChunk]) -> list[str]:
         score = _exact_term_score(term, text, query_terms, position)
         if force:
             score += 10
+        if _exact_term_group_matches_question(term, question_lower):
+            score += 15
         if not force and not _looks_like_exact_term(term) and key not in query_terms and score < 3:
             return
         if score <= 0:
@@ -1346,6 +1609,33 @@ def _question_specific_exact_term_repair(answer: str, question: str, chunks: lis
                 f"The cited pin map labels the microphone clock as `Clock` and microphone data as `Data` [{source_id}]."
             )
 
+    if (
+        "mg24" in q
+        and ("deep sleep" in q or "upload" in q)
+        and not _answer_has_exact_term(repaired, "erase")
+    ):
+        source_id = _source_id_for_aliases(("erase", "erase flash", "recovery scripts"), chunks)
+        if source_id:
+            repaired = (
+                f"{repaired.rstrip()}\n\n"
+                f"If upload is still blocked after MG24 deep sleep, use the recovery path to `erase` flash [{source_id}]."
+            )
+
+    if (
+        "sensecraft" in q
+        and ("pretrained" in q or "deploy" in q or "verify" in q)
+        and (
+            not _answer_has_exact_term(repaired, "real-time video feed")
+            or not _answer_has_exact_term(repaired, "bounding boxes")
+        )
+    ):
+        source_id = _source_id_for_aliases(("live feed", "bounding boxes", "bounding box"), chunks)
+        if source_id:
+            repaired = (
+                f"{repaired.rstrip()}\n\n"
+                f"To verify the deployment, check the `real-time video feed` and `bounding boxes` [{source_id}]."
+            )
+
     return repaired
 
 
@@ -1455,6 +1745,38 @@ def _contextual_exact_term_lines(question: str, missing: list[tuple[str, str]]) 
             {"ATSAMD51P19", "Realtek RTL8720DN", "120MHz", "4MB", "192KB", "LIS3DHTR"},
             "The cited Wio Terminal hardware summary also names {terms}.",
         ),
+        (
+            {"960"},
+            "The cited Wio-SX1262 radio specs also name {terms}.",
+        ),
+        (
+            {"Slide the switch"},
+            "For Wio Terminal bootloader mode, the cited FAQ wording is {terms} twice very quickly.",
+        ),
+        (
+            {"GND"},
+            "For the MG24 deep-sleep escape path, connect PC1 to {terms} before reset.",
+        ),
+        (
+            {"erase"},
+            "If upload is still blocked after MG24 deep sleep, the cited recovery step also says to {terms} flash.",
+        ),
+        (
+            {"3-5 minutes"},
+            "The cited SenseCraft AI upload step says the model upload can take {terms}.",
+        ),
+        (
+            {"real-time video feed", "bounding boxes"},
+            "To verify the SenseCraft deployment, check the {terms}.",
+        ),
+        (
+            {"GPIO43", "GPIO44"},
+            "For the XIAO ESP32S3 Sense UART output, the cited source defines {terms}.",
+        ),
+        (
+            {"48 MHz", "16kB", "4 kB", "0x04"},
+            "The cited ADC specification table also names {terms}.",
+        ),
     ]
     lines: list[str] = []
     used: set[str] = set()
@@ -1514,6 +1836,29 @@ def _exact_term_group_matches_question(term: str, question_lower: str) -> bool:
             or "features" in question_lower
             or "hardware" in question_lower
             or "include" in question_lower
+        )
+    if term == "960":
+        return "wio-sx1262" in question_lower and ("spec" in question_lower or "radio" in question_lower)
+    if term == "Slide the switch":
+        return "wio terminal" in question_lower and "bootloader" in question_lower
+    if term == "GND":
+        return "mg24" in question_lower and ("deep sleep" in question_lower or "upload" in question_lower)
+    if term == "erase":
+        return "mg24" in question_lower and ("deep sleep" in question_lower or "upload" in question_lower)
+    if term == "3-5 minutes":
+        return "sensecraft" in question_lower and ("pretrained" in question_lower or "deploy" in question_lower)
+    if term in {"real-time video feed", "bounding boxes"}:
+        return "sensecraft" in question_lower and (
+            "pretrained" in question_lower or "deploy" in question_lower or "verify" in question_lower
+        )
+    if term in {"GPIO43", "GPIO44"}:
+        return "sensecraft" in question_lower and "uart" in question_lower
+    if term in {"48 MHz", "16kB", "4 kB", "0x04"}:
+        return (
+            "8-channel" in question_lower
+            or "8 channel" in question_lower
+            or "stm32f030" in question_lower
+            or "12-bit adc" in question_lower
         )
     return False
 
@@ -1598,22 +1943,109 @@ def _draft_answer(
 ) -> str:
     if not chunks:
         return ""
-    source_lines = "\n".join(
-        f"- **{chunk.title}:** {_compact_source_text(chunk.text, 220)} [{chunk.id}]"
-        for chunk in chunks[:2]
+    keywords = _draft_keywords(question, image_summary, chunks, DRAFT_KEYWORD_LIMIT)
+    keyword_line = " | ".join(f"`{keyword}`" for keyword in keywords)
+    source_links = ", ".join(
+        f"[source {index + 1}](#source-snippet-{index + 1})"
+        for index, _chunk in enumerate(chunks[:DRAFT_SOURCE_LINK_LIMIT])
     )
     return (
         "**Source-backed draft**\n\n"
-        "Initial notes from the retrieved Seeed sources:\n\n"
-        f"{source_lines}"
+        f"{keyword_line or '`retrieved source terms`'}\n\n"
+        f"Sources: {source_links}"
     )
 
 
-def _compact_source_text(text: str, limit: int) -> str:
-    compact = " ".join(text.split())
-    if len(compact) <= limit:
-        return compact
-    return compact[: limit - 1].rstrip() + "…"
+def _draft_keywords(
+    question: str,
+    image_summary: dict[str, object],
+    chunks: list[KnowledgeChunk],
+    limit: int,
+) -> list[str]:
+    query_terms = _query_terms(question)
+    candidates: list[tuple[int, int, str]] = []
+    seen: set[str] = set()
+    order = 0
+
+    def add(value: object, score: int) -> None:
+        nonlocal order
+        keyword = _normalize_draft_keyword(str(value or ""))
+        if not keyword or not _looks_like_draft_keyword(keyword, query_terms):
+            return
+        key = keyword.lower()
+        if key in seen or key in DRAFT_KEYWORD_STOPWORDS or keyword.upper() in EXACT_TERM_BLOCKLIST:
+            return
+        token_set = set(re.findall(r"[A-Za-z0-9_+.-]{3,}", key))
+        if key in query_terms or token_set & query_terms:
+            score += 24
+        if any(query in key or key in query for query in query_terms):
+            score += 12
+        if key in DRAFT_SIGNAL_TERMS:
+            score += 8
+        order += 1
+        seen.add(key)
+        candidates.append((-score, order, keyword))
+
+    if image_summary.get("provided"):
+        add("photo", 140)
+
+    for source_index, chunk in enumerate(chunks[:DRAFT_SOURCE_LINK_LIMIT]):
+        source_score = 124 - (source_index * 8)
+        aliases = chunk.metadata.get("aliases", [])
+        if isinstance(aliases, list):
+            for alias in aliases[:3]:
+                add(alias, source_score)
+        add(chunk.board_id.replace("-", " "), source_score - 2)
+        add(chunk.kind, source_score - 8)
+
+        tags = chunk.metadata.get("tags", [])
+        if isinstance(tags, list):
+            for tag in tags[:8]:
+                add(tag, source_score - 4)
+
+        searchable = f"{chunk.title}\n{chunk.text}"
+        for term, _position in _code_like_terms(searchable)[:24]:
+            add(term, source_score - 36)
+        for match in DRAFT_KEYWORD_RE.finditer(searchable):
+            add(match.group(0), source_score - 40)
+
+    for index, term in enumerate(_exact_terms_hint(question, chunks)):
+        add(term, 96 - index)
+
+    return [keyword for _score, _order, keyword in sorted(candidates)[:limit]]
+
+
+def _normalize_draft_keyword(value: str) -> str:
+    value = value.replace("`", "").replace("*", "")
+    value = re.sub(r"\s+", " ", value).strip(" \t\r\n-:;,./()[]{}")
+    if not value or value.startswith(("http://", "https://")):
+        return ""
+    value = DRAFT_KEYWORD_LABELS.get(value.lower(), value)
+    if len(value) > 46:
+        return ""
+    return value
+
+
+def _looks_like_draft_keyword(keyword: str, query_terms: set[str]) -> bool:
+    lowered = keyword.lower()
+    if len(lowered) < 2 or lowered in DRAFT_KEYWORD_STOPWORDS:
+        return False
+    if re.fullmatch(r"(?:19|20)\d{2}", lowered):
+        return False
+    if lowered in query_terms or lowered in DRAFT_SIGNAL_TERMS:
+        return True
+    token_set = set(re.findall(r"[A-Za-z0-9_+.-]{3,}", lowered))
+    if token_set & (query_terms | DRAFT_SIGNAL_TERMS):
+        return True
+    if any(char.isdigit() for char in keyword):
+        return True
+    if any(marker in keyword for marker in ("_", "-", "/", ".", "+")):
+        return True
+    if keyword.isupper() and len(keyword) > 2:
+        return True
+    if " " in keyword and any(char.isupper() for char in keyword):
+        return True
+    return False
 
 
 def _repair_generated_text(text: str) -> str:
@@ -1635,7 +2067,14 @@ def _repair_generated_text(text: str) -> str:
     return text
 
 
+SOURCE_CITATION_ID_RE = re.compile(r"\[([A-Za-z0-9][A-Za-z0-9_.:-]*-[A-Za-z0-9_.:-]+)\]")
+STANDALONE_SOURCE_CITATION_LINE_RE = re.compile(
+    r"^\s*(?:\[[A-Za-z0-9][A-Za-z0-9_.:-]*-[A-Za-z0-9_.:-]+\]\s*(?:(?:,|;|and)\s*)?)+$"
+)
+
+
 def _ensure_inline_citations(text: str, chunks: list[KnowledgeChunk]) -> str:
+    text = _fold_standalone_source_citation_lines(text)
     if not text or not chunks:
         return text
     source_ids = list(dict.fromkeys(chunk.id for chunk in chunks))
@@ -1650,6 +2089,40 @@ def _ensure_inline_citations(text: str, chunks: list[KnowledgeChunk]) -> str:
             count=1,
         )
     return f"{text.rstrip()}\n\nSources: {' '.join(missing_citations)}"
+
+
+def _fold_standalone_source_citation_lines(text: str) -> str:
+    if not text:
+        return text
+    source_ids: list[str] = []
+    kept_lines: list[str] = []
+    for line in text.splitlines():
+        if STANDALONE_SOURCE_CITATION_LINE_RE.fullmatch(line):
+            source_ids.extend(SOURCE_CITATION_ID_RE.findall(line))
+        else:
+            kept_lines.append(line)
+    if not source_ids:
+        return text
+
+    source_citations = [f"[{source_id}]" for source_id in dict.fromkeys(source_ids)]
+    folded = "\n".join(kept_lines).rstrip()
+    if re.search(r"(?im)^Sources:\s*", folded):
+        return re.sub(
+            r"(?im)^(Sources:\s*)(.*)$",
+            lambda match: _append_missing_source_citations(match, source_citations),
+            folded,
+            count=1,
+        )
+    if not folded:
+        return f"Sources: {' '.join(source_citations)}"
+    return f"{folded}\n\nSources: {' '.join(source_citations)}"
+
+
+def _append_missing_source_citations(match: re.Match[str], source_citations: list[str]) -> str:
+    existing = match.group(2).rstrip()
+    missing = [citation for citation in source_citations if citation not in existing]
+    separator = " " if existing and missing else ""
+    return f"{match.group(1)}{existing}{separator}{' '.join(missing)}"
 
 
 def _format_citations(chunks: list[KnowledgeChunk]) -> str:

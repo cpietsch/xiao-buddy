@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
+from html import unescape
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -46,7 +48,8 @@ def main() -> None:
     progress_html = str(final[3] if len(final) > 3 else "")
 
     _require_terms("answer", answer, terms)
-    _require_terms("source trail", source_text, citations)
+    _require_terms("source snippets", source_text, citations)
+    _reject_visible_source_ids(answer, source_text)
     if require_inline_citation:
         _require_inline_citation(answer, source_text, citations)
     if require_stream:
@@ -95,7 +98,7 @@ def main() -> None:
         f"events={len(events)} "
         f"case={case_id or 'custom'} "
         f"chars={len(answer)} "
-        f"sources={source_text.count('- [')} "
+        f"sources={_source_label_count(source_text)} "
         f"inline_citation={require_inline_citation} "
         f"source_draft_events={len(_source_draft_events(events))} "
         f"reranker_wait_events={len(reranker_wait_events)} "
@@ -194,12 +197,20 @@ def _require_terms(label: str, text: str, terms: tuple[str, ...]) -> None:
 
 
 def _require_inline_citation(answer: str, source_text: str, citations: tuple[str, ...]) -> None:
-    source_ids = _source_ids_for_required_citations(source_text, citations)
-    if not source_ids:
-        source_ids = _source_ids_from_source_text(source_text)
-    if not any(f"[{source_id}]" in answer for source_id in source_ids):
-        expected = ", ".join(f"[{source_id}]" for source_id in source_ids) or "a retrieved source id"
-        raise SystemExit(f"answer missing inline citation for {expected}")
+    source_labels = _source_labels_for_required_citations(source_text, citations)
+    if not source_labels:
+        source_labels = _source_labels_from_source_text(source_text)
+    normalized_answer = _normalize(answer)
+    if not any(_normalize(source_label) in normalized_answer for source_label in source_labels):
+        expected = ", ".join(source_labels) or "a retrieved source link"
+        raise SystemExit(f"answer missing inline source link for {expected}")
+
+
+def _reject_visible_source_ids(answer: str, source_text: str) -> None:
+    combined = f"{answer}\n{source_text}"
+    match = re.search(r"\bwiki-[0-9a-f]{8,}\b", combined, flags=re.IGNORECASE)
+    if match:
+        raise SystemExit(f"user-facing output still exposes raw source id {match.group(0)}")
 
 
 def _first_token_ms(diagnostics: dict[str, object]) -> float | None:
@@ -339,36 +350,36 @@ def _format_ms(value: float | None) -> str:
     return f"{value:.1f}" if value is not None else "n/a"
 
 
-def _source_ids_for_required_citations(source_text: str, citations: tuple[str, ...]) -> list[str]:
+def _source_labels_for_required_citations(source_text: str, citations: tuple[str, ...]) -> list[str]:
     if not citations:
         return []
     required = [_normalize(citation) for citation in citations]
-    source_ids: list[str] = []
-    for line in source_text.splitlines():
+    source_labels: list[str] = []
+    current_label = ""
+    for line in _source_text_lines(source_text):
+        if re.fullmatch(r"Source \d+", line):
+            current_label = line.lower()
         normalized_line = _normalize(line)
-        if any(citation in normalized_line for citation in required):
-            source_id = _source_id_from_line(line)
-            if source_id:
-                source_ids.append(source_id)
-    return source_ids
+        if current_label and any(citation in normalized_line for citation in required):
+            source_labels.append(current_label)
+    return source_labels
 
 
-def _source_ids_from_source_text(source_text: str) -> list[str]:
+def _source_labels_from_source_text(source_text: str) -> list[str]:
     return [
-        source_id
-        for line in source_text.splitlines()
-        if (source_id := _source_id_from_line(line))
+        line.lower()
+        for line in _source_text_lines(source_text)
+        if re.fullmatch(r"Source \d+", line)
     ]
 
 
-def _source_id_from_line(line: str) -> str:
-    line = line.strip()
-    if not line.startswith("- ["):
-        return ""
-    end = line.find("]")
-    if end <= 3:
-        return ""
-    return line[3:end]
+def _source_label_count(source_text: str) -> int:
+    return len(_source_labels_from_source_text(source_text))
+
+
+def _source_text_lines(source_text: str) -> list[str]:
+    visible_text = re.sub(r"<[^>]+>", "\n", source_text)
+    return [unescape(line).strip() for line in visible_text.splitlines() if line.strip()]
 
 
 def _normalize(text: str) -> str:

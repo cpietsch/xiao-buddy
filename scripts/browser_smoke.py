@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -180,7 +181,7 @@ def _check_query_interaction(
             || text.includes("Generating a cited answer")
             || (
               text.includes("agent answer")
-              && text.includes("Sources used")
+              && text.includes("Source snippets")
               && text.includes("first token")
             );
         }
@@ -197,7 +198,7 @@ def _check_query_interaction(
             && text.includes("streamed")
             && text.includes("first token")
             && text.includes("agent answer")
-            && text.includes("Sources used")
+            && text.includes("Source snippets")
             && text.includes("Ready");
         }
         """,
@@ -209,10 +210,11 @@ def _check_query_interaction(
     _require_terms("browser answer", body_text, terms)
     _require_terms("browser citations", body_text, citations)
     _require_inline_citation(body_text, citations)
+    _reject_visible_source_ids(body_text)
     _assert_partial_stream_observed(page)
     _assert("RUN PROGRESS" in body_text, "browser answer should keep progress visible")
     _assert("FIELD ANSWER" in body_text, "browser answer should keep answer panel visible")
-    _assert("Sources used" in body_text, "browser answer should keep source trail visible")
+    _assert("Source snippets" in body_text, "browser answer should keep source snippets visible")
     _assert("streamed" in body_text, "browser answer should expose streamed progress")
     _assert("first token" in body_text, "browser answer should expose first-token progress")
     _assert("agent answer" in body_text, "browser answer should expose final agent status")
@@ -477,47 +479,44 @@ def _require_terms(label: str, text: str, terms: tuple[str, ...]) -> None:
 
 
 def _require_inline_citation(body_text: str, citations: tuple[str, ...]) -> None:
-    source_ids = _source_ids_for_required_citations(body_text, citations)
-    if not source_ids:
-        source_ids = _source_ids_from_source_text(body_text)
-    answer_text = body_text.split("Sources used", 1)[0]
-    if not any(f"[{source_id}]" in answer_text for source_id in source_ids):
-        expected = ", ".join(f"[{source_id}]" for source_id in source_ids) or "a rendered source id"
-        raise AssertionError(f"browser answer missing inline citation for {expected}")
+    source_labels = _source_labels_for_required_citations(body_text, citations)
+    if not source_labels:
+        source_labels = _source_labels_from_source_text(body_text)
+    answer_text = body_text.split("Source snippets", 1)[0]
+    normalized_answer = _normalize(answer_text)
+    if not any(_normalize(source_label) in normalized_answer for source_label in source_labels):
+        expected = ", ".join(source_labels) or "a rendered source link"
+        raise AssertionError(f"browser answer missing inline source link for {expected}")
 
 
-def _source_ids_for_required_citations(body_text: str, citations: tuple[str, ...]) -> list[str]:
+def _reject_visible_source_ids(body_text: str) -> None:
+    match = re.search(r"\bwiki-[0-9a-f]{8,}\b", body_text, flags=re.IGNORECASE)
+    if match:
+        raise AssertionError(f"browser output still exposes raw source id {match.group(0)}")
+
+
+def _source_labels_for_required_citations(body_text: str, citations: tuple[str, ...]) -> list[str]:
     if not citations:
         return []
     required = [_normalize(citation) for citation in citations]
-    source_ids: list[str] = []
+    source_labels: list[str] = []
+    current_label = ""
     for line in body_text.splitlines():
+        stripped = line.strip()
+        if re.fullmatch(r"Source \d+", stripped):
+            current_label = stripped.lower()
         normalized_line = _normalize(line)
-        if any(citation in normalized_line for citation in required):
-            source_id = _source_id_from_line(line)
-            if source_id:
-                source_ids.append(source_id)
-    return source_ids
+        if current_label and any(citation in normalized_line for citation in required):
+            source_labels.append(current_label)
+    return source_labels
 
 
-def _source_ids_from_source_text(body_text: str) -> list[str]:
+def _source_labels_from_source_text(body_text: str) -> list[str]:
     return [
-        source_id
+        stripped.lower()
         for line in body_text.splitlines()
-        if (source_id := _source_id_from_line(line))
+        if re.fullmatch(r"Source \d+", (stripped := line.strip()))
     ]
-
-
-def _source_id_from_line(line: str) -> str:
-    line = line.strip()
-    if line.startswith("- ["):
-        line = line[2:].strip()
-    if not line.startswith("["):
-        return ""
-    end = line.find("]")
-    if end <= 1:
-        return ""
-    return line[1:end]
 
 
 def _normalize(text: str) -> str:

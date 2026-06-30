@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import xiao_copilot.clients as clients
 from xiao_copilot.clients import (
     _chat_payload,
+    _chat_choice_meta,
     _chat_delta_content,
     _chat_message_content,
     _content_to_text,
@@ -24,6 +25,7 @@ def main() -> None:
     _assert_embedding_url_variants()
     _assert_chat_content_variants()
     _assert_stream_content_variants()
+    _assert_finish_reason_meta()
     _assert_provider_error_variants()
     _assert_stream_provider_errors_are_yielded()
     _assert_rerank_parsers()
@@ -102,6 +104,14 @@ def _assert_stream_content_variants() -> None:
     )
     body = {"choices": [{"delta": {"content": [{"text": "a"}, {"content": "b"}]}}]}
     _assert(_chat_delta_content(body) == "ab", "stream parser should flatten content parts")
+
+
+def _assert_finish_reason_meta() -> None:
+    _assert(
+        _chat_choice_meta({"choices": [{"finish_reason": "length"}]}) == {"finish_reason": "length"},
+        "chat parser should preserve finish_reason for truncation diagnostics",
+    )
+    _assert(_chat_choice_meta({"choices": [{"delta": {"content": "ok"}}]}) == {}, "missing finish_reason is empty meta")
 
 
 def _assert_provider_error_variants() -> None:

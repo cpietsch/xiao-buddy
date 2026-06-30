@@ -17,11 +17,14 @@ from xiao_copilot.retrieval import RetrievalStage
 def main() -> None:
     _assert_text_repair()
     _assert_system_prompt_preserves_acronyms()
+    _assert_agent_prompt_allows_markdown_tables()
     _assert_exact_term_hint_preserves_hardware_terms()
     _assert_exact_term_append_cites_missing_terms()
     _assert_contextual_exact_term_repair_avoids_source_detail_noise()
     _assert_inline_citation_repair_reuses_sources_line()
     _assert_agent_context_budget_keeps_relevant_excerpt()
+    _assert_broad_answer_budget_expands_for_list_questions()
+    _assert_incomplete_agent_stream_falls_back()
     _assert_agent_wait_heartbeat_keeps_draft_visible()
     _assert_success_stream_reports_first_token_latency()
     _assert_reranker_cache_hit_progress_is_visible()
@@ -141,6 +144,46 @@ def _assert_success_stream_reports_first_token_latency() -> None:
         pipeline.perf_counter = original_perf_counter  # type: ignore[assignment]
 
 
+def _assert_broad_answer_budget_expands_for_list_questions() -> None:
+    settings = _fake_settings()
+    _assert(
+        pipeline._agent_max_tokens_for_question("list all xiaos", "support", settings) == 2000,
+        "broad list questions should use the general 2000-token cap",
+    )
+    _assert(
+        pipeline._agent_max_tokens_for_question("Which pin should I check?", "wiring_or_pinout", settings)
+        == 2000,
+        "focused questions should also use the general 2000-token cap",
+    )
+
+
+def _assert_incomplete_agent_stream_falls_back() -> None:
+    original_load_settings = pipeline.load_settings
+    original_retrieve_progressive = pipeline.retrieve_progressive
+    original_generate_stream = pipeline._generate_with_agent_stream
+    try:
+        pipeline.load_settings = _fake_settings  # type: ignore[assignment]
+        pipeline.retrieve_progressive = _fake_retrieve_progressive  # type: ignore[assignment]
+        pipeline._generate_with_agent_stream = _length_limited_agent_stream  # type: ignore[assignment]
+
+        events = list(pipeline.answer_question_stream(None, "list all xiaos"))
+        answer, _citations, diagnostics, _progress_html = events[-1]
+
+        _assert("**RA4M" not in answer, "truncated markdown should not be returned as final answer")
+        _assert("deterministic fallback" in answer, "length-limited agent output should fall back")
+        _assert(diagnostics.get("agent_used") is False, "truncated agent output should be marked unused")
+        _assert(diagnostics.get("agent_truncated") is True, "truncated agent output should be diagnostic")
+        _assert(diagnostics.get("agent_finish_reason") == "length", "finish_reason should be retained")
+        _assert(
+            diagnostics.get("agent", {}).get("prompt", {}).get("max_tokens", 0) == 2000,
+            "list question diagnostics should show the general 2000-token cap",
+        )
+    finally:
+        pipeline.load_settings = original_load_settings  # type: ignore[assignment]
+        pipeline.retrieve_progressive = original_retrieve_progressive  # type: ignore[assignment]
+        pipeline._generate_with_agent_stream = original_generate_stream  # type: ignore[assignment]
+
+
 def _assert_reranker_cache_hit_progress_is_visible() -> None:
     detail = pipeline._retrieval_progress_detail(
         {
@@ -201,6 +244,33 @@ def _assert_system_prompt_preserves_acronyms() -> None:
     _assert(
         "full service name and acronym" in pipeline.SYSTEM_PROMPT,
         "agent prompt should expand service acronyms for clear cited answers",
+    )
+
+
+def _assert_agent_prompt_allows_markdown_tables() -> None:
+    _assert(
+        "Markdown tables" in pipeline.SYSTEM_PROMPT,
+        "agent system prompt should allow Markdown tables when they improve scanability",
+    )
+    chunk = KnowledgeChunk(
+        id="table-source",
+        title="XIAO pin comparison",
+        source="https://wiki.seeedstudio.com/test/",
+        text="D6 maps to GPIO21. D7 maps to GPIO20. Use a table for pin maps when helpful.",
+        kind="wiki",
+    )
+    messages = pipeline._build_agent_messages(
+        question="Compare the XIAO pins in a table.",
+        image_summary={"provided": False},
+        image_data_url=None,
+        intent="wiring_or_pinout",
+        chunks=[chunk],
+        context_chars=1000,
+    )
+    prompt = str(messages[1]["content"])
+    _assert(
+        "Use Markdown tables when useful" in prompt,
+        "agent user prompt should request Markdown tables for comparison/pin-map answers",
     )
 
 
@@ -358,6 +428,106 @@ def _assert_contextual_exact_term_repair_avoids_source_detail_noise() -> None:
     for expected in ("`2.5km` [kit-source]", "`LoRaWAN Node` [kit-source]"):
         _assert(expected in sx1262, f"kit application repair should include {expected}")
 
+    sx1262_specs = pipeline._ensure_answer_exact_terms(
+        "The Wio-SX1262 supports SX1262 LoRa, +22 dBm transmit power, 868 MHz operation, and SPI [sx-source].",
+        "What are the key radio specs and MCU interface for the Wio-SX1262 module?",
+        [
+            KnowledgeChunk(
+                id="sx-source",
+                title="Wio-SX1262 features",
+                source="https://wiki.seeedstudio.com/test/",
+                text="Frequency coverage from 868 MHz to 960 MHz. With SPI interface. Up to +22 dBm.",
+                kind="wiki",
+            )
+        ],
+    )
+    _assert("`960` [sx-source]" in sx1262_specs, "Wio-SX1262 repair should preserve the upper frequency term")
+
+    wio_bootloader = pipeline._ensure_answer_exact_terms(
+        "Slide the power switch twice very quickly, then check for the blue LED and the Arduino port [boot-source].",
+        "How do I put Wio Terminal into bootloader mode when Arduino upload cannot find the serial port?",
+        [
+            KnowledgeChunk(
+                id="boot-source",
+                title="Wio Terminal bootloader FAQ",
+                source="https://wiki.seeedstudio.com/test/",
+                text="Slide the switch **twice very quickly**. The blue LED will start to breath.",
+                kind="wiki",
+            )
+        ],
+    )
+    _assert(
+        "`Slide the switch` [boot-source]" in wio_bootloader,
+        "Wio Terminal bootloader repair should preserve the FAQ switch wording",
+    )
+
+    mg24_recovery = pipeline._ensure_answer_exact_terms(
+        "Pull PC1 low during reset, then retry upload [mg24-source].",
+        "My XIAO MG24 stopped accepting uploads after deep sleep. What should I try?",
+        [
+            KnowledgeChunk(
+                id="mg24-source",
+                title="MG24 deep sleep recovery",
+                source="https://wiki.seeedstudio.com/test/",
+                text="Connect PC1 to GND before resetting the device, then upload or erase flash.",
+                kind="wiki",
+            )
+        ],
+    )
+    _assert("`GND` [mg24-source]" in mg24_recovery, "MG24 recovery repair should preserve GND")
+    _assert("`erase` [mg24-source]" in mg24_recovery, "MG24 recovery repair should preserve erase")
+
+    pretrained_upload = pipeline._ensure_answer_exact_terms(
+        "Click Deploy Model and verify the live feed [vision-source].",
+        "How do I deploy a SenseCraft AI pretrained person-detection model to Grove Vision AI V2 and verify it is working?",
+        [
+            KnowledgeChunk(
+                id="vision-source",
+                title="Grove Vision AI V2 model upload",
+                source="https://wiki.seeedstudio.com/test/",
+                text=(
+                    "The model upload process may take approximately 3-5 minutes. "
+                    "After deployment, check the real-time video feed for bounding boxes."
+                ),
+                kind="wiki",
+            )
+        ],
+    )
+    for expected in ("`3-5 minutes` [vision-source]", "`real-time video feed` [vision-source]", "`bounding boxes` [vision-source]"):
+        _assert(expected in pretrained_upload, f"SenseCraft pretrained-model repair should preserve {expected}")
+
+    sensecraft_uart = pipeline._ensure_answer_exact_terms(
+        "Use UART at 921600 baud, 8 data bits, parity None, and 1 stop bit [uart-source].",
+        "When using XIAO ESP32S3 Sense as a SenseCraft AI sensor over UART, which GPIOs and serial settings are used?",
+        [
+            KnowledgeChunk(
+                id="uart-source",
+                title="SenseCraft UART output",
+                source="https://wiki.seeedstudio.com/test/",
+                text="For the AI Sensor XIAO ESP32S3 Sense, the output pins are defined as TX: GPIO43 and RX: GPIO44.",
+                kind="wiki",
+            )
+        ],
+    )
+    for expected in ("`GPIO43` [uart-source]", "`GPIO44` [uart-source]"):
+        _assert(expected in sensecraft_uart, f"SenseCraft UART repair should preserve {expected}")
+
+    adc_specs = pipeline._ensure_answer_exact_terms(
+        "The 8-Channel 12-Bit ADC uses 12 bit ADC resolution and I2C [adc-source].",
+        "What are the core specs of the 8-Channel 12-Bit ADC for Raspberry Pi STM32F030 board?",
+        [
+            KnowledgeChunk(
+                id="adc-source",
+                title="8-Channel 12-Bit ADC specification",
+                source="https://wiki.seeedstudio.com/test/",
+                text="Maximum Clock Frequency 48 MHz. Program Memory Size 16kB. Data RAM Size 4 kB. I2C address 0x04(default).",
+                kind="wiki",
+            )
+        ],
+    )
+    for expected in ("`48 MHz` [adc-source]", "`16kB` [adc-source]", "`4 kB` [adc-source]", "`0x04` [adc-source]"):
+        _assert(expected in adc_specs, f"ADC spec repair should preserve {expected}")
+
     rs485 = pipeline._ensure_answer_exact_terms(
         "RS485 RX is D4, TX is D5, and the enable pin is GPIO4 [rs485-source].",
         "Which pins are used for RS485 UART RX/TX and which pin controls enable?",
@@ -479,6 +649,17 @@ def _assert_inline_citation_repair_reuses_sources_line() -> None:
     _assert(answer.count("Sources:") == 1, "citation repair should not create duplicate Sources lines")
     _assert("[source-b]" in answer, "citation repair should append missing citations to the existing Sources line")
 
+    folded = pipeline._ensure_inline_citations("Pin table.\n\n[source-b], [source-a]", chunks)
+    _assert(folded.count("Sources:") == 1, "standalone citation lines should become a Sources line")
+    _assert(
+        "Pin table.\n\nSources: [source-b] [source-a]" == folded,
+        "standalone citation-only paragraphs should not render as orphan answer text",
+    )
+
+    merged = pipeline._ensure_inline_citations("Pin table.\n\n[source-b]\n\nSources: [source-a]", chunks)
+    _assert(merged.count("Sources:") == 1, "folded citation lines should merge into an existing Sources line")
+    _assert("Sources: [source-a] [source-b]" in merged, "folded citation line should preserve its source ID")
+
 
 def _assert_agent_context_budget_keeps_relevant_excerpt() -> None:
     chunk = KnowledgeChunk(
@@ -517,6 +698,7 @@ def _fake_settings() -> Settings:
         embedding_base_url="",
         rerank_base_url="",
         agent_base_url="https://example.test/v1",
+        answer_log_enabled=False,
     )
 
 
@@ -579,6 +761,10 @@ def _broken_agent_stream(*_args, **_kwargs) -> Iterator[EndpointResult]:
 def _good_agent_stream(*_args, **_kwargs) -> Iterator[EndpointResult]:
     yield EndpointResult(ok=True, data="Use the cited source ")
     yield EndpointResult(ok=True, data="for the pin check [test-source].")
+
+
+def _length_limited_agent_stream(*_args, **_kwargs) -> Iterator[EndpointResult]:
+    yield EndpointResult(ok=True, data="| **RA4M", meta={"finish_reason": "length"})
 
 
 def _slow_agent_stream(*_args, **_kwargs) -> Iterator[EndpointResult]:

@@ -25,10 +25,15 @@ def main() -> None:
     _assert_rerank_text_stays_compact_without_metadata()
     _assert_board_metadata_choice_heuristic()
     _assert_source_topic_metadata_heuristic()
+    _assert_adaptive_retrieval_budget()
     _assert_detail_scores_promote_exact_configuration_chunks()
+    _assert_curated_pinout_chunks_are_promoted_after_rerank()
     _assert_rerank_heartbeats_surface_wait_progress()
     _assert_rerank_result_cache_is_keyed_to_exact_inputs()
     _assert_retrieve_progressive_reuses_cached_rerank_result()
+    _assert_graph_expansion_promotes_low_rank_source_matches()
+    _assert_graph_expansion_appends_when_reranker_will_score_candidates()
+    _assert_graph_expansion_skips_board_comparisons()
     print("PASS retrieval formatting regression")
 
 
@@ -133,6 +138,67 @@ def _assert_source_topic_metadata_heuristic() -> None:
     )
 
 
+def _assert_adaptive_retrieval_budget() -> None:
+    settings = Settings(
+        top_k=10,
+        candidate_k=12,
+        adaptive_top_k_enabled=True,
+        focused_top_k=6,
+        focused_candidate_k=8,
+    )
+    focused = retrieval._adaptive_retrieval_budget(
+        "Which XIAO should I choose for 5 GHz WiFi?",
+        settings,
+        has_image=False,
+    )
+    _assert(focused.mode == "focused", "specific board-choice queries should use the focused budget")
+    _assert(focused.top_k == 6, "focused source count should be bounded")
+    _assert(focused.candidate_k == 8, "focused rerank candidate count should be bounded")
+
+    broad = retrieval._adaptive_retrieval_budget(
+        "List all XIAO platforms and variants in a table.",
+        settings,
+        has_image=False,
+    )
+    _assert(broad.mode == "full", "broad/table queries should keep the full source budget")
+    _assert(broad.top_k == 10, "full source budget should keep TOP_K")
+    _assert(broad.candidate_k == 12, "full candidate budget should keep CANDIDATE_K")
+
+    open_choice = retrieval._adaptive_retrieval_budget("Which XIAO should I choose?", settings, has_image=False)
+    _assert(open_choice.mode == "full", "open-ended board-choice queries should keep full context")
+
+    esphome = retrieval._adaptive_retrieval_budget(
+        "What ESPHome YAML board settings should I use for Seeed Studio XIAO ESP32C3?",
+        settings,
+        has_image=False,
+    )
+    _assert(esphome.mode == "full", "setup configuration queries should keep full context")
+
+    specs = retrieval._adaptive_retrieval_budget(
+        "What are the core specs of the 8-Channel 12-Bit ADC for Raspberry Pi STM32F030 board?",
+        settings,
+        has_image=False,
+    )
+    _assert(specs.mode == "full", "specification table queries should keep full context")
+
+    image = retrieval._adaptive_retrieval_budget("What board is this?", settings, has_image=True)
+    _assert(image.mode == "full", "image queries should keep full context")
+
+    disabled = retrieval._adaptive_retrieval_budget(
+        "Which XIAO should I choose for 5 GHz WiFi?",
+        Settings(
+            top_k=10,
+            candidate_k=12,
+            adaptive_top_k_enabled=False,
+            focused_top_k=6,
+            focused_candidate_k=8,
+        ),
+        has_image=False,
+    )
+    _assert(disabled.mode == "fixed", "disabled adaptive retrieval should report fixed mode")
+    _assert(disabled.top_k == 10 and disabled.candidate_k == 12, "disabled adaptive retrieval should preserve settings")
+
+
 def _assert_detail_scores_promote_exact_configuration_chunks() -> None:
     esphome_chunk = KnowledgeChunk(
         id="esphome",
@@ -164,6 +230,55 @@ def _assert_detail_scores_promote_exact_configuration_chunks() -> None:
         )
         >= 2.0,
         "camera-slot pin questions should promote the exact occupancy table",
+    )
+
+    sx1262_chunk = KnowledgeChunk(
+        id="sx1262-features",
+        title="Wio-SX1262 features",
+        source="https://example.test/wio-sx1262",
+        text="Frequency coverage from 868 MHz to 960 MHz. With SPI interface. Up to +22 dBm.",
+    )
+    _assert(
+        _configuration_detail_score(
+            "What are the key radio specs and MCU interface for the Wio-SX1262 module?",
+            sx1262_chunk,
+        )
+        >= 1.0,
+        "Wio-SX1262 spec questions should promote exact frequency/interface chunks",
+    )
+
+
+def _assert_curated_pinout_chunks_are_promoted_after_rerank() -> None:
+    wiki_overview = KnowledgeChunk(
+        id="wiki-overview",
+        title="Getting Started with XIAO W5500 Ethernet Adapter",
+        source="https://wiki.seeedstudio.com/xiao_w5500_ethernet_adapter/",
+        text="Camera streaming and Ethernet examples for the W5500 adapter.",
+        board_id="xiao-w5500-ethernet-adapter",
+        kind="wiki",
+    )
+    shield_overview = KnowledgeChunk(
+        id="shield-overview",
+        title="W5500 Ethernet Shield hardware overview",
+        source="https://wiki.seeedstudio.com/W5500_Ethernet_Shield_v1.0/",
+        text="Generic W5500 shield pins for Arduino D11 D12 D13.",
+        kind="wiki",
+    )
+    pinout = KnowledgeChunk(
+        id="xiao-w5500-ethernet-adapter-pinout",
+        title="XIAO W5500 Ethernet Adapter pin map",
+        source="https://wiki.seeedstudio.com/xiao_w5500_ethernet_adapter/",
+        text="D1 maps to ETH_PHY_CS; D8 maps to ETH_SPI_SCK; D9 maps to ETH_SPI_MISO; D10 maps to ETH_SPI_MOSI.",
+        board_id="xiao-w5500-ethernet-adapter",
+        kind="pinout",
+    )
+    promoted = retrieval._promote_curated_fact_chunks(
+        "What SPI pins does the XIAO W5500 Ethernet Adapter use?",
+        [wiki_overview, shield_overview, pinout],
+    )
+    _assert(
+        promoted[0].id == "xiao-w5500-ethernet-adapter-pinout",
+        "board-specific curated pinout chunks should lead final source order for pin queries",
     )
 
 
@@ -309,6 +424,126 @@ def _assert_retrieve_progressive_reuses_cached_rerank_result() -> None:
         retrieval.load_knowledge_base = original_load_knowledge_base  # type: ignore[assignment]
         retrieval._rerank_with_heartbeats = original_rerank_with_heartbeats  # type: ignore[assignment]
         retrieval._clear_rerank_result_cache()
+
+
+def _assert_graph_expansion_promotes_low_rank_source_matches() -> None:
+    noisy = [
+        KnowledgeChunk(id=f"noise-{index}", title=f"Noise {index}", source="", text="generic XIAO board note")
+        for index in range(6)
+    ]
+    target = KnowledgeChunk(
+        id="bus-servo-overview",
+        title="Getting Started with XIAO Bus Servo Adapter",
+        source="https://wiki.seeedstudio.com/xiao_bus_servo_adapter/",
+        text=(
+            "The XIAO Bus Servo Adapter includes the XIAO ESP32-C3, comes with a "
+            "3D-printed case, and can directly control bus servos."
+        ),
+        board_id="xiao-esp32c3",
+        metadata={
+            "aliases": ["XIAO ESP32C3", "XIAO ESP32-C3", "xiao-esp32c3"],
+            "citations": [
+                {
+                    "title": "Getting Started with XIAO Bus Servo Adapter",
+                    "url": "https://wiki.seeedstudio.com/xiao_bus_servo_adapter/",
+                }
+            ],
+            "tags": ["wiki", "robotics", "bus", "servo", "adapter"],
+        },
+    )
+    chunks = [*noisy, target]
+    selected = [(chunk, float(10 - index)) for index, chunk in enumerate(chunks)]
+    settings = Settings(graph_retrieval_enabled=True, graph_candidate_slots=4, top_k=5, candidate_k=7)
+    expanded, diagnostics = retrieval._expand_rerank_candidates_with_graph(
+        query="Which XIAO-based board should I use for a ready-to-use bus servo robotics controller?",
+        selected=selected,
+        ranked=selected,
+        chunks=chunks,
+        settings=settings,
+    )
+    top_ids = [chunk.id for chunk, _score in expanded[: settings.top_k]]
+    _assert("bus-servo-overview" in top_ids, "graph expansion should promote source/product matches into top_k")
+    _assert(diagnostics["graph_candidates_added"] >= 1, "graph expansion should report added candidates")
+
+
+def _assert_graph_expansion_skips_board_comparisons() -> None:
+    mg24 = KnowledgeChunk(
+        id="mg24",
+        title="XIAO MG24 identity",
+        source="https://example.test/mg24",
+        text="XIAO MG24 supports low-power modes.",
+        board_id="xiao-mg24",
+        metadata={"aliases": ["XIAO MG24", "xiao-mg24"]},
+    )
+    c6 = KnowledgeChunk(
+        id="c6",
+        title="XIAO ESP32C6 identity",
+        source="https://example.test/c6",
+        text="XIAO ESP32C6 supports Thread and Zigbee.",
+        board_id="xiao-esp32c6",
+        metadata={"aliases": ["XIAO ESP32C6", "XIAO ESP32-C6", "xiao-esp32c6"]},
+    )
+    comparison = KnowledgeChunk(
+        id="comparison",
+        title="XIAO comparison table",
+        source="https://example.test/comparison",
+        text="XIAO MG24 has 1.95 uA low-power current. XIAO ESP32C6 has 15 uA low-power current.",
+    )
+    selected = [(comparison, 3.0), (mg24, 2.0), (c6, 1.0)]
+    settings = Settings(graph_retrieval_enabled=True, graph_candidate_slots=4, top_k=3, candidate_k=3)
+    expanded, diagnostics = retrieval._expand_rerank_candidates_with_graph(
+        query="Between XIAO MG24 and XIAO ESP32C6, which comparison table entry has lower low power current?",
+        selected=selected,
+        ranked=selected,
+        chunks=[comparison, mg24, c6],
+        settings=settings,
+    )
+    _assert(expanded == selected, "board comparison queries should keep baseline ordering")
+    _assert(diagnostics.get("graph_skipped_reason") == "board_comparison_query", "skip reason should be reported")
+
+
+def _assert_graph_expansion_appends_when_reranker_will_score_candidates() -> None:
+    baseline = [
+        KnowledgeChunk(id=f"baseline-{index}", title=f"Baseline {index}", source="", text="stable lexical candidate")
+        for index in range(3)
+    ]
+    target = KnowledgeChunk(
+        id="rpi-base-hat",
+        title="Grove Base Hat for Raspberry Pi Zero > Specifications",
+        source="https://wiki.seeedstudio.com/Grove_Base_Hat_for_Raspberry_Pi_Zero/",
+        text="Operating voltage is 3.3V. ADC is 12-bit and I2C address is 0x04.",
+        metadata={
+            "citations": [
+                {
+                    "title": "Grove Base Hat for Raspberry Pi Zero",
+                    "url": "https://wiki.seeedstudio.com/Grove_Base_Hat_for_Raspberry_Pi_Zero/",
+                }
+            ],
+            "source_file": "Top_Brand/Raspberry_Pi/Pi_HAT/Grove_Base_Hat_for_Raspberry_Pi_Zero.md",
+        },
+    )
+    selected = [(chunk, float(10 - index)) for index, chunk in enumerate(baseline)]
+    settings = Settings(graph_retrieval_enabled=True, graph_candidate_slots=2, top_k=3, candidate_k=3)
+    expanded, diagnostics = retrieval._expand_rerank_candidates_with_graph(
+        query="What voltage and I2C address does Grove Base Hat for Raspberry Pi Zero use?",
+        selected=selected,
+        ranked=selected,
+        chunks=[*baseline, target],
+        settings=settings,
+        preserve_selected=True,
+    )
+    _assert(
+        [chunk.id for chunk, _score in expanded[: len(selected)]] == [chunk.id for chunk, _score in selected],
+        "preserve mode should keep baseline candidates first",
+    )
+    _assert(
+        any(chunk.id == "rpi-base-hat" for chunk, _score in expanded[len(selected) :]),
+        "preserve mode should append graph candidates for the reranker",
+    )
+    _assert(
+        diagnostics["graph_preserved_baseline_candidates"] is True,
+        "preserve mode should be reported in diagnostics",
+    )
 
 
 def _assert(condition: bool, message: str) -> None:

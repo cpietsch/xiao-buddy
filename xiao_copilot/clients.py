@@ -324,7 +324,7 @@ def chat_completion(
         if error:
             return EndpointResult(ok=False, error=error)
         content = _chat_message_content(body)
-        return EndpointResult(ok=True, data=content)
+        return EndpointResult(ok=True, data=content, meta=_chat_choice_meta(body))
     except requests.HTTPError as exc:
         return EndpointResult(ok=False, error=f"{exc}{_response_detail(exc.response)}")
     except Exception as exc:  # noqa: BLE001
@@ -369,8 +369,13 @@ def chat_completion_stream(
                     yield EndpointResult(ok=False, error=error)
                     return
                 content = _chat_delta_content(body)
+                meta = _chat_choice_meta(body)
                 if content:
-                    yield EndpointResult(ok=True, data=content)
+                    yield EndpointResult(ok=True, data=content, meta=meta)
+                if meta.get("finish_reason"):
+                    if not content:
+                        yield EndpointResult(ok=True, data="", meta=meta)
+                    return
     except requests.HTTPError as exc:
         yield EndpointResult(ok=False, error=f"{exc}{_response_detail(exc.response)}")
     except Exception as exc:  # noqa: BLE001
@@ -404,6 +409,14 @@ def _chat_delta_content(body: dict[str, Any]) -> str:
     if "content" in delta:
         return _content_to_text(delta.get("content"))
     return _content_to_text(choice.get("text"))
+
+
+def _chat_choice_meta(body: dict[str, Any]) -> dict[str, Any]:
+    choices = body.get("choices") or []
+    if not choices or not isinstance(choices[0], dict):
+        return {}
+    finish_reason = choices[0].get("finish_reason")
+    return {"finish_reason": finish_reason} if finish_reason else {}
 
 
 def _provider_error_message(body: Any) -> str:
