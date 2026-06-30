@@ -9,6 +9,7 @@ IGNORED_VECTOR_DATA_PATTERNS = {
     "data/index/*.f16",
     "data/index/*.hnsw",
     "data/index/*.faiss",
+    "data/index/knowledge_graph.json",
 }
 TRACKED_INDEX_ALLOWLIST = {
     "data/index/xiao_vectors.json",

@@ -5,13 +5,14 @@ import re
 from queue import Empty, Queue
 from collections.abc import Iterator
 from collections import Counter, OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from threading import Lock, Thread
 from time import perf_counter
 
 from xiao_copilot.clients import EndpointResult, embed_query, embed_texts, rerank
 from xiao_copilot.config import Settings
+from xiao_copilot.knowledge_graph import KnowledgeGraph, get_knowledge_graph, graph_summary
 from xiao_copilot.knowledge_base import KnowledgeChunk, load_knowledge_base
 from xiao_copilot.vector_index import configured_index_paths, load_vector_index, search_vector_index
 
@@ -82,6 +83,46 @@ TECHNICAL_QUERY_TERMS = {
     "wifi",
     "zigbee",
 }
+FULL_CONTEXT_QUERY_PHRASES = (
+    "list all",
+    "all xiao",
+    "all xiaos",
+    "all boards",
+    "all variants",
+    "every xiao",
+    "available xiao",
+    "compare",
+    "comparison",
+    " vs ",
+    "versus",
+    "differences",
+    "table",
+    "platforms",
+    "variants",
+    "options",
+    "tradeoffs",
+)
+FOCUSED_BOARD_CHOICE_TERMS = (
+    "5 ghz",
+    "wifi",
+    "wi-fi",
+    "camera",
+    "microphone",
+    "audio",
+    "tinyml",
+    "low power",
+    "battery",
+    "matter",
+    "thread",
+    "zigbee",
+    "lora",
+    "lorawan",
+    "rs485",
+    "ethernet",
+    "i2c",
+    "spi",
+    "uart",
+)
 
 
 @dataclass(frozen=True)
@@ -93,6 +134,14 @@ class _QueryProfile:
     token_set: frozenset[str]
     distinctive_terms: tuple[str, ...]
     technical_terms: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _RetrievalBudget:
+    top_k: int
+    candidate_k: int
+    mode: str
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -126,6 +175,13 @@ def warm_retrieval_caches(settings: Settings | None = None) -> dict[str, object]
         "lexical_cache_ms": _elapsed_ms(lexical_started_at),
     }
     if settings is not None:
+        if settings.graph_retrieval_enabled:
+            graph_started_at = perf_counter()
+            graph = get_knowledge_graph(chunks, artifact_path=settings.graph_artifact_path)
+            diagnostics["knowledge_graph"] = graph_summary(graph)
+            diagnostics["knowledge_graph_artifact_status"] = graph.metadata.get("artifact_status", "")
+            diagnostics["knowledge_graph_artifact_path"] = graph.metadata.get("artifact_path", "")
+            diagnostics["knowledge_graph_ms"] = _elapsed_ms(graph_started_at)
         vector_started_at = perf_counter()
         try:
             manifest, data = configured_index_paths(
@@ -156,12 +212,76 @@ def retrieve(
     return final_stage.chunks, final_stage.diagnostics
 
 
+def _adaptive_retrieval_budget(query: str, settings: Settings, *, has_image: bool) -> _RetrievalBudget:
+    configured_top_k = max(1, int(settings.top_k))
+    configured_candidate_k = max(configured_top_k, int(settings.candidate_k))
+    if not settings.adaptive_top_k_enabled:
+        return _RetrievalBudget(
+            top_k=configured_top_k,
+            candidate_k=configured_candidate_k,
+            mode="fixed",
+            reason="disabled",
+        )
+
+    profile = _query_profile(query)
+    full_reason = _full_retrieval_context_reason(profile, has_image=has_image)
+    if full_reason:
+        return _RetrievalBudget(
+            top_k=configured_top_k,
+            candidate_k=configured_candidate_k,
+            mode="full",
+            reason=full_reason,
+        )
+
+    focused_top_k = min(configured_top_k, max(1, int(settings.focused_top_k)))
+    focused_candidate_k = min(
+        configured_candidate_k,
+        max(focused_top_k, int(settings.focused_candidate_k)),
+    )
+    return _RetrievalBudget(
+        top_k=focused_top_k,
+        candidate_k=focused_candidate_k,
+        mode="focused",
+        reason="specific_query",
+    )
+
+
+def _full_retrieval_context_reason(profile: _QueryProfile, *, has_image: bool) -> str:
+    if has_image:
+        return "image_query"
+    q = profile.lower
+    if any(phrase in q for phrase in FULL_CONTEXT_QUERY_PHRASES):
+        return "broad_or_comparison_query"
+    if "esphome" in q and ("yaml" in q or "home assistant" in q):
+        return "setup_configuration_query"
+    if any(term in q for term in ("core specs", "key specs", "specification", "specifications")):
+        return "specification_query"
+    board_choice = (
+        "which xiao" in q
+        or "which board" in q
+        or "which supported xiao" in q
+        or "choose" in q
+        or "pick" in q
+        or "best" in q
+    )
+    if board_choice and not any(term in q for term in FOCUSED_BOARD_CHOICE_TERMS):
+        return "open_board_choice"
+    if len(profile.distinctive_terms) <= 1 and len(profile.technical_terms) <= 1:
+        return "low_specificity_query"
+    return ""
+
+
 def retrieve_progressive(
     query: str,
     settings: Settings,
     image_data_url: str | None = None,
 ) -> Iterator[RetrievalStage]:
     retrieval_started_at = perf_counter()
+    configured_top_k = settings.top_k
+    configured_candidate_k = settings.candidate_k
+    budget = _adaptive_retrieval_budget(query, settings, has_image=bool(image_data_url))
+    if budget.top_k != settings.top_k or budget.candidate_k != settings.candidate_k:
+        settings = replace(settings, top_k=budget.top_k, candidate_k=budget.candidate_k)
     timing_ms: dict[str, float] = {}
     load_started_at = perf_counter()
     chunks = load_knowledge_base()
@@ -179,6 +299,17 @@ def retrieve_progressive(
         "embedding_pool_chunks": len(embedding_pool),
         "vector_index_used": False,
         "reranker_used": False,
+        "top_k": settings.top_k,
+        "candidate_k": settings.candidate_k,
+        "configured_top_k": configured_top_k,
+        "configured_candidate_k": configured_candidate_k,
+        "adaptive_top_k_enabled": settings.adaptive_top_k_enabled,
+        "retrieval_budget": {
+            "mode": budget.mode,
+            "reason": budget.reason,
+            "top_k": settings.top_k,
+            "candidate_k": settings.candidate_k,
+        },
     }
 
     query_embedding_started_at = perf_counter()
@@ -255,12 +386,24 @@ def retrieve_progressive(
         for chunk, score in ranked[: settings.candidate_k]
     ]
     top_scored = _select_rerank_candidates(query, ranked, lexical_ranked, settings.candidate_k)
+    graph_started_at = perf_counter()
+    top_scored, graph_diagnostics = _expand_rerank_candidates_with_graph(
+        query=query,
+        selected=top_scored,
+        ranked=ranked,
+        chunks=chunks,
+        settings=settings,
+        preserve_selected=bool(settings.rerank_base_url),
+    )
+    if graph_diagnostics:
+        diagnostics.update(graph_diagnostics)
+    timing_ms["graph_expansion"] = _elapsed_ms(graph_started_at)
+    timing_ms["candidate_selection"] = _elapsed_ms(candidate_started_at)
     top = [chunk for chunk, _score in top_scored]
     diagnostics["selected_reranker_candidates"] = [
         {"id": chunk.id, "score": round(float(score), 4)}
         for chunk, score in top_scored
     ]
-    timing_ms["candidate_selection"] = _elapsed_ms(candidate_started_at)
     preview_timings = dict(timing_ms)
     preview_timings["total"] = _elapsed_ms(retrieval_started_at)
     preview_top = top[: settings.top_k]
@@ -367,6 +510,14 @@ def retrieve_progressive(
             for index, _score, _combined_score in hybrid_scores
             if 0 <= index < len(top)
         ]
+        promoted_ordered = _promote_curated_fact_chunks(query, ordered)
+        if [chunk.id for chunk in promoted_ordered] != [chunk.id for chunk in ordered]:
+            diagnostics["curated_fact_promotions"] = [
+                chunk.id
+                for chunk in promoted_ordered[: settings.top_k]
+                if chunk.kind != "wiki"
+            ]
+        ordered = promoted_ordered
         top = _expand_source_context(query, ordered, chunks, settings.top_k)
         diagnostics["source_context_expanded"] = [chunk.id for chunk in top] != [
             chunk.id for chunk in ordered[: settings.top_k]
@@ -605,6 +756,44 @@ def _hybrid_rerank_scores(
     return sorted(combined, key=lambda item: item[2], reverse=True)
 
 
+def _promote_curated_fact_chunks(query: str, ordered: list[KnowledgeChunk]) -> list[KnowledgeChunk]:
+    if len(ordered) <= 1:
+        return ordered
+    profile = _query_profile(query)
+    scored = [
+        (index, chunk, _curated_fact_promotion_score(profile, chunk))
+        for index, chunk in enumerate(ordered)
+    ]
+    if not any(score > 0 for _index, _chunk, score in scored):
+        return ordered
+    scored.sort(key=lambda item: (-item[2], item[0]))
+    return [chunk for _index, chunk, _score in scored]
+
+
+def _curated_fact_promotion_score(profile: _QueryProfile, chunk: KnowledgeChunk) -> float:
+    q = profile.lower
+    score = 0.0
+    if (
+        any(term in q for term in ("pin", "pins", "gpio", "spi", "i2c", "uart", "adc", "dac"))
+        and chunk.kind == "pinout"
+        and (
+            _board_hint_score_for_profile(profile, chunk) > 0
+            or _recall_match_score_for_profile(profile, chunk) >= 0.8
+        )
+    ):
+        score += 2.5
+    if (
+        any(term in q for term in ("not detected", "not responding", "fails", "error", "reset", "brownout", "boot"))
+        and chunk.kind in {"gotchas", "support", "note"}
+        and (
+            _board_hint_score_for_profile(profile, chunk) > 0
+            or _recall_match_score_for_profile(profile, chunk) >= 0.8
+        )
+    ):
+        score += 1.8
+    return score
+
+
 def _select_rerank_candidates(
     query: str,
     ranked: list[tuple[KnowledgeChunk, float]],
@@ -651,6 +840,128 @@ def _select_rerank_candidates(
             break
 
     return selected
+
+
+def _expand_rerank_candidates_with_graph(
+    *,
+    query: str,
+    selected: list[tuple[KnowledgeChunk, float]],
+    ranked: list[tuple[KnowledgeChunk, float]],
+    chunks: list[KnowledgeChunk],
+    settings: Settings,
+    preserve_selected: bool = False,
+) -> tuple[list[tuple[KnowledgeChunk, float]], dict[str, object]]:
+    if not settings.graph_retrieval_enabled or settings.graph_candidate_slots <= 0:
+        return selected, {"graph_retrieval_enabled": False}
+    if not selected:
+        return selected, {"graph_retrieval_enabled": True, "graph_candidates_added": 0}
+
+    graph = get_knowledge_graph(chunks, artifact_path=settings.graph_artifact_path)
+    query_entities = graph.entities_for_text(query)
+    diagnostics: dict[str, object] = {
+        "graph_retrieval_enabled": True,
+        "graph_query_entities": [
+            graph.entities[key].label for key in sorted(query_entities) if key in graph.entities
+        ][:16],
+        "knowledge_graph": graph_summary(graph),
+        "knowledge_graph_artifact_status": graph.metadata.get("artifact_status", ""),
+        "knowledge_graph_artifact_path": graph.metadata.get("artifact_path", ""),
+        "graph_preserved_baseline_candidates": preserve_selected,
+    }
+    if not query_entities:
+        diagnostics["graph_candidates_added"] = 0
+        return selected, diagnostics
+    if _should_skip_graph_expansion(query, query_entities, graph):
+        diagnostics["graph_candidates_added"] = 0
+        diagnostics["graph_skipped_reason"] = "board_comparison_query"
+        return selected, diagnostics
+
+    chunks_by_id = {chunk.id: chunk for chunk in chunks}
+    scored_by_id = {chunk.id: float(score) for chunk, score in ranked}
+    profile = _query_profile(query)
+    graph_matches = graph.rank_chunks(query, limit=max(settings.candidate_k * 16, 256))
+    graph_candidates: list[tuple[KnowledgeChunk, float, float, tuple[str, ...]]] = []
+    for match in graph_matches:
+        chunk = chunks_by_id.get(match.chunk_id)
+        if chunk is None:
+            continue
+        lexical_score = _lexical_score_for_profile(profile, chunk)
+        recall_score = _recall_match_score_for_profile(profile, chunk)
+        graph_score = float(match.score) + lexical_score * 0.45 + recall_score * 0.35
+        if graph_score < 1.1:
+            continue
+        initial_score = scored_by_id.get(chunk.id, 0.0)
+        graph_candidates.append(
+            (
+                chunk,
+                max(initial_score, graph_score),
+                graph_score,
+                match.matched_entities,
+            )
+        )
+
+    graph_candidates.sort(key=lambda item: item[2], reverse=True)
+    graph_slots = min(settings.graph_candidate_slots, max(settings.candidate_k, len(selected)))
+    merged: list[tuple[KnowledgeChunk, float]] = []
+    seen: set[str] = set()
+
+    def add(chunk: KnowledgeChunk, score: float) -> bool:
+        if chunk.id in seen:
+            return False
+        seen.add(chunk.id)
+        merged.append((chunk, score))
+        return True
+
+    if preserve_selected:
+        for chunk, score in selected:
+            add(chunk, score)
+    else:
+        keep_count = min(len(selected), max(2, settings.top_k - min(graph_slots, 2)))
+        for chunk, score in selected[:keep_count]:
+            add(chunk, score)
+
+    added_graph: list[tuple[KnowledgeChunk, float, tuple[str, ...]]] = []
+    for chunk, score, graph_score, entity_keys in graph_candidates:
+        if len(added_graph) >= graph_slots:
+            break
+        if add(chunk, score):
+            added_graph.append((chunk, graph_score, entity_keys))
+
+    if not preserve_selected:
+        for chunk, score in selected:
+            if len(merged) >= len(selected):
+                break
+            add(chunk, score)
+
+    diagnostics["graph_candidates_considered"] = len(graph_matches)
+    diagnostics["graph_candidates_added"] = len(added_graph)
+    diagnostics["graph_added_candidates"] = [
+        {
+            "id": chunk.id,
+            "score": round(float(score), 4),
+            "entities": [
+                graph.entities[key].label for key in entity_keys[:6] if key in graph.entities
+            ],
+        }
+        for chunk, score, entity_keys in added_graph
+    ]
+    return merged, diagnostics
+
+
+def _should_skip_graph_expansion(
+    query: str,
+    query_entities: frozenset[str],
+    graph: KnowledgeGraph,
+) -> bool:
+    q = query.lower()
+    if not any(term in q for term in ("between", "compare", "comparison", " vs ", " versus ")):
+        return False
+    board_entities = [
+        key
+        for key in query_entities
+        if key in graph.entities and graph.entities[key].kind == "board"
+    ]
+    return len(board_entities) >= 2
 
 
 def _expand_source_context(
@@ -752,8 +1063,16 @@ def _should_expand_source_context(query: str) -> bool:
             "compile",
             "deploy",
             "firmware",
+            "adc",
+            "battery",
+            "grove port",
+            "i2c address",
             "mqtt gateway",
+            "single channel",
+            "spec",
+            "specs",
             "trigger action",
+            "voltage",
         )
     )
 
@@ -843,6 +1162,8 @@ def _procedure_stage_score_for_profile(profile: _QueryProfile, chunk: KnowledgeC
         score += 0.2
     if "deploy" in q and any(term in text for term in ("deploy", "upload", "connect device")):
         score += 0.75
+    if "deploy" in q and "upload" in text and any(term in text for term in ("3-5 minutes", "3 to 5 minutes")):
+        score += 1.1
     if "verify" in q and any(term in text for term in ("preview", "real-time", "feedback", "bounding box")):
         score += 0.45
     if "firmware" in q and any(term in text for term in ("firmware", "uf2", "bootloader")):
@@ -879,6 +1200,12 @@ def _configuration_detail_score_for_profile(profile: _QueryProfile, chunk: Knowl
     if "trigger" in q and "action" in q:
         if any(term in text for term in ("light up the led", "save image to the sd card", "microsd card")):
             score += 1.2
+
+    if "wio-sx1262" in q and ("spec" in q or "radio" in q):
+        if all(term in text for term in ("868", "960", "+22 dbm", "spi")):
+            score += 1.4
+        elif "frequency coverage" in text and "spi interface" in text:
+            score += 0.9
 
     return score
 

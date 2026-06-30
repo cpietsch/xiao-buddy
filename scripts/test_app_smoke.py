@@ -10,9 +10,11 @@ from scripts.app_smoke import (
     _first_token_ms,
     _format_ms,
     _require_first_token_latency,
+    _require_inline_citation,
     _require_reranker_cache_behavior,
     _reranker_cache_hit_events,
     _reranker_wait_events,
+    _source_label_count,
     _source_draft_events,
     _stream_events_with_first_token,
 )
@@ -22,6 +24,7 @@ def main() -> None:
     _assert_first_token_helpers()
     _assert_stream_first_token_events()
     _assert_source_draft_events()
+    _assert_source_link_helpers()
     _assert_reranker_wait_events()
     _assert_reranker_cache_hit_events()
     _assert_reranker_cache_requirements()
@@ -104,6 +107,33 @@ def _assert_source_draft_events() -> None:
     _assert(
         _source_draft_events([draft_event, missing_answer_event, missing_progress_event]) == [draft_event],
         "only visible source-backed draft events with matching progress should count",
+    )
+
+
+def _assert_source_link_helpers() -> None:
+    answer = "Choose ESP32-C5 [source 1](#source-snippet-1)."
+    source_text = """
+<span id="source-snippets"></span>
+<section class="source-snippet" id="source-snippet-1">
+<p class="source-snippet-kicker">Source 1</p>
+<p class="source-snippet-title">XIAO ESP32-C5 WiFi Usage</p>
+<p class="source-snippet-url">https://wiki.seeedstudio.com/xiao_esp32c5_wifi_usage/</p>
+<p class="source-snippet-text">Use the XIAO ESP32-C5 when 5 GHz WiFi is required.</p>
+</section>
+"""
+    _require_inline_citation(
+        answer,
+        source_text,
+        ("https://wiki.seeedstudio.com/xiao_esp32c5_wifi_usage/",),
+    )
+    _assert(_source_label_count(source_text) == 1, "source labels should be counted from snippet panel HTML")
+    _assert_raises_system_exit(
+        lambda: _require_inline_citation(
+            "Choose ESP32-C5 without a source link.",
+            source_text,
+            ("https://wiki.seeedstudio.com/xiao_esp32c5_wifi_usage/",),
+        ),
+        "missing source link should fail app smoke",
     )
 
 

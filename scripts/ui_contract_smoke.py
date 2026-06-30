@@ -40,6 +40,7 @@ def main() -> None:
     args = _parse_args()
     _check_visible_scope()
     _check_accessibility_contract()
+    _check_source_snippet_rendering()
     _check_progress_contract()
     if args.live:
         _check_live_app(args.timeout)
@@ -83,9 +84,52 @@ def _check_accessibility_contract() -> None:
         "env(safe-area-inset-right)",
         "font-size: 16px",
         "font-variant-numeric: tabular-nums",
+        "color-scheme",
+        "prefers-reduced-motion",
+        ".workspace-row",
+        ".answer-column",
+        ".evidence-row",
+        ".source-snippet",
+        ".chip-radio",
+        ".chip-vision",
     ]
     for token in required_css:
         _assert(token in css, f"CSS accessibility hook missing: {token}")
+
+
+def _check_source_snippet_rendering() -> None:
+    diagnostics = {
+        "top_sources": [
+            {
+                "id": "wiki-1192f8c3890bf8",
+                "title": "XIAO ESP32-C5 WiFi Usage",
+                "source": "https://wiki.seeedstudio.com/xiao_esp32c5_wifi_usage/",
+                "snippet": "Use the XIAO ESP32-C5 when 5 GHz WiFi is required.",
+            }
+        ],
+        "retrieval": {"citations": ["wiki-1192f8c3890bf8"]},
+    }
+    answer = app._render_user_answer("Choose ESP32-C5 [wiki-1192f8c3890bf8].", diagnostics)
+    mixed_answer = app._render_user_answer(
+        "Bluetooth LE, Bluetooth Mesh, NFC [source, wiki-1192f8c3890bf8, xiao-nrf52840-identity].",
+        diagnostics,
+    )
+    sources = app._render_source_snippets(diagnostics)
+    display_diagnostics = app._display_diagnostics(diagnostics)
+    raw_id = "wiki-1192f8c3890bf8"
+
+    _assert(raw_id not in answer, "UI answer should hide raw source IDs")
+    _assert("[source 1](#source-snippet-1)" in answer, "UI answer should link to source snippet")
+    _assert(raw_id not in mixed_answer, "UI answer should hide raw source IDs inside mixed citation groups")
+    _assert("xiao-nrf52840-identity" not in mixed_answer, "UI answer should scrub unknown raw source IDs")
+    _assert(
+        "[source 1](#source-snippet-1)" in mixed_answer,
+        "mixed citation groups should preserve known source links",
+    )
+    _assert(raw_id not in sources, "source snippets should hide raw source IDs")
+    _assert("Source 1" in sources, "source panel should show a human source label")
+    _assert("5 GHz WiFi" in sources, "source panel should include the retrieved text snippet")
+    _assert(raw_id not in str(display_diagnostics), "display diagnostics should hide raw source IDs")
 
 
 def _check_progress_contract() -> None:

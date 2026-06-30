@@ -2,16 +2,53 @@
 
 ## Current State
 
-- Branch: `main`, ahead of `origin/main`.
-- Latest implementation commit: `b9efd8e` (`Gate repeated reranker cache smoke`).
+- Branch: `codex/xiao-buddy-ux-polish-20260520`.
+- Latest implementation commit: `b9efd8e` (`Gate repeated reranker cache smoke`), with uncommitted UX/RAG verification work in progress on this branch.
 - Latest fully exported commit: `6929264abff460d18c4c46a1228e229e0a84f277` (`Show reranker cache hits in progress`).
 - Current export bundle: `dist/local-export/xiao-buddy-6929264.bundle`.
 - Current export manifest: `dist/local-export/manifest.json`.
 - Tailscale app URL: http://100.103.106.102:7861/.
-- App process: detached `app.py` server is responding on the Tailscale URL after startup cache warming; current PID is `1832272`.
+- Custom frontend dev URL: http://100.103.106.102:5173/.
+- App process: detached `app.py` FastAPI/Gradio server is responding on the Tailscale URL after startup cache warming; current PID is `2426184`.
+- Frontend process: detached Vite dev server is responding on the Tailscale URL; current PID is `2380340`.
+- Graphify review: useful as inspiration for a graph sidecar over Seeed/XIAO entities and relationships, but not a replacement for the current HNSW/PQ + lexical + reranker path.
+- Graph retrieval experiment is implemented behind `GRAPH_RETRIEVAL_ENABLED=1` with `GRAPH_CANDIDATE_SLOTS=4`; it builds a deterministic graph from source titles, board aliases, tags, protocols, products, and hardware identifiers, then persists it at `data/index/knowledge_graph.json`.
+- Answer-run logging is enabled in local `.env` with `ANSWER_LOG_PATH=dist/answer-runs.jsonl`; `.env.example` keeps it default-off for normal installs.
 
 ## Completed Verification Hardening
 
+- UX polish branch adds a calmer neutral page background, colored domain chips, a sticky desktop answer column, stronger progress-step affordances, improved source/answer markdown readability, reduced-motion handling, and browser-smoke tolerance for very fast cached answers.
+- User-facing answer citations now hide raw chunk IDs such as `wiki-1192f8c3890bf8`; the Gradio UI maps them to `source 1`, `source 2`, etc. links and renders the matching retrieved text snippets in the source panel to the right. Mixed citation groups such as `[source, wiki-..., xiao-...]` are scrubbed as well. The internal pipeline and eval path still keep exact source IDs for quality checks.
+- Custom frontend scaffold was initialized with `pnpm dlx shadcn@latest init --preset bMn6AcKum --template vite` under `frontend/`, then converted from the starter page into a first XIAO Buddy React UI that streams from the existing Gradio `/ask` endpoint through a Vite `/gradio_api` proxy.
+- Custom frontend answers now use `react-markdown` with `remark-gfm` instead of the initial hand-rolled parser, so headings, ordered/unordered lists, tables, emphasis, blockquotes, inline code, fenced code, and source links render through a real Markdown pipeline.
+- Custom frontend source snippets now render from structured diagnostics with `react-markdown` and `remark-gfm` as well; backend source summaries preserve Markdown line breaks so links, lists, tables, code, and emphasis can render in the right-hand snippet panel.
+- Agent prompts now explicitly request compact Markdown tables when useful for comparisons, pin maps, specs, options, or settings; the Gradio frontend was not changed for this work.
+- Custom frontend removed the visible `Run progress` and `Field answer` labels, keeping accessible section labels while making the progress panel more compact.
+- Custom frontend source-ID scrubber now also handles mixed citation brackets such as `[source, xiao-nrf52840-identity]`, converting them into a source-panel link instead of exposing internal chunk IDs.
+- Custom frontend adaptive-source UI now shows compact evidence-budget chips such as `Focused evidence`, `6/10 sources`, and `Cached rerank`, and the right panel title reflects focused/full source mode instead of a generic count.
+- Added a dedicated React frontend browser gate: `scripts/frontend_smoke.py`, `make frontend-smoke`, and `make frontend-agent-smoke`. It checks desktop/mobile layout, skip-link focus, touch-target size, hidden old labels, adaptive source chips, source-panel Markdown, source links, raw source-ID scrubbing, and screenshots.
+- Added a direct backend stream API at `POST /api/ask`, served by FastAPI/uvicorn in `app.py`, while keeping the legacy Gradio UI and `/gradio_api` routes mounted for compatibility.
+- Custom React frontend now calls `/api/ask` directly through the Vite `/api` proxy instead of starting and following a Gradio `/gradio_api/call/...` event ID.
+- Added `scripts/api_smoke.py` and `make api-smoke`; `verify-demo` now includes direct API smoke and custom React frontend smoke in addition to the existing legacy Gradio checks.
+- `scripts/frontend_smoke.py` now fails if the React app sends any `/gradio_api` request; the latest browser run confirms it uses `/api/ask`.
+- Citation repair now folds standalone citation-only paragraphs into the single `Sources:` line, so generated answers no longer render loose lines such as `source 5, source 4, source 6` above the final source list.
+- Retrieval now promotes high-confidence curated pinout chunks after reranking for focused pin/GPIO/SPI/I2C/UART questions, so the source panel leads with the exact pin map instead of a less specific wiki page when both are retrieved.
+- Structured answer-run logging now writes one JSONL record per completed or failed answer run, including `run_id`, question, bounded answer text, structured citation/source records, original citation Markdown, progress text, stages, event counts, diagnostics, and failure flags such as `fallback_answer`, `agent_error`, `truncated_answer`, `reranker_error`, `embedding_error`, and `empty_answer`.
+- Hosted-agent generation now uses `AGENT_MAX_TOKENS=2000` in general, so broad enumeration/table prompts have enough room to complete; stream `finish_reason` is preserved so token-limit cutoffs are detected and marked instead of being logged as clean successes.
+- Retrieval now uses `TOP_K=10` as the default/final source count for all queries; this sends 10 reranked chunks to the agent and source panel instead of 5.
+- `TOP_K=10` exact-term hardening now preserves the Wio-SX1262 `960` upper frequency, MG24 deep-sleep `GND`, SenseCraft upload `3-5 minutes`, and Wio Terminal bootloader `Slide the switch` wording when the hosted agent paraphrases them.
+- Adaptive retrieval is now enabled by default:
+  - `TOP_K=10` and `CANDIDATE_K=12` remain the full budget.
+  - focused questions use `FOCUSED_TOP_K=6` final sources and `FOCUSED_CANDIDATE_K=8` baseline rerank candidates.
+  - broad list/comparison/image queries keep the full budget.
+  - ESPHome/Home Assistant setup and specification-table queries also keep full context so source-specific citations and spec rows are not dropped.
+- Adaptive-budget exact-term hardening now also preserves SenseCraft UART `GPIO43`/`GPIO44`, MG24 `erase`, SenseCraft verification `real-time video feed` / `bounding boxes`, and ADC spec constants `48 MHz`, `16kB`, `4 kB`, and `0x04`.
+- Deterministic graph sidecar can now add graph-matched source/product candidates to retrieval:
+  - offline/no-reranker fallback may promote graph candidates into the top results.
+  - hosted-reranker mode preserves the baseline HNSW/lexical candidates and appends graph candidates for reranking.
+  - board-comparison queries skip graph expansion so comparison-table retrieval is not displaced.
+  - same-source context recovery now covers specs, voltage, ADC/I2C, Grove ports, battery, and single-channel detail queries.
+  - `GRAPH_ARTIFACT_PATH` points to a versioned persisted graph artifact; startup loads it when the corpus hash matches and rebuilds/saves it only when missing or stale.
 - Reranker quality reports include metadata.
 - Answer quality reports include metadata.
 - Local export verification rejects missing, partial, failing, or stale quality reports.
@@ -21,7 +58,7 @@
 - Answer reports separate source-draft visible latency, hosted-agent generation first-token latency, hosted-agent visible-from-request latency, and final answer latency.
 - Answer reports now include source-draft build time and nested retrieval stage timings.
 - Answer reports now include final answer output-size percentiles so generation-length tuning can be tracked from the summary.
-- Agent answer budget is now `AGENT_MAX_TOKENS=260`; the earlier Wio Terminal `LIS3DHTR` miss is covered by contextual exact-term repair and regression coverage.
+- Agent answer budget is now `AGENT_MAX_TOKENS=2000`; truncation detection remains in place so token-limit cutoffs are flagged in diagnostics/logs.
 - App startup warms the lexical retrieval caches, loads the configured HNSW vector index, and sends one bounded streamed warmup request to the hosted agent before serving traffic.
 - Retrieval now emits a pre-rerank source-backed preview before the hosted reranker finishes, then refreshes the draft after final reranked sources are ready.
 - Retrieval now emits reranker-wait progress events while the hosted reranker is running, so the source draft can keep updating during the remaining rerank delay.
@@ -41,6 +78,132 @@
 ## Live Endpoint / Report Status
 
 - Live app endpoint is available at http://100.103.106.102:7861/.
+- Latest direct-API restart loaded the persisted graph artifact in `826.8 ms`, completed retrieval warmup in `9844.3 ms`, and warmed the hosted agent with first token `3115.8 ms`, total `3162.0 ms`.
+- Latest direct-API/custom-frontend verification passed:
+  - `pnpm format`.
+  - `pnpm typecheck`.
+  - `pnpm lint`.
+  - `pnpm build` (passes, with the existing Vite warning that Node `22.11.0` is below its `22.12+` recommendation).
+  - `make smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 API_SMOKE_TIMEOUT_SECONDS=180 make api-smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 APP_SMOKE_TIMEOUT_SECONDS=180 make app-smoke`.
+  - `make frontend-agent-smoke`.
+  - `make browser-smoke`.
+  - direct API smoke returned `events=127`, `sources=6`, `source_draft_events=3`, `reranker_cache_events=124`, first token `265.0 ms`, total `12796.5 ms`, and no failure flags.
+  - legacy app smoke still passed through the mounted Gradio API with `events=134`, `sources=6`, inline citations, first token `4378.9 ms`, total `15397.4 ms`, and no failure flags.
+  - frontend-agent smoke confirmed the React app calls `/api/ask`, does not call `/gradio_api`, renders focused evidence chips, keeps the source panel visible, and saved current screenshots in `dist/frontend-smoke/`.
+- Latest adaptive-retrieval restart loaded the persisted graph artifact in `825.3 ms`, completed retrieval warmup in `10004.5 ms`, and warmed the hosted agent with first token `3027.2 ms`, total `3073.8 ms`.
+- Latest adaptive-retrieval answer quality report is current in `dist/answer-quality/all.json` and passed:
+  - fact, citation, inline-citation, agent, stream, and answer-format rates are all `33/33 = 100%`.
+  - first-token latency: p50 `5479.3 ms`, p95 `7646.3 ms`, max `8274.9 ms`.
+  - hosted-agent visible-from-request latency: p50 `9593.3 ms`, p95 `13911.9 ms`, max `19322.8 ms`.
+  - final answer latency: p50 `16593.1 ms`, p95 `23343.4 ms`, max `24556.9 ms`.
+  - agent prompt size: p50 `4873 chars`, p95 `7117 chars`, max `7349 chars`.
+  - retrieval total: p50 `4119.1 ms`, p95 `5708.3 ms`, max `13494.2 ms`.
+  - hosted reranker: p50 `3106.1 ms`, p95 `4119.0 ms`, max `5602.3 ms`.
+- Adaptive retrieval improved the hosted answer report versus unconditional `TOP_K=10`: final p50 latency dropped from `21712.3 ms` to `16593.1 ms`, first-token p50 dropped from `7973.6 ms` to `5479.3 ms`, and prompt p50 dropped from `6916` to `4873` chars while preserving the `33/33` quality gate.
+- Latest adaptive local verification passed: `make smoke`.
+- Latest adaptive live Tailscale verification passed:
+  - `REQUEST_TIMEOUT_SECONDS=90 APP_SMOKE_TIMEOUT_SECONDS=180 make app-smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 APP_SMOKE_TIMEOUT_SECONDS=180 make app-cache-smoke`.
+  - default app smoke used focused mode with `top_k=6`, `candidate_k=8`, `sources=6`, first token `6561.3 ms`, total `16433.1 ms`, and no failure flags.
+  - repeated cached-rerank smoke used `sources=6`, `reranker_wait_events=0`, cached-rerank progress, first token about `0.2 s`, and total about `6.3-6.5 s`.
+- Latest UX/retrieval restart loaded the graph artifact with status `built_and_saved`, completed retrieval warmup in `17846.0 ms`, and warmed the hosted agent with first token `282.9 ms`, total `329.6 ms`.
+- Latest UX/retrieval verification passed:
+  - `make smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 APP_SMOKE_TIMEOUT_SECONDS=180 make app-smoke`.
+  - `make frontend-agent-smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 make answer-eval`.
+  - live app smoke returned `sources=6`, inline citations, `8` source-draft events, `3` reranker-wait events, `3` first-token heartbeat events, first token `3021.1 ms`, total `12799.6 ms`, and no failure flags.
+  - frontend-agent smoke confirmed the W5500 default pinout query leads with `XIAO W5500 Ethernet Adapter pin map`, has no orphan source-only line, hides raw source IDs, and still renders `Focused evidence` / `6/10 sources`.
+- Latest UX/retrieval answer quality report is current in `dist/answer-quality/all.json` and passed:
+  - fact, citation, inline-citation, agent, stream, and answer-format rates are all `33/33 = 100%`.
+  - first-token latency: p50 `5436.9 ms`, p95 `6320.0 ms`, max `8190.4 ms`.
+  - hosted-agent visible-from-request latency: p50 `9569.7 ms`, p95 `12511.5 ms`, max `14749.5 ms`.
+  - final answer latency: p50 `16046.2 ms`, p95 `22855.5 ms`, max `23880.9 ms`.
+  - agent prompt size: p50 `4876 chars`, p95 `7117 chars`, max `7349 chars`.
+  - retrieval total: p50 `4143.7 ms`, p95 `5664.3 ms`, max `13517.1 ms`.
+  - hosted reranker: p50 `3089.5 ms`, p95 `4100.9 ms`, max `5611.3 ms`.
+- Latest final restart loaded the persisted graph artifact in `858.9 ms`, completed retrieval warmup in `9944.0 ms`, and warmed the hosted agent with first token `3181.1 ms`, total `3226.9 ms`.
+- Latest final `TOP_K=10` answer quality report is current in `dist/answer-quality/all.json` and passed:
+  - fact, citation, inline-citation, agent, stream, and answer-format rates are all `33/33 = 100%`.
+  - first-token latency: p50 `7973.6 ms`, p95 `8877.5 ms`, max `9009.0 ms`.
+  - hosted-agent visible-from-request latency: p50 `12955.0 ms`, p95 `15172.0 ms`, max `22819.5 ms`.
+  - final answer latency: p50 `21712.3 ms`, p95 `26155.2 ms`, max `28542.0 ms`.
+  - agent prompt size: p50 `6916 chars`, p95 `7349 chars`, max `7402 chars`.
+  - retrieval total: p50 `5120.4 ms`, p95 `6509.6 ms`, max `14818.1 ms`.
+  - hosted reranker remains the dominant retrieval cost: p50 `4127.7 ms`, p95 `5476.2 ms`, max `5617.4 ms`.
+- Latest final local verification passed: `make smoke`.
+- Latest final live Tailscale verification passed: `REQUEST_TIMEOUT_SECONDS=90 APP_SMOKE_TIMEOUT_SECONDS=180 make app-smoke`.
+  - app smoke returned `sources=10`, inline citations, source-draft events, reranker-wait events, first-token heartbeats, and a streamed answer.
+  - live app-smoke timing: first token `8389.1 ms`, total `17569.0 ms`.
+- Current `TOP_K=10` restart loaded the persisted graph artifact in `872.0 ms`, completed retrieval warmup in `9925.1 ms`, and warmed the hosted agent with first token `294.8 ms`, total `341.2 ms`.
+- `TOP_K=10` verification passed:
+  - `make smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 APP_SMOKE_TIMEOUT_SECONDS=180 make app-smoke`.
+- Latest `TOP_K=10` app-smoke logger record: run ID `5c780d3944a64091bfba7142ea9b1c47`, `sources=10`, native reranker used with no cache hit, hosted reranker `5048.8 ms`, agent prompt `6767` chars, first token `6755.0 ms`, total `15811.4 ms`, and no failure flags.
+- Current snippet-Markdown restart loaded the persisted graph artifact in `831.1 ms`, completed retrieval warmup in `9833.0 ms`, and warmed the hosted agent with first token `358.2 ms`, total `404.7 ms`.
+- Snippet Markdown verification passed:
+  - `pnpm format`.
+  - `pnpm typecheck`.
+  - `pnpm lint`.
+  - `pnpm build` (passes, with the existing Vite warning that Node `22.11.0` is below its `22.12+` recommendation).
+  - `make smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 APP_SMOKE_TIMEOUT_SECONDS=180 make app-smoke`.
+  - Playwright smoke against http://100.103.106.102:5173/ confirmed `.source-snippet-markdown` renders Markdown links in the right panel and saved `dist/frontend-smoke/snippet-md.png`.
+- Current 2000-token restart loaded the persisted graph artifact in `847.0 ms`, completed retrieval warmup in `10276.9 ms`, and warmed the hosted agent with first token `303.7 ms`, total `350.0 ms`.
+- `AGENT_MAX_TOKENS=2000` live verification passed:
+  - `make smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 APP_SMOKE_TIMEOUT_SECONDS=180 make app-smoke`.
+  - live Tailscale replay of `list all xiaos`.
+- Latest `list all xiaos` logger record: run ID `51445dbfb11a4df19287351297680628`, `finish_reason=stop`, `max_tokens=2000`, `answer_chars=695`, and no failure flags.
+- Current truncation-fix restart loaded the persisted graph artifact in `847.8 ms`, completed retrieval warmup in `9861.4 ms`, and warmed the hosted agent with first token `323.6 ms`, total `370.6 ms`.
+- Replayed the reported `list all xiaos` live query successfully: final answer includes `RA4M1`, `MG24`, `RP2350`, `nRF52840`, and `SAMD21`, uses source links instead of raw `wiki-*` IDs, has `finish_reason=stop`, uses `max_tokens=520` before the later general-cap increase to `2000`, and is not marked truncated. Latest logger run ID for that replay: `d92bae33dc0f42c0a292c8433e058c9f`.
+- Truncation/source scrubber verification passed:
+  - `make smoke`.
+  - live Tailscale replay of `list all xiaos`.
+- Current logger-enabled restart loaded the persisted graph artifact in `828.5 ms`, completed retrieval warmup in `9769.6 ms`, and warmed the hosted agent with first token `281.9 ms`, total `328.5 ms`.
+- Logger-enabled live app smoke passed with `59` stream events, `7` source-draft events, `4` reranker-wait events, `0` reranker-cache events, `1` heartbeat event, first token `201.0 ms`, and total `8136.4 ms`.
+- Latest logger record was written to `dist/answer-runs.jsonl` with run ID `93524a282a5347438f1f8bbfc6743b9a`, status `ok`, `5` structured sources, stages `prepare, retrieve, generate, done`, and no failure flags.
+- Logger verification passed:
+  - `make smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 APP_SMOKE_TIMEOUT_SECONDS=180 make app-smoke`.
+- Current source-snippet UX restart warmed retrieval in `8904.1 ms`; hosted-agent warmup first token was `283.0 ms`, total `329.9 ms`.
+- Current source-snippet UX verification passed:
+  - `make smoke`.
+  - `.venv/bin/python scripts/test_pipeline_failover.py`.
+  - `make browser-smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 BROWSER_SMOKE_TIMEOUT_MS=90000 make browser-agent-smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 APP_SMOKE_TIMEOUT_SECONDS=180 make app-smoke`.
+- Latest post-restart app smoke passed with `73` stream events, `6` source-draft events, `3` reranker-wait events, `0` reranker-cache events, first token `175.2 ms`, and total `7017.6 ms`.
+- Custom frontend verification passed:
+  - `pnpm format`.
+  - `pnpm typecheck`.
+  - `pnpm lint`.
+  - `pnpm build` (passes, but Vite warns that Node `22.11.0` is below its `22.12+` requirement).
+  - `make frontend-agent-smoke` passed against http://100.103.106.102:5173/ and saved `dist/frontend-smoke/desktop.png`, `dist/frontend-smoke/desktop-after-query.png`, and `dist/frontend-smoke/mobile.png`.
+  - The latest frontend-agent smoke caught and fixed a compact Theme button touch-target issue; primary visible buttons now meet the 44px target.
+  - Latest live query smoke rendered `Focused evidence`, `6/10 sources`, `Cached rerank`, and `Focused sources (6)` with no visible raw source IDs.
+  - Latest full repo smoke passed with `make smoke` after adding the dedicated frontend smoke script and Makefile targets.
+  - Playwright smoke against http://100.103.106.102:5173/ with desktop, desktop-after-query, and mobile screenshots in `dist/frontend-smoke/`.
+  - Post-Markdown Playwright smoke confirmed a streamed answer renders `.answer-markdown` source anchors, keeps the source-snippet panel visible, and hides raw `wiki-*` IDs.
+  - Post-prompt Playwright smoke confirmed a comparison query renders an actual Markdown table in `.answer-markdown table`.
+  - Compact-layout Playwright smoke confirmed the custom frontend no longer visibly renders `Run progress` or `Field answer`, while a streamed answer still completes with source links and snippets.
+  - Mocked frontend stream smoke confirmed `[source, xiao-nrf52840-identity]` renders without the raw internal ID and keeps a source-panel anchor.
+- Graph retrieval verification:
+  - `make smoke` passed after adding graph code and tests.
+  - `GRAPH_RETRIEVAL_ENABLED=1 GRAPH_CANDIDATE_SLOTS=4 OFFLINE_EVAL=1 STRICT_EVAL=1 .venv/bin/python scripts/eval_smoke.py` improved offline retrieval from board/content/citation `61/39/49` of `62` to `62/44/57` of `62`.
+  - Focused live HNSW/reranker check with graph enabled passed `5/5` on bus-servo robotics, S3 UART SenseCraft AI, XIAO ePaper pinout, Raspberry Pi Zero Grove Base Hat specs, and SenseCraft battery/channel cases.
+  - Persisted graph artifact build wrote `data/index/knowledge_graph.json` (`16 MiB`) in `8760.4 ms`; a fresh process loaded it in `610.9 ms`.
+  - Current backend restart loaded the graph artifact in `818.5 ms`, then completed retrieval warmup in `9886.2 ms`; hosted-agent warmup first token was `279.7 ms`, total `326.5 ms`.
+  - Post-artifact focused live HNSW/reranker check with graph enabled passed `5/5`.
+  - Post-artifact app smoke passed with `65` stream events, `13` source-draft events, `5` reranker-wait events, `0` reranker-cache events, `6` heartbeat events, first token `5823.6 ms`, and total `13755.7 ms`.
+- Current UX branch startup warmup log shows retrieval warmup total `8887.7 ms` and agent warmup first token `342.4 ms`, total `389.0 ms`.
+- Current UX branch verification passed:
+  - `make smoke`.
+  - `make browser-smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 BROWSER_SMOKE_TIMEOUT_MS=90000 make browser-agent-smoke`.
+  - `REQUEST_TIMEOUT_SECONDS=90 APP_SMOKE_TIMEOUT_SECONDS=180 make app-cache-smoke`.
 - Endpoint functional smoke passed:
   - embedding functional: `dim=2048`, `189 ms`.
   - reranker functional: native scores, `236 ms`.
@@ -119,6 +282,78 @@
 - Browser smoke now verifies both the source-backed draft and visible partial hosted-agent stream.
 - Browser smoke now records the first-token wait heartbeat and fails if a long draft-to-stream gap has no progress heartbeat.
 - Browser smoke now also accepts the answer-panel hosted-agent wait note as visible progress, after it caught a roughly `3.9 s` browser-side quiet gap between the source draft and first rendered streamed token.
+- UX branch browser smoke now also accepts a final answer that appears before the smoke test observes intermediate progress text, which happens on repeated cached-rerank queries.
+- Converted the custom React frontend from a single-answer panel into a chat thread:
+  - submitted questions now render as user messages;
+  - streamed source drafts and hosted-agent tokens update the latest assistant message in place;
+  - the progress strip and source-snippet panel remain scoped to the latest assistant response;
+  - reset clears the conversation, while stop preserves the partial assistant output and marks the request stopped.
+- Redesigned the custom React frontend into a chat-first workspace:
+  - removed the old left-side bench panel;
+  - added a compact sticky top bar, scrollable transcript, and bottom chat composer;
+  - kept source peeking as a sticky right rail on desktop and a source section on narrower screens;
+  - moved example prompts into a horizontal prompt rail below the composer;
+  - kept the compact progress strip above the transcript so retrieval/generation status remains visible without dominating the chat.
+- Added conversation history support to the direct `POST /api/ask` SSE route:
+  - the frontend sends recent non-streaming user/assistant turns;
+  - the API sanitizes and bounds history before folding it into the current follow-up question;
+  - Gradio remains mounted for compatibility, but the custom frontend stays on the direct `/api/ask` stream.
+- Extended frontend smoke coverage to assert the chat message rendering path, while preserving checks for source links, direct API usage, and no raw source IDs in visible UI.
+- Latest chat UX verification:
+  - `pnpm format`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm build` passed with the existing Vite warning that Node `22.11.0` is below Vite's `22.12+` recommendation.
+  - `make api-smoke` passed: `events=132`, `sources=6`, `first_token_ms=3149.4`, `total_ms=12964.6`.
+  - `make frontend-agent-smoke` passed on desktop, desktop-after-query, and mobile screenshots.
+  - follow-up API probe with W5500 history passed and answered `What SPI pins does it use?` with the expected D1/D8/D9/D10 SPI table.
+- Latest chat-first redesign verification:
+  - `pnpm format`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm build` passed with the existing Vite warning that Node `22.11.0` is below Vite's `22.12+` recommendation.
+  - `make frontend-agent-smoke` passed against http://100.103.106.102:5173/ and saved desktop, desktop-after-query, and mobile screenshots under `dist/frontend-smoke/`.
+  - The smoke initially caught that compact mobile header hiding the visible `firmware recovery` scope phrase; the empty-chat prompt now carries that scope text.
+- Moved progress into the sticky chat header and removed the header domain pills:
+  - the header now contains the brand, a dense four-stage run strip, and the theme control;
+  - the conversation pane now starts directly with the transcript, keeping the progress visible during scroll;
+  - the source peek rail remains unchanged and tied to the latest answer;
+  - frontend smoke now asserts the removed header pill container does not return.
+- Latest header-progress verification:
+  - `pnpm format`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm build` passed with the existing Vite warning that Node `22.11.0` is below Vite's `22.12+` recommendation.
+  - `make frontend-agent-smoke` passed against http://100.103.106.102:5173/ and saved desktop, streamed-query desktop, and mobile screenshots.
+- Redesigned the custom frontend into a Seeed Project Workbench:
+  - page title and h1 are now `Seeed Project Workbench`;
+  - left project rail provides project brief, task starters, session meters, and a bench checklist;
+  - center panel is a build-log conversation with the existing follow-up chat stream;
+  - right panel is now `Evidence peek`, preserving source snippet peeking for the latest answer;
+  - task starter cards and prompt chips populate the composer instead of acting as inert decoration.
+- Latest workbench redesign verification:
+  - `pnpm format`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm build` passed with the existing Vite warning that Node `22.11.0` is below Vite's `22.12+` recommendation.
+  - `make frontend-agent-smoke` passed against http://100.103.106.102:5173/ and saved desktop, streamed-query desktop, and mobile screenshots.
+- Restyled the workbench after inspecting `https://fs.zeigma.com/`:
+  - shifted from the previous green dashboard look to a warm off-white page, white rounded panels, thin neutral borders, soft shadows, and purple accent states;
+  - collapsed the left rail into one floating navigation-style panel with section dividers;
+  - made task cards look like compact side-nav actions instead of dashboard cards;
+  - changed primary buttons, focus states, source links, progress chips, and answer badges to the purple reference accent;
+  - kept the workbench information architecture and evidence peeking intact.
+- Latest FS-style verification:
+  - `pnpm format`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm build` passed with the existing Vite warning that Node `22.11.0` is below Vite's `22.12+` recommendation.
+  - `make frontend-agent-smoke` passed against http://100.103.106.102:5173/ and saved desktop, streamed-query desktop, and mobile screenshots.
+- Compact source-backed draft:
+  - the interim `Source-backed draft` is now a keyword strip sourced from aliases, tags, exact terms, and code-like identifiers instead of long excerpt bullets;
+  - draft sources use compact `source 1`/`source 2` panel links rather than raw wiki IDs;
+  - common hardware acronyms are normalized in the draft, and standalone years are filtered out.
+  - Verification: `.venv/bin/python -m py_compile xiao_copilot/pipeline.py`, `.venv/bin/python scripts/test_pipeline_failover.py`, `.venv/bin/python scripts/test_app_smoke.py`, `REQUEST_TIMEOUT_SECONDS=90 API_SMOKE_TIMEOUT_SECONDS=180 make api-smoke`, and `make frontend-agent-smoke`.
 - App smoke now records source-draft, reranker-wait, and first-token heartbeat events, and fails if a long hosted-agent first-token wait has no heartbeat.
 - Current bottleneck: the hosted reranker still costs about `3.4 s` p50 inside full answer evaluation, but it no longer blocks first useful source text.
 - Current interpretation: local ANN, source draft construction, and candidate selection are not the main problem; final perceived latency now mostly comes from hosted rerank plus hosted agent prefill/generation.
@@ -155,11 +390,12 @@
 ## Remaining Next Steps
 
 - Continue optimizing final answer latency without weakening the current `33/33` answer-quality gate.
+- Tune the adaptive retrieval thresholds with more manual QA; the current focused/full heuristic is validated by the `33/33` answer-quality gate and live smoke, but more real questions can reveal edge cases.
 - Investigate reducing hosted agent prefill/generation latency; this is now the main remaining visible delay after source previews.
 - Consider reranker request batching or service-side tuning if it can improve the full RAG p95 without reducing the current `62/62` reranker gate.
 - Consider a faster or smaller hosted agent model for first-pass synthesis, while keeping the current agent as a high-quality final path.
 - Harden close-margin reranker eval cases where positive and negative pages are near duplicates or similar-board pages.
-- For `b9efd8e`, regenerate answer quality and local export before the next handoff bundle; those artifacts are still current for `6929264`.
+- For this UX branch, local export still needs regeneration before a handoff bundle; the answer-quality JSON has been regenerated for the current working tree, but the export bundle is still for `6929264`.
 
 ## Key Commands / Artifacts
 
@@ -168,6 +404,8 @@
 - Answer quality regeneration: `REQUEST_TIMEOUT_SECONDS=90 make answer-eval`
 - Reranker quality regeneration: `REQUEST_TIMEOUT_SECONDS=90 make rerank-quality-all`
 - Repeated-cache live smoke: `REQUEST_TIMEOUT_SECONDS=90 APP_SMOKE_TIMEOUT_SECONDS=180 make app-cache-smoke`
+- Custom frontend live smoke: `make frontend-agent-smoke`
+- Direct API live smoke: `REQUEST_TIMEOUT_SECONDS=90 API_SMOKE_TIMEOUT_SECONDS=180 make api-smoke`
 - Export verification: `make export-local verify-local-export`
 - Reranker quality result target: `62/62` passing with metadata matching current `HEAD`.
 - Answer quality result target: `33/33` passing with metadata matching current `HEAD`.

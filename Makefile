@@ -1,4 +1,4 @@
-.PHONY: smoke ui-smoke corpus-scope browser-smoke browser-agent-smoke health health-live health-functional app-smoke app-cache-smoke eval-gate answer-eval eval-all verify-live verify-demo verify-handoff import-wiki-xiao import-wiki-all build-hnsw build-faiss-pq rerank-benchmark rerank-quality rerank-quality-all vector-artifact verify-vector-artifact verify-vector-artifact-restore install-vector-artifact export-local verify-local-export
+.PHONY: smoke ui-smoke corpus-scope browser-smoke browser-agent-smoke frontend-smoke frontend-agent-smoke api-smoke health health-live health-functional app-smoke app-cache-smoke eval-gate answer-eval eval-all verify-live verify-demo verify-handoff import-wiki-xiao import-wiki-all build-hnsw build-faiss-pq build-graph rerank-benchmark rerank-quality rerank-quality-all vector-artifact verify-vector-artifact verify-vector-artifact-restore install-vector-artifact export-local verify-local-export
 
 PYTHON ?= .venv/bin/python
 
@@ -11,6 +11,8 @@ smoke:
 	$(PYTHON) scripts/test_clients.py
 	$(PYTHON) scripts/test_endpoint_smoke.py
 	$(PYTHON) scripts/test_eval_contracts.py
+	$(PYTHON) scripts/test_knowledge_graph.py
+	$(PYTHON) scripts/test_answer_logger.py
 	$(PYTHON) scripts/test_retrieval.py
 	$(PYTHON) scripts/test_answer_eval_quality.py
 	$(PYTHON) scripts/test_reranker_quality.py
@@ -34,6 +36,15 @@ browser-smoke:
 
 browser-agent-smoke:
 	$(PYTHON) scripts/browser_smoke.py --run-query --timeout-ms $${BROWSER_SMOKE_TIMEOUT_MS:-120000}
+
+frontend-smoke:
+	$(PYTHON) scripts/frontend_smoke.py
+
+frontend-agent-smoke:
+	$(PYTHON) scripts/frontend_smoke.py --run-query --timeout-ms $${FRONTEND_SMOKE_TIMEOUT_MS:-120000}
+
+api-smoke:
+	$(PYTHON) scripts/api_smoke.py
 
 health:
 	$(PYTHON) scripts/health_check.py
@@ -63,8 +74,10 @@ verify-live: smoke health-live app-smoke eval-all
 
 verify-demo: verify-live
 	$(MAKE) health-functional PYTHON=$(PYTHON)
+	$(MAKE) api-smoke PYTHON=$(PYTHON)
 	$(MAKE) rerank-quality-all PYTHON=$(PYTHON)
 	$(MAKE) browser-agent-smoke PYTHON=$(PYTHON)
+	$(MAKE) frontend-agent-smoke PYTHON=$(PYTHON)
 
 verify-handoff: verify-demo verify-vector-artifact-restore
 	$(MAKE) export-local PYTHON=$(PYTHON)
@@ -81,6 +94,9 @@ build-hnsw:
 
 build-faiss-pq:
 	$(PYTHON) scripts/build_wiki_vector_index.py --backend faiss-pq --batch-size $${BATCH_SIZE:-32}
+
+build-graph:
+	$(PYTHON) scripts/build_knowledge_graph.py
 
 rerank-benchmark:
 	$(PYTHON) scripts/benchmark_rerank_window.py --windows $${RERANK_BENCHMARK_WINDOWS:-900,1600,2400,3200}

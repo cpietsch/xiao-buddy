@@ -50,13 +50,22 @@ RERANK_TEXT_CHARS=2800
 AGENT_BASE_URL=https://your-llm-host/v1
 AGENT_MODEL=your-agent-model-id
 AGENT_API_KEY=
-AGENT_MAX_TOKENS=260
+AGENT_MAX_TOKENS=2000
 AGENT_CONTEXT_CHARS=2000
 AGENT_STARTUP_WARMUP_SECONDS=8
 
-TOP_K=5
+TOP_K=10
 CANDIDATE_K=12
+ADAPTIVE_TOP_K_ENABLED=1
+FOCUSED_TOP_K=6
+FOCUSED_CANDIDATE_K=8
 VECTOR_CANDIDATE_K=96
+GRAPH_RETRIEVAL_ENABLED=0
+GRAPH_CANDIDATE_SLOTS=4
+GRAPH_ARTIFACT_PATH=data/index/knowledge_graph.json
+ANSWER_LOG_ENABLED=0
+ANSWER_LOG_PATH=dist/answer-runs.jsonl
+ANSWER_LOG_ANSWER_CHARS=12000
 VECTOR_INDEX_MANIFEST=data/index/xiao_vectors.json
 VECTOR_INDEX_DATA=
 VECTOR_INDEX_ARCHIVE_URL=
@@ -86,6 +95,18 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python app.py
+```
+
+The Python process serves the legacy Gradio UI plus the direct streaming API at
+`POST /api/ask`. The API accepts an optional recent `history` array so the
+custom Seeed Project Workbench frontend can answer follow-up questions. The
+React frontend lives in `frontend/` and proxies `/api` to the Python backend
+during development:
+
+```bash
+cd frontend
+pnpm install
+pnpm dev --host 0.0.0.0 --port 5173 --strictPort
 ```
 
 ## Expanding The Knowledge Base
@@ -181,8 +202,14 @@ first-token latency:
 REQUEST_TIMEOUT_SECONDS=90 make health-functional
 ```
 
-Check the running Gradio `/ask` API wiring, streamed answer events, source
-panel, inline source IDs, first-token latency diagnostics, and progress HTML:
+Check the direct custom-frontend API stream:
+
+```bash
+make api-smoke
+```
+
+Check the legacy Gradio `/ask` API wiring, streamed answer events, source panel,
+inline source IDs, first-token latency diagnostics, and progress HTML:
 
 ```bash
 make app-smoke
@@ -217,8 +244,8 @@ python -m playwright install chromium
 make browser-smoke
 ```
 
-To exercise the real hydrated browser flow against the hosted pipeline, run the
-agent-backed browser smoke. It fills the question textbox, clicks the visible
+To exercise the real hydrated Gradio browser flow against the hosted pipeline,
+run the agent-backed browser smoke. It fills the question textbox, clicks the visible
 button, waits for required answer terms, cited source URLs, inline citations,
 and streamed progress to appear in the page, and saves
 `dist/browser-smoke/desktop-after-query.png`:
@@ -226,6 +253,17 @@ and streamed progress to appear in the page, and saves
 ```bash
 REQUEST_TIMEOUT_SECONDS=90 make browser-agent-smoke
 ```
+
+To exercise the custom React frontend, run:
+
+```bash
+make frontend-agent-smoke
+```
+
+That smoke verifies the React app calls the direct `/api/ask` stream, renders
+the project rail and build-log messages, keeps the evidence/source peek panel
+populated, avoids the legacy `/gradio_api` route, and saves screenshots under
+`dist/frontend-smoke/`.
 
 Run the complete local and live API/retrieval verification sequence before a
 demo or handoff:
@@ -243,11 +281,12 @@ When the dev browser dependency is installed, run the full demo gate as well:
 REQUEST_TIMEOUT_SECONDS=90 make verify-demo
 ```
 
-This runs the live API/retrieval gates, the functional endpoint smoke, the
-all-case reranker audit, and then the agent-backed browser smoke. The reranker
-audit writes `dist/reranker-quality/all.json` and fails on any retrieval-eval
-case where the live reranker does not rank citation-matched positives above
-hard lexical negatives.
+This runs the live API/retrieval gates, the functional endpoint smoke, direct
+API smoke, all-case reranker audit, legacy Gradio browser smoke, and custom
+React frontend browser smoke. The reranker audit writes
+`dist/reranker-quality/all.json` and fails on any retrieval-eval case where the
+live reranker does not rank citation-matched positives above hard lexical
+negatives.
 
 For a release or machine handoff, run the full demo gate, verify the packaged
 vector index artifact, and refresh the local bundle/patch export in one pass:
@@ -335,11 +374,34 @@ retrieval eval set:
 make rerank-benchmark
 ```
 
-The production defaults are `CANDIDATE_K=12` and `RERANK_TEXT_CHARS=2800`, which
-keep richer evidence available to the reranker while bounding reranker latency.
-`CANDIDATE_K=8` is faster but currently fails the full answer quality gate on an
-MG24 deep-sleep recovery case, and a `RERANK_TEXT_CHARS=900` window is faster but
-fails the strict reranker quality audit on close wiki cases.
+The production defaults are `TOP_K=10`, `CANDIDATE_K=12`, and
+`RERANK_TEXT_CHARS=2800`, which keep richer evidence available to the reranker
+while bounding reranker latency. With `ADAPTIVE_TOP_K_ENABLED=1`, focused
+questions use `FOCUSED_TOP_K=6` final sources and `FOCUSED_CANDIDATE_K=8`
+rerank candidates; broad list/comparison/image queries keep the full budget.
+An unconditional `CANDIDATE_K=8` was faster but missed a hard MG24 deep-sleep
+case before exact-term hardening, and a `RERANK_TEXT_CHARS=900` window is faster
+but fails the strict reranker quality audit on close wiki cases.
+
+`GRAPH_RETRIEVAL_ENABLED=1` enables an experimental deterministic graph sidecar
+that adds source-title, board-alias, protocol, product, and hardware-identifier
+matches into retrieval. `GRAPH_CANDIDATE_SLOTS` controls how many graph
+candidates are added; with a hosted reranker configured, baseline HNSW/lexical
+candidates are preserved and graph candidates are appended for reranking.
+`GRAPH_ARTIFACT_PATH` stores the graph cache; when its corpus hash matches, the
+app loads it instead of rebuilding the graph at startup.
+
+To prebuild or validate the graph artifact before restarting the app:
+
+```bash
+make build-graph
+```
+
+`ANSWER_LOG_ENABLED=1` writes one JSONL record per answer run to
+`ANSWER_LOG_PATH`. Records include a `run_id`, question, bounded answer text,
+structured citation/source records, timings, retrieval diagnostics, agent
+status, and failure flags such as `fallback_answer`, `agent_error`, or
+`reranker_error`; token-limit cutoffs are flagged as `truncated_answer`.
 
 To verify the live reranker is helping on representative Seeed wiki topics, run
 the focused reranker quality gate:
@@ -420,7 +482,9 @@ make verify-vector-artifact-restore
 
 At query time the app embeds only the user/photo query, searches this local
 vector index, merges vector candidates with lexical/high-trust curated matches,
-reranks the evidence, and sends only the selected chunks to the final agent.
+reranks the evidence, and sends up to `TOP_K=10` chunks to the final agent and
+source panel. Focused questions use the smaller adaptive source/candidate budget
+when `ADAPTIVE_TOP_K_ENABLED=1`.
 
 For local debugging or tiny indexes, the exact-scan backend is still available:
 
@@ -447,8 +511,9 @@ for vector search, can use an optional reranker endpoint for better ordering, an
 can call any OpenAI-compatible chat-completions endpoint for the final answer.
 Use `AGENT_MAX_TOKENS` to cap generated answer length when a larger hosted model
 streams quickly but takes too long to finish full responses. The production
-default is `260`, which keeps the full answer-quality gate passing while trimming
-long generated answers.
+default is `2000`, so broad enumeration/table questions have enough room to
+complete. Streamed responses that end with `finish_reason=length` are marked as
+truncated instead of being treated as successful final answers.
 Use `AGENT_CONTEXT_CHARS` to bound the source text sent to the final agent; the
 app keeps query-relevant excerpts for synthesis while retrieval and reranking use
 the richer source text. The production default is `2000`, which keeps the full
@@ -482,7 +547,8 @@ variables rather than committing them to the repo.
 
 ## Project Layout
 
-- `app.py` - Gradio Blocks UI.
+- `app.py` - FastAPI app with direct `/api/ask` SSE stream plus mounted legacy Gradio Blocks UI.
+- `frontend/` - custom React/Vite Seeed Project Workbench with project starters, build-log chat, and source peeking, streaming from `/api/ask`.
 - `amd-droplet.md` - AMD MI300X / ROCm / vLLM deployment walkthrough for one hosted Qwen endpoint stack.
 - `data/corpus/xiao_boards.json` - curated XIAO-only board facts, pin maps, gotchas, citations, and image URLs.
 - `data/corpus/wiki_chunks.jsonl` - imported chunks from the official Seeed wiki markdown.
