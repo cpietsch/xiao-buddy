@@ -13,6 +13,9 @@ pinned: false
 
 A hackathon-simple Hugging Face Space for multimodal hardware support around Seeed Studio XIAO boards and connected Seeed wiki hardware.
 
+> 🏆 **1st place — Vision & Multimodal AI track** at the [AMD Developer Hackathon](https://lablab.ai/ai-hackathons/amd-developer) (hosted by lablab.ai).
+> Hackathon entry: **[XIAO Field Copilot](https://lablab.ai/ai-hackathons/amd-developer/go-ahead/xiao-field-copilot)**.
+
 The app accepts a board photo plus a question, retrieves cited Seeed support notes, optionally reranks them,
 and produces a field-ready answer through an OpenAI-compatible agent endpoint. It also works without
 the optional hosted reranker/agent services by falling back to lexical retrieval and a deterministic cited response.
@@ -32,6 +35,18 @@ photo + question
   -> hosted OpenAI-compatible agent model
   -> cited answer + sources + run details
 ```
+
+## Screenshots
+
+The UI is a custom React/Vite "Seeed Project Workbench": a board photo plus a question in, a grounded, cited answer out, with a live evidence panel that fills in as the answer streams.
+
+| | |
+| --- | --- |
+| ![Workbench, empty state](docs/screenshots/01-workbench-empty.png) | ![Answer streaming in](docs/screenshots/02-workbench-streaming.png) |
+| ![Final cited answer](docs/screenshots/03-workbench-answer.png) | ![Dark theme](docs/screenshots/04-workbench-dark.png) |
+| ![Attach a board photo](docs/screenshots/05-photo-upload.png) | ![Multimodal answer](docs/screenshots/06-multimodal-answer.png) |
+
+> The answers shown above were generated against a local stub of the model endpoints for UI demonstration; live deployments use the hosted Qwen3-VL embedding/reranker and agent models described below.
 
 ## Environment
 
