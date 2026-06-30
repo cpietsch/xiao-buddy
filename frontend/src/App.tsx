@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Cpu,
   Database,
+  ImagePlus,
   LoaderCircle,
   PanelRight,
   Radio,
@@ -14,6 +15,7 @@ import {
   Send,
   Square,
   Wrench,
+  X,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -76,6 +78,7 @@ type ChatMessage = {
   id: string
   role: ChatRole
   content: string
+  image?: string
   status?: "streaming" | "done" | "error"
 }
 
@@ -140,7 +143,10 @@ function App() {
   const [diagnostics, setDiagnostics] = React.useState<Diagnostics>({})
   const [error, setError] = React.useState("")
   const [isRunning, setIsRunning] = React.useState(false)
+  const [image, setImage] = React.useState<string | null>(null)
+  const [dragActive, setDragActive] = React.useState(false)
   const abortRef = React.useRef<AbortController | null>(null)
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const chatEndRef = React.useRef<HTMLDivElement | null>(null)
   const questionRef = React.useRef<HTMLTextAreaElement | null>(null)
   const { theme, setTheme } = useTheme()
@@ -174,13 +180,25 @@ function App() {
     return () => window.cancelAnimationFrame(frame)
   }, [messages.length, latestMessageContent])
 
+  function attachImageFile(file: File | null | undefined) {
+    if (!file || !file.type.startsWith("image/")) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setImage(reader.result)
+        setError("")
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
   async function handleSubmit(event?: React.FormEvent<HTMLFormElement>) {
     event?.preventDefault()
     if (isRunning) return
 
     const query = question.trim()
-    if (!query) {
-      setError("Enter a hardware question.")
+    if (!query && !image) {
+      setError("Enter a hardware question or attach a board photo.")
       questionRef.current?.focus()
       return
     }
@@ -189,10 +207,12 @@ function App() {
     const controller = new AbortController()
     abortRef.current = controller
     const history = chatHistoryForRequest(messages)
+    const stagedImage = image
     const userMessage: ChatMessage = {
       id: createMessageId("user"),
       role: "user",
       content: query,
+      image: stagedImage ?? undefined,
       status: "done",
     }
     const assistantMessage: ChatMessage = {
@@ -204,6 +224,7 @@ function App() {
     setIsRunning(true)
     setError("")
     setQuestion("")
+    setImage(null)
     setMessages((current) => [...current, userMessage, assistantMessage])
     setDiagnostics({ status: "running", stage: "prepare" })
     updateQueryUrl("")
@@ -212,6 +233,7 @@ function App() {
       await askBuddy(
         query,
         history,
+        stagedImage,
         controller.signal,
         ([nextAnswer, , nextDiagnostics]) => {
           const nextContent = scrubRawSourceIds(nextAnswer || "")
@@ -277,6 +299,7 @@ function App() {
   function reset() {
     abortRef.current?.abort()
     setQuestion("")
+    setImage(null)
     setMessages([])
     setDiagnostics({})
     setError("")
@@ -378,7 +401,24 @@ function App() {
             />
           </article>
 
-          <form className="chat-composer" onSubmit={handleSubmit}>
+          <form
+            className={cn("chat-composer", dragActive && "composer-dragging")}
+            onSubmit={handleSubmit}
+            onDragOver={(event) => {
+              if (event.dataTransfer?.types?.includes("Files")) {
+                event.preventDefault()
+                setDragActive(true)
+              }
+            }}
+            onDragLeave={(event) => {
+              if (event.currentTarget === event.target) setDragActive(false)
+            }}
+            onDrop={(event) => {
+              event.preventDefault()
+              setDragActive(false)
+              attachImageFile(event.dataTransfer?.files?.[0])
+            }}
+          >
             <div className="composer-field">
               <label htmlFor="hardware-question" className="composer-label">
                 Workbench prompt
@@ -401,6 +441,15 @@ function App() {
                     void handleSubmit()
                   }
                 }}
+                onPaste={(event) => {
+                  const file = Array.from(event.clipboardData?.items ?? [])
+                    .find((item) => item.type.startsWith("image/"))
+                    ?.getAsFile()
+                  if (file) {
+                    event.preventDefault()
+                    attachImageFile(file)
+                  }
+                }}
                 placeholder="Describe the board, sensor, wiring, firmware, symptom, or project goal…"
                 rows={3}
                 aria-describedby={error ? "question-error" : undefined}
@@ -411,6 +460,32 @@ function App() {
                 <p id="question-error" className="composer-error" role="alert">
                   {error}
                 </p>
+              ) : null}
+              {image ? (
+                <div className="image-attachment">
+                  <img
+                    src={image}
+                    alt="Attached board photo"
+                    className="image-attachment-thumb"
+                  />
+                  <div className="image-attachment-meta">
+                    <span className="image-attachment-title">
+                      Board photo attached
+                    </span>
+                    <span className="image-attachment-hint">
+                      Embedded with your question so the assistant can identify
+                      the board.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="image-attachment-remove"
+                    onClick={() => setImage(null)}
+                    aria-label="Remove attached photo"
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </button>
+                </div>
               ) : null}
             </div>
 
@@ -431,6 +506,26 @@ function App() {
               </div>
 
               <div className="composer-actions">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(event) => {
+                    attachImageFile(event.target.files?.[0])
+                    event.target.value = ""
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="composer-attach-button"
+                  onClick={() => fileInputRef.current?.click()}
+                  aria-label="Attach a board photo"
+                >
+                  <ImagePlus className="size-4" aria-hidden="true" />
+                  Photo
+                </Button>
                 {messages.length > 0 || question ? (
                   <Button
                     type="button"
@@ -683,7 +778,18 @@ function ChatThread({
             {isAssistant ? (
               <MarkdownText text={message.content} />
             ) : (
-              <p className="chat-user-text">{message.content}</p>
+              <>
+                {message.image ? (
+                  <img
+                    src={message.image}
+                    alt="Attached board photo"
+                    className="chat-message-image"
+                  />
+                ) : null}
+                {message.content ? (
+                  <p className="chat-user-text">{message.content}</p>
+                ) : null}
+              </>
             )}
           </article>
         )
@@ -942,13 +1048,14 @@ function safeLinkHref(href: string) {
 async function askBuddy(
   question: string,
   history: ChatHistoryItem[],
+  image: string | null,
   signal: AbortSignal,
   onEvent: (event: AskEvent) => void
 ) {
   const streamResponse = await fetch(apiUrl("/api/ask"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image: null, question, history }),
+    body: JSON.stringify({ image, question, history }),
     signal,
   })
   if (!streamResponse.ok || !streamResponse.body) {

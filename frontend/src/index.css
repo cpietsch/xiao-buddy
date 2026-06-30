@@ -1281,8 +1281,90 @@
 
   .composer-reset-button,
   .composer-stop-button,
-  .composer-send-button {
+  .composer-send-button,
+  .composer-attach-button {
     min-height: 2.75rem;
+  }
+
+  .composer-dragging .composer-input {
+    border-color: var(--ring);
+    background: color-mix(in oklch, var(--primary), transparent 92%);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring), transparent 60%);
+  }
+
+  .image-attachment {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    margin-top: 0.6rem;
+    border: 1px solid color-mix(in oklch, var(--primary), transparent 55%);
+    border-radius: 12px;
+    background: color-mix(in oklch, var(--primary), transparent 92%);
+    padding: 0.5rem 0.6rem;
+  }
+
+  .image-attachment-thumb {
+    width: 3rem;
+    height: 3rem;
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--muted);
+    object-fit: cover;
+  }
+
+  .image-attachment-meta {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+  }
+
+  .image-attachment-title {
+    color: var(--foreground);
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .image-attachment-hint {
+    color: var(--muted-foreground);
+    font-size: 0.74rem;
+    line-height: 1.25;
+  }
+
+  .image-attachment-remove {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--background);
+    color: var(--muted-foreground);
+    transition:
+      color 140ms ease,
+      border-color 140ms ease,
+      background-color 140ms ease;
+  }
+
+  .image-attachment-remove:hover,
+  .image-attachment-remove:focus-visible {
+    border-color: color-mix(in oklch, var(--destructive), transparent 45%);
+    background: color-mix(in oklch, var(--destructive), transparent 92%);
+    color: var(--destructive);
+  }
+
+  .chat-message-image {
+    display: block;
+    max-width: min(100%, 18rem);
+    max-height: 14rem;
+    margin: 0 0 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    object-fit: cover;
   }
 
   .source-peek {
